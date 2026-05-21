@@ -1,0 +1,53 @@
+{
+  "name": "notype",
+  "version": "2.1.0",
+  "description": "NoType – Local Voice Dictation (Privacy-First)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --x64",
+    "build:dir": "electron-builder --win --x64 --dir"
+  },
+  "author": "NoType",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.notype.app",
+    "productName": "NoType",
+    "directories": {
+      "output": "../dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "*.html",
+      "assets/**",
+      "!node_modules/electron-builder/**",
+      "!node_modules/**/{CHANGELOG.md,README.md,readme.md,*.d.ts,*.map,*.tsbuildinfo}"
+    ],
+    "extraResources": [
+      { "from": "../dist/backend",      "to": "backend",     "filter": ["**/*"] }
+    ],
+    "asar": false,
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "assets/icon.ico",
+      "artifactName": "NoType-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "NoType",
+      "runAfterFinish": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico"
+    }
+  }
+}

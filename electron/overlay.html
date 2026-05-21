@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NoType Overlay</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: transparent;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+
+  /* Show only the active style */
+  .style { display: none; }
+  body[data-style="wave_classic"] .style-wave-classic,
+  body[data-style="wave"]         .style-wave,
+  body[data-style="aurora"]       .style-aurora,
+  body[data-style="particles"]    .style-particles,
+  body[data-style="pulse"]        .style-pulse,
+  body[data-style="ribbon"]       .style-ribbon,
+  body[data-style="spectrum"]     .style-spectrum { display: flex; }
+
+  /* ═══════════════════════════════════════════════════════════════
+     1. WAVE CLASSIC  (600×48 – original ethereal sine)
+     ═══════════════════════════════════════════════════════════════ */
+  .style-wave-classic {
+    width: 100%; height: 100%;
+    align-items: center; justify-content: center;
+    animation: fadeUp 0.4s ease-out;
+  }
+  .style-wave-classic svg { width: 100%; height: 100%; overflow: visible; }
+  .style-wave-classic path {
+    fill: none;
+    stroke: url(#wcGrad);
+    stroke-width: 2;
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 4px rgba(0,212,170,0.55)) drop-shadow(0 0 12px rgba(0,212,170,0.25));
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     2. WAVE  (600×72 – multilayer waves, Apple Siri vibe)
+     ═══════════════════════════════════════════════════════════════ */
+  .style-wave {
+    width: 100%; height: 100%;
+    align-items: center; justify-content: center;
+    animation: fadeUp 0.4s ease-out;
+  }
+  .style-wave svg { width: 100%; height: 100%; overflow: visible; }
+  .style-wave .layer1 { fill: none; stroke: url(#wGradA); stroke-width: 3.5; stroke-linecap: round;
+                        filter: drop-shadow(0 0 10px rgba(0,212,170,0.85))
+                                drop-shadow(0 0 20px rgba(0,212,170,0.4)); opacity: 1; }
+  .style-wave .layer2 { fill: none; stroke: url(#wGradB); stroke-width: 2.2; stroke-linecap: round;
+                        filter: drop-shadow(0 0 8px rgba(110,231,196,0.7)); opacity: 0.85; }
+  .style-wave .layer3 { fill: none; stroke: url(#wGradC); stroke-width: 1.5; stroke-linecap: round;
+                        filter: drop-shadow(0 0 6px rgba(61,199,255,0.5)); opacity: 0.65; }
+
+  /* ═══════════════════════════════════════════════════════════════
+     3. AURORA  (320×320 – Apple-Siri swirling conic gradient blob)
+        Container is clipped to a circle so the gaussian-blurred blobs
+        never produce hard edges on the corners.
+     ═══════════════════════════════════════════════════════════════ */
+  .style-aurora {
+    position: relative;
+    width: 320px; height: 320px;
+    align-items: center; justify-content: center;
+    animation: fadeScale 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+    /* Clip everything inside the visual circle – removes square-edge blur. */
+    clip-path: circle(50% at 50% 50%);
+    -webkit-clip-path: circle(50% at 50% 50%);
+  }
+  .style-aurora .aurora-blob {
+    position: absolute; inset: 24px;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg,
+      #ff3d8a 0%, #ff7e3d 14%, #ffd23d 28%, #3dffa6 42%,
+      #3dc7ff 56%, #7e3dff 70%, #ff3dc7 84%, #ff3d8a 100%);
+    filter: blur(34px) saturate(140%);
+    will-change: transform;
+    transition: opacity 0.2s ease-out;
+  }
+  .style-aurora .aurora-blob2 {
+    position: absolute; inset: 50px;
+    border-radius: 50%;
+    background: conic-gradient(from 180deg,
+      #00d4aa 0%, #6ee7c4 25%, #3dc7ff 50%, #b7f5e3 75%, #00d4aa 100%);
+    filter: blur(28px) saturate(180%);
+    mix-blend-mode: screen;
+    will-change: transform;
+  }
+  .style-aurora .aurora-core {
+    position: relative; z-index: 2;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.5) 55%, rgba(255,255,255,0) 100%);
+    will-change: transform, box-shadow;
+  }
+  @keyframes auroraSpin { to { transform: rotate(360deg); } }
+
+  /* ═══════════════════════════════════════════════════════════════
+     4. PARTICLES  (640×96 – flowing particle stream)
+     ═══════════════════════════════════════════════════════════════ */
+  .style-particles {
+    position: relative;
+    width: 100%; height: 100%;
+    align-items: center; justify-content: center;
+    animation: fadeUp 0.4s ease-out;
+  }
+  .style-particles canvas {
+    width: 100%; height: 100%;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     5. PULSE  (180×180 – breathing circle with concentric ripples)
+     ═══════════════════════════════════════════════════════════════ */
+  .style-pulse {
+    position: relative;
+    width: 180px; height: 180px;
+    align-items: center; justify-content: center;
+    animation: fadeScale 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .style-pulse .ripple {
+    position: absolute;
+    border-radius: 50%;
+    border: 2px solid rgba(0, 212, 170, 0.55);
+    will-change: transform, opacity;
+  }
+  /* Slower, calmer pulse – 4.5s cycle, ~2.25s between staggered ripples.
+     cubic-bezier(0.22, 1, 0.36, 1) is "ease-out-quart" → soft swell, no snap. */
+  .style-pulse .ripple.r1 { inset: 50px; animation: rippleSoft 4.5s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+  .style-pulse .ripple.r2 { inset: 50px; animation: rippleSoft 4.5s cubic-bezier(0.22, 1, 0.36, 1) infinite 1.5s; }
+  .style-pulse .ripple.r3 { inset: 50px; animation: rippleSoft 4.5s cubic-bezier(0.22, 1, 0.36, 1) infinite 3.0s; }
+  @keyframes rippleSoft {
+    0%   { transform: scale(0.55); opacity: 0; border-color: rgba(0, 212, 170, 0); }
+    15%  { opacity: 0.85; border-color: rgba(0, 212, 170, 0.85); }
+    100% { transform: scale(1.85); opacity: 0; border-color: rgba(0, 212, 170, 0); }
+  }
+  .style-pulse .pulse-core {
+    position: relative; z-index: 1;
+    width: 88px; height: 88px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #b7f5e3 0%, #6ee7c4 30%, #00d4aa 65%, #008f6e 100%);
+    box-shadow: 0 0 40px rgba(0,212,170,0.7),
+                0 0 80px rgba(0,212,170,0.35),
+                0 0 140px rgba(0,212,170,0.15),
+                inset 0 2px 0 rgba(255,255,255,0.35),
+                inset 0 -4px 8px rgba(0,90,70,0.4);
+    will-change: transform, box-shadow;
+  }
+  .style-pulse .pulse-glow {
+    position: absolute; inset: 20px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,212,170,0.55) 0%, rgba(0,212,170,0) 70%);
+    filter: blur(14px);
+    will-change: transform, opacity;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     6. RIBBON  (600×80 – flowing multi-strand ribbon)
+     ═══════════════════════════════════════════════════════════════ */
+  .style-ribbon {
+    width: 100%; height: 100%;
+    align-items: center; justify-content: center;
+    animation: fadeUp 0.4s ease-out;
+  }
+  .style-ribbon svg { width: 100%; height: 100%; overflow: visible; }
+  .style-ribbon path {
+    fill: none;
+    stroke-linecap: round;
+  }
+  .style-ribbon .strand1 { stroke: url(#rGrad1); stroke-width: 4;
+                           filter: drop-shadow(0 0 8px rgba(0,212,170,0.75))
+                                   drop-shadow(0 0 18px rgba(0,212,170,0.35)); }
+  .style-ribbon .strand2 { stroke: url(#rGrad2); stroke-width: 2.5; opacity: 0.85;
+                           filter: drop-shadow(0 0 6px rgba(110,231,196,0.55)); }
+  .style-ribbon .strand3 { stroke: url(#rGrad3); stroke-width: 2; opacity: 0.65;
+                           filter: drop-shadow(0 0 5px rgba(61,199,255,0.45)); }
+
+  /* ═══════════════════════════════════════════════════════════════
+     7. SPECTRUM  (320×100 – gradient FFT bars with reflection)
+     ═══════════════════════════════════════════════════════════════ */
+  .style-spectrum {
+    position: relative;
+    width: 320px; height: 100px;
+    align-items: end;
+    padding: 14px 16px;
+    gap: 3px;
+    background: rgba(10, 10, 14, 0.65);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.4),
+                inset 0 1px 0 rgba(255,255,255,0.06);
+    animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .style-spectrum .sb {
+    flex: 1;
+    min-height: 3px;
+    background: linear-gradient(to top,
+      rgba(0,212,170,0.0) 0%,
+      rgba(0,212,170,0.6) 25%,
+      rgba(110,231,196,1) 75%,
+      #b7f5e3 100%);
+    border-radius: 2px;
+    box-shadow: 0 0 6px rgba(0,212,170,0.5);
+    transition: height 0.04s ease-out;
+    will-change: height;
+    position: relative;
+  }
+  .style-spectrum .sb::after {
+    content: '';
+    position: absolute;
+    top: 100%; left: 0; right: 0;
+    height: 30%;
+    background: linear-gradient(to bottom, rgba(0,212,170,0.4), transparent);
+    transform: scaleY(-1);
+    transform-origin: top;
+    opacity: 0.4;
+  }
+
+  /* ─── Shared keyframes ─────────────────────────────────────── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeScale {
+    from { opacity: 0; transform: scale(0.85); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+</style>
+</head>
+<body data-style="wave">
+
+  <!-- ── 1. WAVE CLASSIC (original) ── -->
+  <div class="style style-wave-classic">
+    <svg viewBox="0 0 600 40" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="wcGrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%"   stop-color="#00d4aa" stop-opacity="0"/>
+          <stop offset="20%"  stop-color="#00d4aa" stop-opacity="1"/>
+          <stop offset="80%"  stop-color="#6ee7c4" stop-opacity="1"/>
+          <stop offset="100%" stop-color="#00d4aa" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path id="wcPath" d="M 0 20 L 600 20" />
+    </svg>
+  </div>
+
+  <!-- ── 2. WAVE (multilayer) ── -->
+  <div class="style style-wave">
+    <svg viewBox="0 0 600 64" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="wGradA" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%"   stop-color="#00d4aa" stop-opacity="0"/>
+          <stop offset="15%"  stop-color="#00d4aa" stop-opacity="1"/>
+          <stop offset="50%"  stop-color="#6ee7c4" stop-opacity="1"/>
+          <stop offset="85%"  stop-color="#00d4aa" stop-opacity="1"/>
+          <stop offset="100%" stop-color="#00d4aa" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="wGradB" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%"   stop-color="#6ee7c4" stop-opacity="0"/>
+          <stop offset="50%"  stop-color="#b7f5e3" stop-opacity="0.9"/>
+          <stop offset="100%" stop-color="#6ee7c4" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="wGradC" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%"   stop-color="#3dc7ff" stop-opacity="0"/>
+          <stop offset="50%"  stop-color="#3dc7ff" stop-opacity="0.7"/>
+          <stop offset="100%" stop-color="#3dc7ff" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path id="wPath1" class="layer1" d="M 0 32 L 600 32" />
+      <path id="wPath2" class="layer2" d="M 0 32 L 600 32" />
+      <path id="wPath3" class="layer3" d="M 0 32 L 600 32" />
+    </svg>
+  </div>
+
+  <!-- ── 3. AURORA ── -->
+  <div class="style style-aurora">
+    <div class="aurora-blob"></div>
+    <div class="aurora-blob2"></div>
+    <div class="aurora-core" id="auroraCore"></div>
+  </div>
+
+  <!-- ── 4. PARTICLES (canvas-rendered) ── -->
+  <div class="style style-particles">
+    <canvas id="particlesCanvas"></canvas>
+  </div>
+
+  <!-- ── 5. PULSE ── -->
+  <div class="style style-pulse">
+    <div class="pulse-glow" id="pulseGlow"></div>
+    <div class="ripple r1"></div>
+    <div class="ripple r2"></div>
+    <div class="ripple r3"></div>
+    <div class="pulse-core" id="pulseCore"></div>
+  </div>
+
+  <!-- ── 6. RIBBON ── -->
+  <div class="style style-ribbon">
+    <svg viewBox="0 0 600 72" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="rGrad1" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%"   stop-color="#00d4aa" stop-opacity="0"/>
+          <stop offset="50%"  stop-color="#00d4aa" stop-opacity="1"/>
+          <stop offset="100%" stop-color="#00d4aa" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="rGrad2" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%"   stop-color="#6ee7c4" stop-opacity="0"/>
+          <stop offset="50%"  stop-color="#6ee7c4" stop-opacity="1"/>
+          <stop offset="100%" stop-color="#6ee7c4" stop-opacity="0"/>
+        </linearGradient>
+        <linearGradient id="rGrad3" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%"   stop-color="#3dc7ff" stop-opacity="0"/>
+          <stop offset="50%"  stop-color="#3dc7ff" stop-opacity="1"/>
+          <stop offset="100%" stop-color="#3dc7ff" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <path id="ribPath1" class="strand1" d="M 0 36 Q 150 36 300 36 T 600 36" />
+      <path id="ribPath2" class="strand2" d="M 0 36 Q 150 36 300 36 T 600 36" />
+      <path id="ribPath3" class="strand3" d="M 0 36 Q 150 36 300 36 T 600 36" />
+    </svg>
+  </div>
+
+  <!-- ── 7. SPECTRUM ── -->
+  <div class="style style-spectrum" id="spectrum"></div>
+
+<script>
+  // ── State ────────────────────────────────────────────────────────
+  let amplitude = 0.15;
+  let targetAmp = 0.15;
+  let frame = 0;
+  let currentStyle = 'wave';
+
+  // ── Build spectrum bars ──
+  const SPEC_BAR_COUNT = 36;
+  const specEl = document.getElementById('spectrum');
+  const specBars = [];
+  for (let i = 0; i < SPEC_BAR_COUNT; i++) {
+    const b = document.createElement('div');
+    b.className = 'sb';
+    specEl.appendChild(b);
+    specBars.push(b);
+  }
+
+  // ── Particles canvas setup ──
+  const particlesCanvas = document.getElementById('particlesCanvas');
+  const particlesCtx = particlesCanvas.getContext('2d');
+  function resizeParticlesCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = particlesCanvas.getBoundingClientRect();
+    particlesCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
+    particlesCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
+    particlesCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  // Spawn 80 particles, life-cycled
+  const PARTICLE_COUNT = 80;
+  const particles = [];
+  function makeParticle(seedX) {
+    return {
+      x: seedX != null ? seedX : Math.random() * 640,
+      y: 48 + (Math.random() - 0.5) * 30,
+      vx: 0.6 + Math.random() * 1.4,
+      vy: (Math.random() - 0.5) * 0.4,
+      r: 1 + Math.random() * 2.5,
+      life: 0,
+      maxLife: 80 + Math.random() * 80,
+      hue: 165 + Math.random() * 20,  // teal-mint range
+    };
+  }
+  for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(makeParticle());
+  setTimeout(resizeParticlesCanvas, 0);
+  window.addEventListener('resize', resizeParticlesCanvas);
+
+  // ── References ──
+  const wcPath = document.getElementById('wcPath');
+  const wPath1 = document.getElementById('wPath1');
+  const wPath2 = document.getElementById('wPath2');
+  const wPath3 = document.getElementById('wPath3');
+  const ribPath1 = document.getElementById('ribPath1');
+  const ribPath2 = document.getElementById('ribPath2');
+  const ribPath3 = document.getElementById('ribPath3');
+  const auroraCore = document.getElementById('auroraCore');
+  const auroraBlob = document.querySelector('.style-aurora .aurora-blob');
+  const auroraBlob2 = document.querySelector('.style-aurora .aurora-blob2');
+  const pulseCore = document.getElementById('pulseCore');
+  const pulseGlow = document.getElementById('pulseGlow');
+
+  // ── Chime sounds (Web Audio) ─────────────────────────────────────
+  let audioCtx = null;
+  function getAudioCtx() {
+    if (!audioCtx) audioCtx = new AudioContext();
+    return audioCtx;
+  }
+  function playChime(type) {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    const freqs = type === 'start' ? [523, 659] : [659, 523];
+    const peak = type === 'start' ? 0.15 : 0.12;
+    freqs.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine'; osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, now + i * 0.12);
+      gain.gain.linearRampToValueAtTime(peak, now + i * 0.12 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.3);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + i * 0.12);
+      osc.stop(now + i * 0.12 + 0.35);
+    });
+  }
+
+  // ── Per-style renderers ──────────────────────────────────────────
+
+  function renderWaveClassic(t, amp) {
+    const W = 600, CY = 20, steps = 60;
+    let d = `M 0 ${CY}`;
+    for (let i = 1; i <= steps; i++) {
+      const x = (i / steps) * W;
+      let y = Math.sin(t * 1.0 + i * 0.32) * 6
+            + Math.sin(t * 1.9 + i * 0.18) * 4
+            + Math.sin(t * 3.1 + i * 0.45) * 2;
+      const n = i / steps;
+      const edge = Math.min(1, Math.min(n, 1 - n) / 0.18);
+      y *= edge * (amp + 0.1);
+      d += ` L ${x.toFixed(1)} ${(CY + y).toFixed(2)}`;
+    }
+    wcPath.setAttribute('d', d);
+  }
+
+  function renderWave(t, amp) {
+    const W = 600, CY = 32, steps = 90;
+    const buildPath = (freq, phase, mag) => {
+      let d = `M 0 ${CY}`;
+      for (let i = 1; i <= steps; i++) {
+        const x = (i / steps) * W;
+        let y = Math.sin(t * freq + i * 0.25 + phase) * mag * 0.55
+              + Math.sin(t * (freq * 1.7) + i * 0.4 + phase) * mag * 0.4
+              + Math.sin(t * (freq * 3.1) + i * 0.15 + phase) * mag * 0.2;
+        const n = i / steps;
+        const edge = Math.min(1, Math.min(n, 1 - n) / 0.18);
+        y *= edge * (amp + 0.12);
+        d += ` L ${x.toFixed(1)} ${(CY + y).toFixed(2)}`;
+      }
+      return d;
+    };
+    // Bigger magnitudes – more visible at the same calm speed.
+    wPath1.setAttribute('d', buildPath(0.9, 0,     26));
+    wPath2.setAttribute('d', buildPath(1.3, 1.6,   20));
+    wPath3.setAttribute('d', buildPath(0.6, 3.2,   14));
+  }
+
+  function renderAurora(t, amp) {
+    // Core breathes + glows with amplitude
+    const coreScale = 1 + amp * 0.5 + Math.sin(t * 1.4) * 0.05;
+    auroraCore.style.transform = `scale(${coreScale.toFixed(3)})`;
+    auroraCore.style.boxShadow =
+      `0 0 ${(40 + amp * 60).toFixed(0)}px rgba(255,255,255,${(0.7 + amp * 0.3).toFixed(2)}),
+       0 0 ${(80 + amp * 80).toFixed(0)}px rgba(0,212,170,${(0.3 + amp * 0.4).toFixed(2)})`;
+
+    // Big blob expands AND brightens with amplitude – this is what the user
+    // perceives as "pulsing from the inside".
+    const blobScale = 1 + amp * 0.18 + Math.sin(t * 0.8) * 0.03;
+    auroraBlob.style.transform = `rotate(${(t * 60).toFixed(1)}deg) scale(${blobScale.toFixed(3)})`;
+    auroraBlob.style.opacity = (0.85 + amp * 0.15).toFixed(2);
+
+    // Inner blob has more aggressive scale → readable amplitude reaction
+    const blob2Scale = 1 + amp * 0.3 + Math.sin(t * 1.3) * 0.04;
+    auroraBlob2.style.transform = `rotate(${(-t * 90).toFixed(1)}deg) scale(${blob2Scale.toFixed(3)})`;
+  }
+
+  function renderParticles(t, amp) {
+    const ctx = particlesCtx;
+    const w = particlesCanvas.clientWidth;
+    const h = particlesCanvas.clientHeight;
+    ctx.clearRect(0, 0, w, h);
+
+    // Always render all particles – visibility is controlled by an alpha curve
+    // tied to position (fade-in left, fade-out right) so the user never sees
+    // a hard pop-in or cut-off at the screen edge.
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      p.x += p.vx * (0.5 + amp * 1.5);
+      p.y += p.vy + Math.sin(t * 1.4 + p.x * 0.018) * 0.5 * amp;
+      p.life++;
+
+      // Re-spawn just BEFORE the visible window so the fade-in is in front of
+      // the viewer (looks like new particles materialise from thin air).
+      if (p.x > w + 40 || p.life > p.maxLife) {
+        Object.assign(p, makeParticle(-40 - Math.random() * 60));
+        p.y = h / 2 + (Math.random() - 0.5) * h * 0.65;
+      }
+
+      // Position-based alpha curve:
+      //   0%  ──►  fade in over first 18% of width
+      //   18-82%  full visibility
+      //   82-100%  fade out
+      // Multiplied by amplitude (more particles "light up" when louder).
+      const xT = p.x / w;
+      let xFade;
+      if (xT < 0)        xFade = 0;
+      else if (xT < 0.18) xFade = xT / 0.18;
+      else if (xT > 0.82) xFade = Math.max(0, (1 - xT) / 0.18);
+      else                xFade = 1;
+      // smoothstep so the fade is curve, not linear
+      xFade = xFade * xFade * (3 - 2 * xFade);
+
+      const baseAlpha = xFade * (0.55 + amp * 0.45);
+      if (baseAlpha < 0.01) continue;  // skip invisible particles entirely
+
+      // Glow halo – bigger and brighter than before for dominance
+      const haloR = p.r * 5.5 + amp * 8;
+      const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, haloR);
+      grd.addColorStop(0, `hsla(${p.hue}, 95%, 75%, ${baseAlpha * 0.9})`);
+      grd.addColorStop(0.5, `hsla(${p.hue}, 95%, 65%, ${baseAlpha * 0.35})`);
+      grd.addColorStop(1, `hsla(${p.hue}, 90%, 55%, 0)`);
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, haloR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Bright core dot
+      ctx.fillStyle = `hsla(${p.hue}, 100%, 90%, ${Math.min(1, baseAlpha + 0.25)})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function renderPulse(t, amp) {
+    // Smooth breathing: dominant amplitude-driven scale + a very slow ambient
+    // sine so it doesn't feel static when silent.
+    const coreScale = 1 + amp * 0.45 + Math.sin(t * 0.9) * 0.03;
+    pulseCore.style.transform = `scale(${coreScale.toFixed(3)})`;
+    pulseCore.style.boxShadow = `
+      0 0 ${(40 + amp * 50).toFixed(0)}px rgba(0,212,170,${(0.65 + amp * 0.35).toFixed(2)}),
+      0 0 ${(80 + amp * 70).toFixed(0)}px rgba(0,212,170,${(0.3 + amp * 0.25).toFixed(2)}),
+      0 0 ${(140 + amp * 90).toFixed(0)}px rgba(0,212,170,${(0.12 + amp * 0.18).toFixed(2)}),
+      inset 0 2px 0 rgba(255,255,255,0.35),
+      inset 0 -4px 8px rgba(0,90,70,0.4)
+    `;
+    pulseGlow.style.transform = `scale(${(1 + amp * 0.65).toFixed(3)})`;
+    pulseGlow.style.opacity = (0.55 + amp * 0.45).toFixed(2);
+  }
+
+  function renderRibbon(t, amp) {
+    // Slower, calmer wave – frequencies roughly halved from the previous
+    // hyperactive version. More control points (10 instead of 6) for visibly
+    // smoother curves at the cost of a few extra path segments.
+    const W = 600, CY = 36, ctrls = 10;
+    const buildPath = (phase, mag) => {
+      const pts = [];
+      for (let i = 0; i <= ctrls; i++) {
+        const x = (i / ctrls) * W;
+        const n = i / ctrls;
+        const edge = Math.min(1, Math.min(n, 1 - n) / 0.18);
+        // Two slow sines layered – no fast frequency component anymore.
+        const y = CY + (
+          Math.sin(t * 0.45 + i * 0.65 + phase) * mag * 0.85 +
+          Math.sin(t * 0.85 + i * 0.45 + phase * 1.4) * mag * 0.35
+        ) * edge * (amp + 0.15);
+        pts.push({ x, y });
+      }
+      // Smooth quadratic-curve path through the points
+      let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(2)}`;
+      for (let i = 1; i < pts.length; i++) {
+        const xc = (pts[i - 1].x + pts[i].x) / 2;
+        const yc = (pts[i - 1].y + pts[i].y) / 2;
+        d += ` Q ${pts[i - 1].x.toFixed(1)} ${pts[i - 1].y.toFixed(2)} ${xc.toFixed(1)} ${yc.toFixed(2)}`;
+      }
+      d += ` T ${pts[pts.length - 1].x.toFixed(1)} ${pts[pts.length - 1].y.toFixed(2)}`;
+      return d;
+    };
+    // Larger magnitudes – more visual presence at calmer speed.
+    ribPath1.setAttribute('d', buildPath(0,    28));
+    ribPath2.setAttribute('d', buildPath(2.1,  22));
+    ribPath3.setAttribute('d', buildPath(4.2,  16));
+  }
+
+  function renderSpectrum(t, amp) {
+    for (let i = 0; i < SPEC_BAR_COUNT; i++) {
+      const freqWeight = Math.pow(1 - (i / SPEC_BAR_COUNT) * 0.55, 1.2);
+      let w = 0;
+      w += Math.sin(t * 1.4 + i * 0.4) * 0.4;
+      w += Math.sin(t * 2.3 + i * 0.7) * 0.3;
+      w += Math.sin(t * 3.7 + i * 0.25) * 0.2;
+      const center = SPEC_BAR_COUNT / 2.6;
+      const dist = Math.abs(i - center);
+      const gauss = Math.exp(-0.5 * (dist / (SPEC_BAR_COUNT / 3)) ** 2);
+      // Bigger scalar (110 instead of 80) – spectrum fills more of the card.
+      const h = Math.max(4, (0.55 + w) * gauss * freqWeight * amp * 110);
+      specBars[i].style.height = h.toFixed(1) + 'px';
+    }
+  }
+
+  // ── Animation loop (rAF, throttled to ~60fps on RAF cadence) ─────
+  function loop() {
+    if (!document.hidden) {
+      frame++;
+      amplitude += (targetAmp - amplitude) * 0.2;
+      const amp = Math.max(amplitude, 0.08);
+      const t = frame * 0.10;
+
+      switch (currentStyle) {
+        case 'wave_classic': renderWaveClassic(t, amp); break;
+        case 'wave':         renderWave(t, amp); break;
+        case 'aurora':       renderAurora(t, amp); break;
+        case 'particles':    renderParticles(t, amp); break;
+        case 'pulse':        renderPulse(t, amp); break;
+        case 'ribbon':       renderRibbon(t, amp); break;
+        case 'spectrum':     renderSpectrum(t, amp); break;
+      }
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // ── IPC ──────────────────────────────────────────────────────────
+  if (window.notype) {
+    window.notype.onAmplitude((val) => { targetAmp = Math.max(val, 0.08); });
+    window.notype.onRecordingStarted(() => {
+      targetAmp = 0.15;
+      // Particle stream reset
+      for (let i = 0; i < particles.length; i++) {
+        Object.assign(particles[i], makeParticle());
+      }
+      resizeParticlesCanvas();
+      playChime('start');
+    });
+    window.notype.onRecordingStopped(() => playChime('stop'));
+    window.notype.onSetTheme((theme) => {
+      document.body.classList.toggle('dark', theme === 'dark');
+    });
+    if (window.notype.onSetStyle) {
+      window.notype.onSetStyle((style) => {
+        const valid = ['wave_classic', 'wave', 'aurora', 'particles', 'pulse', 'ribbon', 'spectrum'];
+        currentStyle = valid.includes(style) ? style : 'wave';
+        document.body.dataset.style = currentStyle;
+        // particles canvas needs a re-measure when switched in
+        if (currentStyle === 'particles') setTimeout(resizeParticlesCanvas, 50);
+      });
+    }
+  }
+</script>
+</body>
+</html>

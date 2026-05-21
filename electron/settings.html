@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NoType – Settings</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --fg-muted: #333;
+    --fg-dim: #999;
+    --card-bg: #fafafa;
+    --card-border: #f0f0f0;
+    --input-bg: #ffffff;
+    --input-border: #e0e0e0;
+    --input-border-hover: #bbbbbb;
+    --input-focus: #1a1a1a;
+    --hover-bg: #f0f0f0;
+    --toggle-off: #dddddd;
+    --toggle-on: #1a1a1a;
+    --toggle-knob: #ffffff;
+    --scroll-thumb: #cccccc;
+    --scroll-thumb-hover: #999999;
+    --save-bg: #1a1a1a;
+    --save-bg-hover: #333333;
+    --save-fg: #ffffff;
+    --bar-track: #eeeeee;
+    --shadow: rgba(0,0,0,0.15);
+    --select-arrow: '%23999';
+  }
+
+  [data-theme="dark"] {
+    --bg: rgba(28, 28, 30, 0.0);   /* transparent so Mica shines through */
+    --fg: #f5f5f5;
+    --fg-muted: #d4d4d4;
+    --fg-dim: #999999;
+    --card-bg: rgba(255, 255, 255, 0.04);
+    --card-border: rgba(255, 255, 255, 0.08);
+    --input-bg: rgba(255, 255, 255, 0.06);
+    --input-border: rgba(255, 255, 255, 0.12);
+    --input-border-hover: rgba(255, 255, 255, 0.30);
+    --input-focus: #ffffff;
+    --hover-bg: rgba(255, 255, 255, 0.08);
+    --toggle-off: rgba(255, 255, 255, 0.15);
+    --toggle-on: #ffffff;
+    --toggle-knob: #1a1a1a;
+    --scroll-thumb: rgba(255, 255, 255, 0.15);
+    --scroll-thumb-hover: rgba(255, 255, 255, 0.30);
+    --save-bg: #ffffff;
+    --save-bg-hover: #e5e5e5;
+    --save-fg: #1a1a1a;
+    --bar-track: rgba(255, 255, 255, 0.10);
+    --shadow: rgba(0,0,0,0.4);
+    --select-arrow: '%23bbb';
+  }
+
+  body {
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    overflow-y: auto;
+    user-select: none;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--scroll-thumb);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); }
+
+  /* ── Titlebar ── */
+  .titlebar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    -webkit-app-region: drag;
+    border-bottom: 1px solid var(--card-border);
+  }
+
+  .titlebar h1 {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+
+  .titlebar .close-btn {
+    -webkit-app-region: no-drag;
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    border-radius: 6px;
+    font-size: 16px;
+    color: var(--fg-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+
+  .titlebar .close-btn:hover {
+    background: var(--hover-bg);
+    color: var(--fg);
+  }
+
+  /* ── Content ── */
+  .content {
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 18px;
+  }
+
+  .card-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    margin-bottom: 14px;
+  }
+
+  .field {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--card-border);
+    gap: 12px;
+  }
+
+  .field:last-child { border-bottom: none; }
+
+  .field > div:first-child { flex-shrink: 0; min-width: 0; }
+
+  .field-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--fg-muted);
+  }
+
+  .field-desc {
+    font-size: 11px;
+    color: var(--fg-dim);
+    margin-top: 2px;
+  }
+
+  /* ── Select ── */
+  select {
+    appearance: none;
+    background-color: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    padding: 8px 32px 8px 12px;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--fg);
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s;
+    max-width: 260px;
+    width: 260px;
+    min-width: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23999' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    flex-shrink: 0;
+  }
+
+  select:hover { border-color: var(--input-border-hover); }
+  select:focus { border-color: var(--input-focus); }
+
+  /* Native option menus are drawn by the OS – give them sensible colors in dark mode */
+  [data-theme="dark"] select option {
+    background: #1f1f1f;
+    color: #f5f5f5;
+  }
+
+  /* ── Toggle Switch ── */
+  .toggle {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+  }
+
+  .toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .toggle .slider {
+    position: absolute;
+    inset: 0;
+    background: var(--toggle-off);
+    border-radius: 24px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .toggle .slider::before {
+    content: '';
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background: var(--toggle-knob);
+    border-radius: 50%;
+    transition: transform 0.2s, background 0.2s;
+    box-shadow: 0 1px 3px var(--shadow);
+  }
+
+  .toggle input:checked + .slider { background: var(--toggle-on); }
+  .toggle input:checked + .slider::before { transform: translateX(20px); }
+
+  /* ── Hotkey Input ── */
+  .hotkey-display {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  .hotkey-value {
+    font-family: 'Consolas', 'SF Mono', monospace;
+    font-size: 12px;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    min-width: 100px;
+    max-width: 180px;
+    text-align: center;
+    color: var(--fg);
+    letter-spacing: 0.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .hotkey-value.recording {
+    border-color: #ef4444;
+    color: #ef4444;
+    animation: hotkey-pulse 1s infinite;
+  }
+
+  @keyframes hotkey-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.2); }
+    50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1); }
+  }
+
+  .btn-sm {
+    padding: 8px 14px;
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    border-radius: 8px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: var(--fg-muted);
+  }
+
+  .btn-sm:hover { border-color: var(--input-focus); background: var(--hover-bg); }
+
+  /* ── Save Button ── */
+  .save-bar {
+    padding: 16px 20px;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .btn-save {
+    padding: 10px 28px;
+    background: var(--save-bg);
+    color: var(--save-fg);
+    border: none;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.3px;
+  }
+
+  .btn-save:hover { background: var(--save-bg-hover); }
+  .btn-save:active { transform: scale(0.98); }
+
+  /* ── Status badge ── */
+  .status-badge {
+    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 99px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .status-badge.ok { background: #e6f9f0; color: #059669; }
+  .status-badge.loading { background: #fff3e0; color: #d97706; }
+  [data-theme="dark"] .status-badge.ok { background: rgba(34, 197, 94, 0.18); color: #34d399; }
+  [data-theme="dark"] .status-badge.loading { background: rgba(217, 119, 6, 0.20); color: #fbbf24; }
+</style>
+</head>
+<body>
+
+<!-- Titlebar -->
+<div class="titlebar">
+  <h1>NoType Settings</h1>
+  <button class="close-btn" id="closeBtn">✕</button>
+</div>
+
+<div class="content">
+  <!-- Hotkey Card -->
+  <div class="card">
+    <div class="card-title">Hotkey</div>
+    <div class="field">
+      <div>
+        <div class="field-label">Tastenkombination</div>
+        <div class="field-desc">Drücke "Ändern" und dann deine gewünschte Kombination</div>
+      </div>
+      <div class="hotkey-display">
+        <div class="hotkey-value" id="hotkeyValue">Ctrl+Shift+Space</div>
+        <button class="btn-sm" id="hotkeyBtn">Ändern</button>
+      </div>
+    </div>
+    <div class="field">
+      <div>
+        <div class="field-label">Modus</div>
+        <div class="field-desc">Wie die Aufnahme gesteuert wird</div>
+      </div>
+      <select id="modeSelect">
+        <option value="hold_to_speak">Hold to Speak</option>
+        <option value="press_to_speak">Press to Speak</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Speech Card -->
+  <div class="card">
+    <div class="card-title">Sprache & Modell</div>
+    <div class="field">
+      <div>
+        <div class="field-label">Sprache</div>
+      </div>
+      <select id="langSelect">
+        <option value="de">Deutsch</option>
+        <option value="en">English</option>
+        <option value="pl">Polski</option>
+        <option value="hr">Hrvatski</option>
+      </select>
+    </div>
+    <div class="field">
+      <div>
+        <div class="field-label">Automatische Spracherkennung</div>
+        <div class="field-desc">Erkennt die gesprochene Sprache automatisch</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="autoLangToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="field">
+      <div>
+        <div class="field-label">Whisper Modell</div>
+        <div class="field-desc">Größer = genauer, aber langsamer</div>
+      </div>
+      <select id="modelSelect">
+        <option value="tiny">Tiny (~1GB RAM)</option>
+        <option value="base">Base (~1.5GB RAM)</option>
+        <option value="small">Small (~2GB RAM)</option>
+        <option value="medium">Medium (~5GB RAM)</option>
+        <option value="large-v3">Large v3 (~10GB RAM)</option>
+        <option value="large-v3-turbo">Large v3 Turbo (~6GB, schneller)</option>
+      </select>
+    </div>
+    <div class="field" style="flex-direction: column; align-items: stretch; gap: 8px;">
+      <div>
+        <div class="field-label">Eigene Begriffe (Initial Prompt)</div>
+        <div class="field-desc">Z.&nbsp;B. Firmen-, Produkt- oder Eigennamen, damit Whisper sie versteht. Max ~200 Zeichen.</div>
+      </div>
+      <input type="text" id="initialPromptInput" maxlength="220"
+             placeholder="z.B. MetricDash, Supabase, Mijo, Jonas Strambach"
+             style="width: 100%; padding: 8px 12px; font-size: 13px;
+                    font-family: inherit; background: var(--input-bg);
+                    color: var(--fg); border: 1px solid var(--input-border);
+                    border-radius: 8px; outline: none;">
+    </div>
+  </div>
+
+  <!-- Performance Card -->
+  <div class="card">
+    <div class="card-title">Performance</div>
+    <div class="field">
+      <div>
+        <div class="field-label">Beam Size</div>
+        <div class="field-desc">Auto = dynamisch je nach Länge</div>
+      </div>
+      <select id="beamSelect">
+        <option value="auto">Auto (Empfohlen)</option>
+        <option value="1">1 – Schnellste</option>
+        <option value="3">3 – Balanciert</option>
+        <option value="5">5 – Höchste Qualität</option>
+      </select>
+    </div>
+    <div class="field">
+      <div>
+        <div class="field-label">Quantisierung</div>
+        <div class="field-desc">int8_float16 = schnellst bei gleicher Qualität</div>
+      </div>
+      <select id="computeSelect">
+        <option value="float16">float16 (Standard)</option>
+        <option value="int8_float16">int8_float16 (Schneller, Turing+ GPU)</option>
+        <option value="int8">int8 (Minimaler RAM)</option>
+      </select>
+    </div>
+    <div class="field" style="flex-direction: column; align-items: stretch; gap: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <div class="field-label">VAD Empfindlichkeit</div>
+          <div class="field-desc">Niedrig = aggressiver Stille-Filter</div>
+        </div>
+        <span id="vadValue" style="font-size: 12px; color: #666; font-weight: 500;">300ms</span>
+      </div>
+      <input type="range" id="vadSlider" min="100" max="500" step="50" value="300" style="width: 100%; accent-color: var(--toggle-on);">
+    </div>
+  </div>
+
+  <!-- System Card -->
+  <div class="card">
+    <div class="card-title">System</div>
+    <div class="field">
+      <div>
+        <div class="field-label">Mikrofon</div>
+        <div class="field-desc">Audioeingangsgerät auswählen</div>
+      </div>
+      <select id="micSelect">
+        <option value="">Standard (System)</option>
+      </select>
+    </div>
+    <!-- Mic test meter -->
+    <div class="field" style="flex-direction: column; align-items: stretch; gap: 8px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <div class="field-label">Mikrofon-Test</div>
+          <div class="field-desc">Prüfe ob dein Mikrofon funktioniert</div>
+        </div>
+        <button class="btn-sm" id="micTestBtn">🎤 Test</button>
+      </div>
+      <div style="background: var(--bar-track); border-radius: 6px; height: 8px; overflow: hidden; position: relative;">
+        <div id="micTestBar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #22c55e, #4ade80); border-radius: 6px; transition: width 0.08s ease-out;"></div>
+      </div>
+    </div>
+    <div class="field">
+      <div>
+        <div class="field-label">Overlay-Stil</div>
+        <div class="field-desc">Aussehen der Aufnahme-Anzeige</div>
+      </div>
+      <select id="overlayStyleSelect">
+        <option value="wave">Wave – mehrlagige Sinuswellen mit Glow</option>
+        <option value="wave_classic">Wave Classic – Original-Sinuslinie</option>
+        <option value="aurora">Aurora – rotierende Farb-Vortex (Siri-Style)</option>
+        <option value="particles">Particles – fließender Partikelstrom</option>
+        <option value="pulse">Pulse – atmender Orb mit Ripples</option>
+        <option value="ribbon">Ribbon – fließende Multi-Strang-Bänder</option>
+        <option value="spectrum">Spectrum – Glas-Card mit FFT-Bars</option>
+      </select>
+    </div>
+    <div class="field">
+      <div>
+        <div class="field-label">Dark Mode Overlay</div>
+        <div class="field-desc">Nur f&uuml;r Pill-Stil relevant</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="darkModeToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="field">
+      <div>
+        <div class="field-label">Modell-Status</div>
+      </div>
+      <span class="status-badge loading" id="modelStatus">Laden...</span>
+    </div>
+  </div>
+</div>
+
+<div class="save-bar">
+  <button class="btn-save" id="saveBtn">Speichern</button>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  // ── State ──
+  let currentConfig = {};
+  let recordingHotkey = false;
+  let hotkeyParts = new Set();
+
+  // ── Close ──
+  $('closeBtn').onclick = () => window.notype.closeSettings();
+
+  // ── Hotkey Recording ──
+  $('hotkeyBtn').onclick = () => {
+    if (recordingHotkey) return;
+    recordingHotkey = true;
+    hotkeyParts.clear();
+    $('hotkeyValue').textContent = 'Warte auf Eingabe...';
+    $('hotkeyValue').classList.add('recording');
+    $('hotkeyBtn').textContent = '...';
+  };
+
+  document.addEventListener('keydown', (e) => {
+    if (!recordingHotkey) return;
+    e.preventDefault();
+
+    const key = e.key.toLowerCase();
+    const map = {
+      'control': 'ctrl', 'shift': 'shift', 'alt': 'alt',
+      'meta': 'win', ' ': 'space', 'enter': 'enter',
+      'tab': 'tab', 'backspace': 'backspace', 'delete': 'delete',
+      'escape': 'escape', '<': 'less', '>': 'greater',
+    };
+
+    const mapped = map[key] || (e.code.startsWith('Key') ? e.code.slice(3).toLowerCase() : key);
+    hotkeyParts.add(mapped);
+    $('hotkeyValue').textContent = Array.from(hotkeyParts).join('+');
+  });
+
+  document.addEventListener('keyup', (e) => {
+    if (!recordingHotkey) return;
+    if (hotkeyParts.size > 0) {
+      recordingHotkey = false;
+      $('hotkeyValue').classList.remove('recording');
+      $('hotkeyBtn').textContent = 'Ändern';
+      $('hotkeyValue').textContent = Array.from(hotkeyParts).join('+');
+    }
+  });
+
+  // ── Populate from config ──
+  function applyConfig(cfg) {
+    currentConfig = cfg;
+    $('hotkeyValue').textContent = cfg.hotkey || 'ctrl+shift+space';
+    $('modeSelect').value = cfg.mode || 'hold_to_speak';
+    $('langSelect').value = cfg.language || 'de';
+    $('autoLangToggle').checked = cfg.auto_language_detect !== false;
+    $('modelSelect').value = cfg.model_size || 'small';
+    $('darkModeToggle').checked = cfg.overlay_theme === 'dark';
+    $('overlayStyleSelect').value = cfg.overlay_style || 'wave';
+    $('initialPromptInput').value = cfg.initial_prompt || '';
+
+    // Performance
+    $('beamSelect').value = cfg.beam_size || 'auto';
+    $('computeSelect').value = cfg.compute_type || 'int8_float16';
+    $('vadSlider').value = cfg.vad_sensitivity || 300;
+    $('vadValue').textContent = ($('vadSlider').value) + 'ms';
+
+    // Load mic devices
+    window.notype.listDevices();
+  }
+
+  // ── Save ──
+  $('saveBtn').onclick = () => {
+    const micVal = $('micSelect').value;
+    const newConfig = {
+      hotkey: $('hotkeyValue').textContent.trim(),
+      mode: $('modeSelect').value,
+      language: $('langSelect').value,
+      auto_language_detect: $('autoLangToggle').checked,
+      model_size: $('modelSelect').value,
+      overlay_theme: $('darkModeToggle').checked ? 'dark' : 'light',
+      overlay_style: $('overlayStyleSelect').value,
+      initial_prompt: $('initialPromptInput').value.trim(),
+      mic_device_index: micVal === '' ? null : parseInt(micVal),
+      beam_size: $('beamSelect').value,
+      compute_type: $('computeSelect').value,
+      vad_sensitivity: parseInt($('vadSlider').value),
+      first_run_complete: true,
+    };
+    window.notype.saveConfig(newConfig);
+    window.notype.closeSettings();
+  };
+
+  // VAD slider live value
+  $('vadSlider').oninput = () => {
+    $('vadValue').textContent = $('vadSlider').value + 'ms';
+  };
+
+  // ── Theme ──
+  if (window.notype && window.notype.onSetTheme) {
+    window.notype.onSetTheme((theme) => {
+      document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : '';
+    });
+  }
+
+  // ── Listen for config ──
+  if (window.notype) {
+    window.notype.onConfig(applyConfig);
+    window.notype.onModelReady((data) => {
+      $('modelStatus').textContent = `${data.model} · ${data.device}`;
+      $('modelStatus').className = 'status-badge ok';
+    });
+    window.notype.onDevices((devices) => {
+      const sel = $('micSelect');
+      // Keep "Standard" option, remove rest
+      while (sel.options.length > 1) sel.remove(1);
+      devices.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.index;
+        opt.textContent = d.name + (d.default ? ' (Standard)' : '');
+        sel.appendChild(opt);
+      });
+      // Set current value
+      if (currentConfig.mic_device_index != null) {
+        sel.value = currentConfig.mic_device_index;
+      }
+    });
+    window.notype.getConfig();
+  }
+
+  // ── Mic Test ──
+  let micTestStream = null;
+  let micTestContext = null;
+  let micTestAnimId = null;
+
+  $('micTestBtn').onclick = async () => {
+    if (micTestStream) {
+      // Stop test
+      stopMicTest();
+      return;
+    }
+
+    try {
+      micTestStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micTestContext = new AudioContext();
+      const source = micTestContext.createMediaStreamSource(micTestStream);
+      const analyser = micTestContext.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+
+      const dataArray = new Float32Array(analyser.fftSize);
+      $('micTestBtn').textContent = '⏹ Stop';
+      $('micTestBtn').style.borderColor = '#22c55e';
+      $('micTestBtn').style.color = '#22c55e';
+
+      function updateMeter() {
+        analyser.getFloatTimeDomainData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i] * dataArray[i];
+        const rms = Math.sqrt(sum / dataArray.length);
+        const level = Math.min(100, rms * 400);
+        $('micTestBar').style.width = level + '%';
+        micTestAnimId = requestAnimationFrame(updateMeter);
+      }
+      updateMeter();
+    } catch (e) {
+      $('micTestBar').style.background = '#ef4444';
+      $('micTestBar').style.width = '100%';
+      setTimeout(() => {
+        $('micTestBar').style.background = 'linear-gradient(90deg, #22c55e, #4ade80)';
+        $('micTestBar').style.width = '0%';
+      }, 1500);
+    }
+  };
+
+  function stopMicTest() {
+    if (micTestAnimId) cancelAnimationFrame(micTestAnimId);
+    if (micTestStream) micTestStream.getTracks().forEach(t => t.stop());
+    if (micTestContext) micTestContext.close();
+    micTestStream = null;
+    micTestContext = null;
+    micTestAnimId = null;
+    $('micTestBar').style.width = '0%';
+    $('micTestBtn').textContent = '🎤 Test';
+    $('micTestBtn').style.borderColor = '';
+    $('micTestBtn').style.color = '';
+  }
+
+  // Cleanup on close
+  window.addEventListener('beforeunload', stopMicTest);
+</script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+# ── Python ──
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+*.egg-info/
+
+# ── PyInstaller / Electron-Builder build artifacts ──
+build/
+dist/
+
+# ── Node ──
+node_modules/
+npm-debug.log*
+yarn.lock
+
+# ── Runtime data ──
+notype.log
+*.log
+settings.json
+settings.json.bak*
+history.json
+autostart_error.log
+
+# ── OS / IDE noise ──
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*~
+
+# ── Project plans / scratch ──
+*.pen

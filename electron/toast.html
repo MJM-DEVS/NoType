@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>NoType Toast</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: transparent;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+
+  :root {
+    --toast-bg: rgba(255, 255, 255, 0.92);
+    --toast-fg: #1a1a1a;
+    --toast-sub: rgba(0, 0, 0, 0.5);
+    --toast-shadow: rgba(0, 0, 0, 0.18);
+    --toast-border: rgba(0, 0, 0, 0.06);
+  }
+  [data-theme="dark"] {
+    --toast-bg: rgba(28, 28, 30, 0.92);
+    --toast-fg: #f5f5f5;
+    --toast-sub: rgba(255, 255, 255, 0.55);
+    --toast-shadow: rgba(0, 0, 0, 0.5);
+    --toast-border: rgba(255, 255, 255, 0.08);
+  }
+
+  .toast {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--toast-bg);
+    color: var(--toast-fg);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--toast-border);
+    border-radius: 999px;
+    padding: 10px 20px 10px 14px;
+    box-shadow: 0 6px 24px var(--toast-shadow);
+    animation: toastIn 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+               toastOut 0.3s ease-in 2.2s forwards;
+    max-width: 520px;
+  }
+
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateY(12px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @keyframes toastOut {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(-8px); }
+  }
+
+  .icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .icon.success { background: #22c55e; }
+  .icon.error { background: #ef4444; }
+  .icon.warning { background: #f59e0b; }
+
+  .icon svg { width: 12px; height: 12px; }
+
+  .toast-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  .toast-title {
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .toast-sub {
+    font-size: 10px;
+    color: var(--toast-sub);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+</style>
+</head>
+<body>
+
+<div class="toast" id="toast">
+  <div class="icon success" id="icon">
+    <svg viewBox="0 0 12 12" fill="none" id="icon-svg">
+      <path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </div>
+  <div class="toast-body">
+    <div class="toast-title" id="title">Text eingefügt</div>
+    <div class="toast-sub" id="subtitle"></div>
+  </div>
+</div>
+
+<script>
+  const icons = {
+    success: '<path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>',
+    error:   '<path d="M3 3L9 9M9 3L3 9" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>',
+    warning: '<path d="M6 3.5V6.5M6 8.5V8" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>',
+  };
+
+  if (window.notype && window.notype.onSetTheme) {
+    window.notype.onSetTheme((theme) => {
+      document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : '';
+    });
+  }
+
+  if (window.notype) {
+    window.notype.onToastData((data) => {
+      const type = data.type || 'success';
+      const iconEl = document.getElementById('icon');
+      const svgEl = document.getElementById('icon-svg');
+      const titleEl = document.getElementById('title');
+      const subEl = document.getElementById('subtitle');
+
+      // Set icon style
+      iconEl.className = 'icon ' + type;
+      svgEl.innerHTML = icons[type] || icons.success;
+
+      if (type === 'success') {
+        const wordCount = data.text.trim().split(/\s+/).length;
+        const preview = data.text.length > 50 ? data.text.slice(0, 50) + '…' : data.text;
+        titleEl.textContent = preview;
+        // Build subtitle with word count + optional perf stats
+        let sub = `${wordCount} Wörter eingefügt`;
+        if (data.stats) {
+          const s = data.stats;
+          sub += `  ·  beam ${s.beam}  ·  ${s.compute_type}  ·  ${s.duration}s`;
+        }
+        subEl.textContent = sub;
+      } else if (type === 'error') {
+        titleEl.textContent = 'Fehler';
+        subEl.textContent = data.text;
+      } else if (type === 'warning') {
+        titleEl.textContent = data.text;
+        subEl.textContent = '';
+      }
+    });
+  }
+
+  setTimeout(() => {
+    if (window.notype) window.notype.closeToast();
+  }, 2600);
+</script>
+</body>
+</html>
