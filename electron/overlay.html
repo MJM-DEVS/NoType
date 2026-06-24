@@ -77,33 +77,44 @@
     clip-path: circle(50% at 50% 50%);
     -webkit-clip-path: circle(50% at 50% 50%);
   }
+  /* GPU-safe: blur radii reduced (≤20px) and mix-blend-mode removed – both
+     are TDR-prone on a transparent always-on-top window. Single blurred layer
+     emphasis; the inner blob blends via plain alpha instead of `screen`. */
   .style-aurora .aurora-blob {
     position: absolute; inset: 24px;
     border-radius: 50%;
     background: conic-gradient(from 0deg,
       #ff3d8a 0%, #ff7e3d 14%, #ffd23d 28%, #3dffa6 42%,
       #3dc7ff 56%, #7e3dff 70%, #ff3dc7 84%, #ff3d8a 100%);
-    filter: blur(34px) saturate(140%);
+    filter: blur(20px);
     will-change: transform;
-    transition: opacity 0.2s ease-out;
   }
   .style-aurora .aurora-blob2 {
-    position: absolute; inset: 50px;
+    position: absolute; inset: 56px;
     border-radius: 50%;
     background: conic-gradient(from 180deg,
       #00d4aa 0%, #6ee7c4 25%, #3dc7ff 50%, #b7f5e3 75%, #00d4aa 100%);
-    filter: blur(28px) saturate(180%);
-    mix-blend-mode: screen;
+    filter: blur(16px);
+    opacity: 0.6;
     will-change: transform;
+  }
+  /* Pre-blurred glow element behind the core – scaled/faded via transform in JS
+     (cheap) instead of recomputing a box-shadow string every frame. */
+  .style-aurora .aurora-glow {
+    position: absolute; inset: 110px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,255,255,0.85) 0%, rgba(0,212,170,0.3) 45%, rgba(0,212,170,0) 72%);
+    filter: blur(8px);
+    z-index: 1;
+    will-change: transform, opacity;
   }
   .style-aurora .aurora-core {
     position: relative; z-index: 2;
     width: 36px; height: 36px;
     border-radius: 50%;
     background: radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.5) 55%, rgba(255,255,255,0) 100%);
-    will-change: transform, box-shadow;
+    will-change: transform;
   }
-  @keyframes auroraSpin { to { transform: rotate(360deg); } }
 
   /* ═══════════════════════════════════════════════════════════════
      4. PARTICLES  (640×96 – flowing particle stream)
@@ -143,17 +154,18 @@
     15%  { opacity: 0.85; border-color: rgba(0, 212, 170, 0.85); }
     100% { transform: scale(1.85); opacity: 0; border-color: rgba(0, 212, 170, 0); }
   }
+  /* GPU-safe: box-shadow is STATIC (not recomputed every frame). The amplitude
+     glow reaction is driven by the pre-blurred .pulse-glow element via
+     transform/opacity, which composites on the GPU without re-rasterizing. */
   .style-pulse .pulse-core {
     position: relative; z-index: 1;
     width: 88px; height: 88px;
     border-radius: 50%;
     background: radial-gradient(circle at 35% 30%, #b7f5e3 0%, #6ee7c4 30%, #00d4aa 65%, #008f6e 100%);
-    box-shadow: 0 0 40px rgba(0,212,170,0.7),
-                0 0 80px rgba(0,212,170,0.35),
-                0 0 140px rgba(0,212,170,0.15),
+    box-shadow: 0 0 40px rgba(0,212,170,0.55),
                 inset 0 2px 0 rgba(255,255,255,0.35),
                 inset 0 -4px 8px rgba(0,90,70,0.4);
-    will-change: transform, box-shadow;
+    will-change: transform;
   }
   .style-pulse .pulse-glow {
     position: absolute; inset: 20px;
@@ -187,17 +199,19 @@
   /* ═══════════════════════════════════════════════════════════════
      7. SPECTRUM  (320×100 – gradient FFT bars with reflection)
      ═══════════════════════════════════════════════════════════════ */
+  /* GPU-safe: NO backdrop-filter. On a transparent always-on-top window it
+     forces DWM to re-sample the live desktop behind the card every single
+     frame while 36 bars change height – the costliest per-frame effect.
+     A solid translucent fill gives the same glass look without the cost. */
   .style-spectrum {
     position: relative;
     width: 320px; height: 100px;
     align-items: end;
     padding: 14px 16px;
     gap: 3px;
-    background: rgba(10, 10, 14, 0.65);
+    background: rgba(12, 14, 20, 0.9);
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 18px;
-    backdrop-filter: blur(24px) saturate(180%);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
     box-shadow: 0 12px 40px rgba(0,0,0,0.4),
                 inset 0 1px 0 rgba(255,255,255,0.06);
     animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
@@ -287,6 +301,7 @@
   <div class="style style-aurora">
     <div class="aurora-blob"></div>
     <div class="aurora-blob2"></div>
+    <div class="aurora-glow" id="auroraGlow"></div>
     <div class="aurora-core" id="auroraCore"></div>
   </div>
 
@@ -380,6 +395,26 @@
   setTimeout(resizeParticlesCanvas, 0);
   window.addEventListener('resize', resizeParticlesCanvas);
 
+  // GPU-safe particles: pre-render ONE soft mint halo sprite to an offscreen
+  // canvas ONCE, then drawImage it per particle. This removes ~80
+  // createRadialGradient() allocations + 80 arc-fills PER FRAME (the dominant
+  // cost of this style). drawImage of a cached bitmap is cheap and GPU-friendly.
+  const SPRITE_SIZE = 64;
+  const haloSprite = document.createElement('canvas');
+  haloSprite.width = haloSprite.height = SPRITE_SIZE;
+  {
+    const sctx = haloSprite.getContext('2d');
+    const c = SPRITE_SIZE / 2;
+    const g = sctx.createRadialGradient(c, c, 0, c, c, c);
+    g.addColorStop(0,   'rgba(183,245,227,1)');   // bright mint core
+    g.addColorStop(0.4, 'rgba(0,212,170,0.45)');
+    g.addColorStop(1,   'rgba(0,212,170,0)');
+    sctx.fillStyle = g;
+    sctx.beginPath();
+    sctx.arc(c, c, c, 0, Math.PI * 2);
+    sctx.fill();
+  }
+
   // ── References ──
   const wcPath = document.getElementById('wcPath');
   const wPath1 = document.getElementById('wPath1');
@@ -389,6 +424,7 @@
   const ribPath2 = document.getElementById('ribPath2');
   const ribPath3 = document.getElementById('ribPath3');
   const auroraCore = document.getElementById('auroraCore');
+  const auroraGlow = document.getElementById('auroraGlow');
   const auroraBlob = document.querySelector('.style-aurora .aurora-blob');
   const auroraBlob2 = document.querySelector('.style-aurora .aurora-blob2');
   const pulseCore = document.getElementById('pulseCore');
@@ -459,20 +495,17 @@
   }
 
   function renderAurora(t, amp) {
-    // Core breathes + glows with amplitude
+    // Core breathes via transform only (cheap). The glow reaction is the
+    // pre-blurred .aurora-glow element scaled + faded – NO per-frame box-shadow.
     const coreScale = 1 + amp * 0.5 + Math.sin(t * 1.4) * 0.05;
     auroraCore.style.transform = `scale(${coreScale.toFixed(3)})`;
-    auroraCore.style.boxShadow =
-      `0 0 ${(40 + amp * 60).toFixed(0)}px rgba(255,255,255,${(0.7 + amp * 0.3).toFixed(2)}),
-       0 0 ${(80 + amp * 80).toFixed(0)}px rgba(0,212,170,${(0.3 + amp * 0.4).toFixed(2)})`;
+    auroraGlow.style.transform = `scale(${(1 + amp * 0.8).toFixed(3)})`;
+    auroraGlow.style.opacity = (0.6 + amp * 0.4).toFixed(2);
 
-    // Big blob expands AND brightens with amplitude – this is what the user
-    // perceives as "pulsing from the inside".
+    // Blobs expand with amplitude – the perceived "pulsing from the inside".
     const blobScale = 1 + amp * 0.18 + Math.sin(t * 0.8) * 0.03;
     auroraBlob.style.transform = `rotate(${(t * 60).toFixed(1)}deg) scale(${blobScale.toFixed(3)})`;
-    auroraBlob.style.opacity = (0.85 + amp * 0.15).toFixed(2);
 
-    // Inner blob has more aggressive scale → readable amplitude reaction
     const blob2Scale = 1 + amp * 0.3 + Math.sin(t * 1.3) * 0.04;
     auroraBlob2.style.transform = `rotate(${(-t * 90).toFixed(1)}deg) scale(${blob2Scale.toFixed(3)})`;
   }
@@ -516,38 +549,22 @@
       const baseAlpha = xFade * (0.55 + amp * 0.45);
       if (baseAlpha < 0.01) continue;  // skip invisible particles entirely
 
-      // Glow halo – bigger and brighter than before for dominance
+      // Glow halo: draw the cached sprite (no per-frame gradient allocation).
       const haloR = p.r * 5.5 + amp * 8;
-      const grd = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, haloR);
-      grd.addColorStop(0, `hsla(${p.hue}, 95%, 75%, ${baseAlpha * 0.9})`);
-      grd.addColorStop(0.5, `hsla(${p.hue}, 95%, 65%, ${baseAlpha * 0.35})`);
-      grd.addColorStop(1, `hsla(${p.hue}, 90%, 55%, 0)`);
-      ctx.fillStyle = grd;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, haloR, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Bright core dot
-      ctx.fillStyle = `hsla(${p.hue}, 100%, 90%, ${Math.min(1, baseAlpha + 0.25)})`;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r * 1.2, 0, Math.PI * 2);
-      ctx.fill();
+      const d = haloR * 2;
+      ctx.globalAlpha = Math.min(1, baseAlpha);
+      ctx.drawImage(haloSprite, p.x - haloR, p.y - haloR, d, d);
     }
+    ctx.globalAlpha = 1;
   }
 
   function renderPulse(t, amp) {
-    // Smooth breathing: dominant amplitude-driven scale + a very slow ambient
-    // sine so it doesn't feel static when silent.
+    // Core breathes via transform only; the box-shadow is now STATIC (CSS).
+    // The amplitude glow reaction is the pre-blurred .pulse-glow element scaled
+    // + faded – no per-frame box-shadow recomputation (which re-rasterizes).
     const coreScale = 1 + amp * 0.45 + Math.sin(t * 0.9) * 0.03;
     pulseCore.style.transform = `scale(${coreScale.toFixed(3)})`;
-    pulseCore.style.boxShadow = `
-      0 0 ${(40 + amp * 50).toFixed(0)}px rgba(0,212,170,${(0.65 + amp * 0.35).toFixed(2)}),
-      0 0 ${(80 + amp * 70).toFixed(0)}px rgba(0,212,170,${(0.3 + amp * 0.25).toFixed(2)}),
-      0 0 ${(140 + amp * 90).toFixed(0)}px rgba(0,212,170,${(0.12 + amp * 0.18).toFixed(2)}),
-      inset 0 2px 0 rgba(255,255,255,0.35),
-      inset 0 -4px 8px rgba(0,90,70,0.4)
-    `;
-    pulseGlow.style.transform = `scale(${(1 + amp * 0.65).toFixed(3)})`;
+    pulseGlow.style.transform = `scale(${(1 + amp * 0.9).toFixed(3)})`;
     pulseGlow.style.opacity = (0.55 + amp * 0.45).toFixed(2);
   }
 
@@ -601,25 +618,35 @@
     }
   }
 
-  // ── Animation loop (rAF, throttled to ~60fps on RAF cadence) ─────
-  function loop() {
-    if (!document.hidden) {
-      frame++;
-      amplitude += (targetAmp - amplitude) * 0.2;
-      const amp = Math.max(amplitude, 0.08);
-      const t = frame * 0.10;
-
-      switch (currentStyle) {
-        case 'wave_classic': renderWaveClassic(t, amp); break;
-        case 'wave':         renderWave(t, amp); break;
-        case 'aurora':       renderAurora(t, amp); break;
-        case 'particles':    renderParticles(t, amp); break;
-        case 'pulse':        renderPulse(t, amp); break;
-        case 'ribbon':       renderRibbon(t, amp); break;
-        case 'spectrum':     renderSpectrum(t, amp); break;
-      }
-    }
+  // ── Animation loop — HARD frame-rate cap via wall-clock time gate ──
+  // Critical for GPU safety: a bare rAF loop renders at the monitor's refresh
+  // rate, so on a 144/240/360 Hz panel it does 2.4-6x the blur/blend/canvas
+  // work of 60 Hz (and runs the frame-count-driven animation that much faster).
+  // Gating on elapsed time caps composite/raster cost to TARGET_FPS regardless
+  // of refresh rate AND normalises animation speed across all monitors.
+  const TARGET_FPS = 40;
+  const FRAME_MS = 1000 / TARGET_FPS;
+  let lastFrameTs = 0;
+  function loop(ts) {
     requestAnimationFrame(loop);
+    if (document.hidden) return;                 // idle: render nothing
+    if (ts - lastFrameTs < FRAME_MS) return;     // drop extra frames on high-Hz panels
+    lastFrameTs = ts;
+
+    frame++;
+    amplitude += (targetAmp - amplitude) * 0.2;
+    const amp = Math.max(amplitude, 0.08);
+    const t = frame * 0.10;
+
+    switch (currentStyle) {
+      case 'wave_classic': renderWaveClassic(t, amp); break;
+      case 'wave':         renderWave(t, amp); break;
+      case 'aurora':       renderAurora(t, amp); break;
+      case 'particles':    renderParticles(t, amp); break;
+      case 'pulse':        renderPulse(t, amp); break;
+      case 'ribbon':       renderRibbon(t, amp); break;
+      case 'spectrum':     renderSpectrum(t, amp); break;
+    }
   }
   requestAnimationFrame(loop);
 

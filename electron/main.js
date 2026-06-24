@@ -11,6 +11,22 @@ if (!gotLock) {
   process.exit(0);
 }
 
+// ── GPU Safe Mode (escape hatch for flaky drivers) ──────────────────
+// MUST run at module load, BEFORE app.whenReady() / the GPU process starting –
+// disableHardwareAcceleration / command-line switches are no-ops afterwards.
+// When the user's GPU driver crashes with screen artifacts (TDR), enabling
+// `gpu_safe_mode` moves compositing to the CPU and stops provoking the driver.
+// We read settings.json synchronously here; app.getPath('userData') is already
+// resolvable at module load (only the cached USER_DATA_DIR is deferred).
+try {
+  const _cfgPath = path.join(app.getPath('userData'), 'settings.json');
+  const _cfg = fs.existsSync(_cfgPath) ? JSON.parse(fs.readFileSync(_cfgPath, 'utf-8')) : {};
+  if (_cfg.gpu_safe_mode) {
+    app.disableHardwareAcceleration();
+    console.log('GPU safe mode ON – hardware acceleration disabled');
+  }
+} catch (_) { /* settings unreadable – default to normal GPU path */ }
+
 // ── Paths ──
 // In a packaged build (electron-builder), Python sources live under resourcesPath.
 const IS_PACKAGED = app.isPackaged;
@@ -103,15 +119,31 @@ function saveHistory() {
   }
 }
 
+// Debounced save: each transcription calls both addToHistory and trackStats,
+// i.e. two writes back-to-back. Coalesce them into one write ~1s later, off
+// the post-transcription hot path. quitApp() flushes synchronously.
+let _saveTimer = null;
+function scheduleSave() {
+  if (_saveTimer) return;
+  _saveTimer = setTimeout(() => { _saveTimer = null; saveHistory(); }, 1000);
+}
+
 // ── State ──
 let tray = null;
 let overlayWin = null;
+let overlayReady = false;          // overlay webContents finished loading
+let overlayIdleTimer = null;       // destroys the hidden overlay after long idle
+const OVERLAY_IDLE_MS = 5 * 60 * 1000;
 let settingsWin = null;
 let toastWin = null;
 let pythonProcess = null;
-let pythonStartCount = 0;     // how many times we've spawned the backend
-let lastBackendDeath = 0;     // ms timestamp of the last unexpected exit
-let quitRequested = false;    // set by quitApp() to suppress restart
+let pythonStartCount = 0;          // how many times we've spawned the backend
+let lastBackendDeath = 0;          // ms timestamp of the last unexpected exit
+let consecutiveFastCrashes = 0;    // crashes <10s apart in a row (circuit breaker)
+let crashToastShown = false;       // rate-limit the crash toast during a storm
+let backendUptimeTimer = null;     // resets the breaker after sustained uptime
+let backendGaveUp = false;         // true once we stop auto-restarting
+let quitRequested = false;         // set by quitApp() to suppress restart
 let isRecording = false;
 let isPaused = false;
 let isTranscribing = false;
@@ -175,6 +207,7 @@ function loadConfig() {
     auto_language_detect: true,
     overlay_enabled: true,
     overlay_style: 'wave',
+    gpu_safe_mode: false,
     first_run_complete: false,
     ...config,
   };
@@ -223,33 +256,58 @@ function startPython() {
     console.log(`Python exited (code ${code})`);
     pythonProcess = null;
     modelLoaded = false;
+    if (backendUptimeTimer) { clearTimeout(backendUptimeTimer); backendUptimeTimer = null; }
 
     // If we asked it to quit, don't relaunch.
     if (quitRequested) return;
 
     // If any recording was in flight, reset the state machine so the hotkey
     // doesn't end up locked.
-    if (isRecording || isTranscribing) {
-      finishTranscription();
-      showToast('Backend abgestürzt – starte neu', 'error');
-    } else {
-      showToast('Backend ist abgestürzt – starte neu', 'error');
+    if (isRecording || isTranscribing) finishTranscription();
+
+    // ── Circuit breaker ──
+    // A deterministic native crash (e.g. a CUDA/ctranslate2 segfault from a
+    // GPU driver reset) would otherwise respawn forever, and EACH respawn
+    // re-initialises a fresh CUDA context that prevents a wedged driver from
+    // settling. Count crashes that happen <10s apart; after 5 in a row, STOP
+    // and require a manual restart. A single watchdog-kill (uptime >65s) lands
+    // in the `else` branch and resets the counter, so it's never mistaken for
+    // a crash loop.
+    const now = Date.now();
+    if (now - lastBackendDeath < 10_000) consecutiveFastCrashes++;
+    else consecutiveFastCrashes = 0;
+    lastBackendDeath = now;
+
+    if (consecutiveFastCrashes >= 5) {
+      backendGaveUp = true;
+      console.error('Backend crash-looping – giving up auto-restart');
+      if (!crashToastShown) {
+        showToast('Backend startet nicht – bitte NoType neu starten', 'error');
+        crashToastShown = true;
+      }
+      updateTray('loading');
+      return;  // require manual restart – stop hammering the GPU
     }
 
-    // Throttle restart loop: if we crashed twice in <10 s, back off to avoid
-    // a respawn storm (e.g. a corrupt settings.json that crashes the model
-    // load every time).
-    const now = Date.now();
-    const tooSoon = (now - lastBackendDeath) < 10_000;
-    lastBackendDeath = now;
-    const delay = tooSoon ? 8_000 : 2_000;
-    console.log(`Restarting backend in ${delay} ms (attempt #${pythonStartCount + 1})`);
-    setTimeout(() => { if (!quitRequested) startPython(); }, delay);
+    // Exponential backoff: 2s, 4s, 8s, 16s, 32s (capped at 60s).
+    const delay = Math.min(60_000, 2_000 * 2 ** consecutiveFastCrashes);
+    if (!crashToastShown) {
+      showToast('Backend abgestürzt – starte neu', 'error');
+      crashToastShown = true;
+    }
+    console.log(`Restarting backend in ${delay} ms (fast-crash streak ${consecutiveFastCrashes})`);
+    setTimeout(() => { if (!quitRequested && !backendGaveUp) startPython(); }, delay);
   });
 
   pythonProcess.on('error', (err) => {
     console.error('Backend spawn error:', err);
   });
+
+  // Reset the breaker once the backend has run cleanly for 30s – a transient
+  // one-off crash shouldn't count toward the give-up threshold forever.
+  backendUptimeTimer = setTimeout(() => {
+    if (pythonProcess) { consecutiveFastCrashes = 0; crashToastShown = false; }
+  }, 30_000);
 
   pythonStartCount++;
 }
@@ -482,27 +540,57 @@ function createOverlay() {
     },
   });
 
+  overlayReady = false;
   overlayWin.setIgnoreMouseEvents(true);
   overlayWin.loadFile(path.join(__dirname, 'overlay.html'));
+  overlayWin.webContents.once('did-finish-load', () => { overlayReady = true; });
 
   overlayWin.on('closed', () => {
     overlayWin = null;
+    overlayReady = false;
   });
 }
 
-function showOverlay() {
-  if (!overlayWin || overlayWin.isDestroyed()) createOverlay();
+// Push the current style/theme + recording-started to the overlay. If the
+// renderer isn't loaded yet (freshly recreated window), wait for did-finish-load
+// so the IPC messages are never dropped.
+function pushOverlayState() {
+  if (!overlayWin || overlayWin.isDestroyed()) return;
   const styleName = OVERLAY_STYLES[config.overlay_style] ? config.overlay_style : DEFAULT_OVERLAY_STYLE;
+  const send = () => {
+    if (!overlayWin || overlayWin.isDestroyed()) return;
+    overlayWin.webContents.send('set-style', styleName);
+    overlayWin.webContents.send('set-theme', currentTheme());
+    overlayWin.webContents.send('recording-started');
+  };
+  if (overlayReady) send();
+  else overlayWin.webContents.once('did-finish-load', send);
+}
+
+function showOverlay() {
+  if (overlayIdleTimer) { clearTimeout(overlayIdleTimer); overlayIdleTimer = null; }
+  if (!overlayWin || overlayWin.isDestroyed()) createOverlay();
   applyOverlayBounds();
   overlayWin.showInactive();
-  overlayWin.webContents.send('set-style', styleName);
-  overlayWin.webContents.send('set-theme', currentTheme());
-  overlayWin.webContents.send('recording-started');
+  pushOverlayState();
 }
 
 function hideOverlay() {
   if (overlayWin && !overlayWin.isDestroyed()) {
     overlayWin.hide();
+    // Destroy the transparent always-on-top surface after a long idle period
+    // so it isn't kept alive for the whole session. Recreated lazily on next
+    // record. (Hidden cost is already ~0 thanks to the document.hidden gate;
+    // this just frees the compositor surface during extended non-use.)
+    if (overlayIdleTimer) clearTimeout(overlayIdleTimer);
+    overlayIdleTimer = setTimeout(() => {
+      overlayIdleTimer = null;
+      if (overlayWin && !overlayWin.isDestroyed() && !overlayWin.isVisible()) {
+        overlayWin.destroy();
+        overlayWin = null;
+        overlayReady = false;
+      }
+    }, OVERLAY_IDLE_MS);
   }
 }
 
@@ -859,14 +947,14 @@ function trackStats(text) {
   }
   todayStats.count++;
   todayStats.words += text.trim().split(/\s+/).length;
-  saveHistory();  // also persists statsByDate
+  scheduleSave();  // also persists statsByDate
 }
 
 // ── Clipboard History ──
 function addToHistory(text) {
   clipboardHistory.unshift({ text, time: Date.now() });
   if (clipboardHistory.length > MAX_HISTORY) clipboardHistory.pop();
-  saveHistory();
+  scheduleSave();
   updateTray('ready');  // Refresh menu with new history
 }
 
@@ -922,6 +1010,8 @@ function showToast(text, type = 'success', stats = null) {
 // ── App Lifecycle ──
 function quitApp() {
   quitRequested = true;  // suppress backend auto-restart
+  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
+  saveHistory();  // final synchronous flush of any pending debounced save
   sendToPython('quit');
   globalShortcut.unregisterAll();
   setTimeout(() => {
@@ -937,7 +1027,8 @@ app.whenReady().then(() => {
   initPaths();
   loadConfig();
   loadHistory();
-  createOverlay();  // Created hidden, never shows until hotkey
+  // Overlay is created lazily on the first recording (showOverlay) so no
+  // transparent always-on-top compositor surface exists until actually needed.
   createTrayWithRetry();
   startPython();
   startBackendWatchdog();

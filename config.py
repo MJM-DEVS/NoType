@@ -61,6 +61,7 @@ DEFAULT_CONFIG = {
     "overlay_enabled": True,
     "overlay_style": "wave",         # wave | wave_classic | aurora | particles | pulse | ribbon | spectrum
     "initial_prompt": "",            # custom-vocab bias for Whisper
+    "gpu_safe_mode": False,          # disable HW acceleration (flaky-driver escape hatch)
     "first_run_complete": False,
 }
 

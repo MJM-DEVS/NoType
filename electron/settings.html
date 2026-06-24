@@ -149,7 +149,10 @@
 
   .field:last-child { border-bottom: none; }
 
-  .field > div:first-child { flex-shrink: 0; min-width: 0; }
+  /* Let the label/description column take the remaining space and SHRINK so a
+     long description wraps instead of pushing the control (toggle/select) off
+     the right edge. The controls keep their own flex-shrink: 0. */
+  .field > div:first-child { flex: 1 1 auto; min-width: 0; }
 
   .field-label {
     font-size: 13px;
@@ -161,6 +164,7 @@
     font-size: 11px;
     color: var(--fg-dim);
     margin-top: 2px;
+    overflow-wrap: anywhere;   /* wrap long descriptions, never overflow */
   }
 
   /* ── Select ── */
@@ -493,10 +497,20 @@
     <div class="field">
       <div>
         <div class="field-label">Dark Mode Overlay</div>
-        <div class="field-desc">Nur f&uuml;r Pill-Stil relevant</div>
+        <div class="field-desc">Dunkler Overlay-Hintergrund</div>
       </div>
       <label class="toggle">
         <input type="checkbox" id="darkModeToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="field">
+      <div>
+        <div class="field-label">GPU-Sicherheitsmodus</div>
+        <div class="field-desc">Bei Grafik-Abst&uuml;rzen / Artefakten aktivieren. Deaktiviert die Hardware-Beschleunigung (Neustart der App n&ouml;tig).</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="gpuSafeModeToggle">
         <span class="slider"></span>
       </label>
     </div>
@@ -571,6 +585,7 @@
     $('modelSelect').value = cfg.model_size || 'small';
     $('darkModeToggle').checked = cfg.overlay_theme === 'dark';
     $('overlayStyleSelect').value = cfg.overlay_style || 'wave';
+    $('gpuSafeModeToggle').checked = !!cfg.gpu_safe_mode;
     $('initialPromptInput').value = cfg.initial_prompt || '';
 
     // Performance
@@ -594,6 +609,7 @@
       model_size: $('modelSelect').value,
       overlay_theme: $('darkModeToggle').checked ? 'dark' : 'light',
       overlay_style: $('overlayStyleSelect').value,
+      gpu_safe_mode: $('gpuSafeModeToggle').checked,
       initial_prompt: $('initialPromptInput').value.trim(),
       mic_device_index: micVal === '' ? null : parseInt(micVal),
       beam_size: $('beamSelect').value,
