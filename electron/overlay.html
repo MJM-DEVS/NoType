@@ -64,53 +64,48 @@
                         filter: drop-shadow(0 0 6px rgba(61,199,255,0.5)); opacity: 0.65; }
 
   /* ═══════════════════════════════════════════════════════════════
-     3. AURORA  (320×320 – Apple-Siri swirling conic gradient blob)
-        Container is clipped to a circle so the gaussian-blurred blobs
-        never produce hard edges on the corners.
+     3. AURORA  (168×168 – compact swirling orb, cohesive cool palette)
+        Smaller and calmer than before; a brand-aligned teal→aqua→sky
+        gradient instead of a full rainbow. Clipped to a circle so the
+        blurred blobs never show square corners.
      ═══════════════════════════════════════════════════════════════ */
   .style-aurora {
     position: relative;
-    width: 320px; height: 320px;
+    width: 168px; height: 168px;
     align-items: center; justify-content: center;
     animation: fadeScale 0.45s cubic-bezier(0.16, 1, 0.3, 1);
-    /* Clip everything inside the visual circle – removes square-edge blur. */
     clip-path: circle(50% at 50% 50%);
     -webkit-clip-path: circle(50% at 50% 50%);
   }
-  /* GPU-safe: blur radii reduced (≤20px) and mix-blend-mode removed – both
-     are TDR-prone on a transparent always-on-top window. Single blurred layer
-     emphasis; the inner blob blends via plain alpha instead of `screen`. */
   .style-aurora .aurora-blob {
-    position: absolute; inset: 24px;
+    position: absolute; inset: 13px;
     border-radius: 50%;
     background: conic-gradient(from 0deg,
-      #ff3d8a 0%, #ff7e3d 14%, #ffd23d 28%, #3dffa6 42%,
-      #3dc7ff 56%, #7e3dff 70%, #ff3dc7 84%, #ff3d8a 100%);
-    filter: blur(20px);
+      #00d4aa 0%, #19c6c8 30%, #38b0e8 52%, #6ee7c4 74%, #00d4aa 100%);
+    filter: blur(13px);
     will-change: transform;
   }
   .style-aurora .aurora-blob2 {
-    position: absolute; inset: 56px;
+    position: absolute; inset: 32px;
     border-radius: 50%;
     background: conic-gradient(from 180deg,
-      #00d4aa 0%, #6ee7c4 25%, #3dc7ff 50%, #b7f5e3 75%, #00d4aa 100%);
-    filter: blur(16px);
-    opacity: 0.6;
+      #b7f5e3 0%, #6ee7c4 35%, #38d0e0 70%, #b7f5e3 100%);
+    filter: blur(10px);
+    opacity: 0.55;
     will-change: transform;
   }
-  /* Pre-blurred glow element behind the core – scaled/faded via transform in JS
-     (cheap) instead of recomputing a box-shadow string every frame. */
+  /* Pre-blurred glow behind the core – scaled/faded via transform in JS. */
   .style-aurora .aurora-glow {
-    position: absolute; inset: 110px;
+    position: absolute; inset: 56px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(255,255,255,0.85) 0%, rgba(0,212,170,0.3) 45%, rgba(0,212,170,0) 72%);
-    filter: blur(8px);
+    background: radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(0,212,170,0.35) 45%, rgba(0,212,170,0) 72%);
+    filter: blur(5px);
     z-index: 1;
     will-change: transform, opacity;
   }
   .style-aurora .aurora-core {
     position: relative; z-index: 2;
-    width: 36px; height: 36px;
+    width: 20px; height: 20px;
     border-radius: 50%;
     background: radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.5) 55%, rgba(255,255,255,0) 100%);
     will-change: transform;
@@ -154,29 +149,45 @@
     15%  { opacity: 0.85; border-color: rgba(0, 212, 170, 0.85); }
     100% { transform: scale(1.85); opacity: 0; border-color: rgba(0, 212, 170, 0); }
   }
-  /* GPU-safe: box-shadow is STATIC (not recomputed every frame). The amplitude
-     glow reaction is driven by the pre-blurred .pulse-glow element via
-     transform/opacity, which composites on the GPU without re-rasterizing. */
+  /* A glossy 3D sphere: a deep off-center radial body, a bright top-left
+     specular highlight, a dark bottom rim shadow and a thin top rim light.
+     box-shadow stays STATIC (GPU-safe); amplitude reaction = .pulse-glow. */
   .style-pulse .pulse-core {
-    position: relative; z-index: 1;
-    width: 88px; height: 88px;
+    position: relative; z-index: 2;
+    width: 96px; height: 96px;
     border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #b7f5e3 0%, #6ee7c4 30%, #00d4aa 65%, #008f6e 100%);
-    box-shadow: 0 0 40px rgba(0,212,170,0.55),
-                inset 0 2px 0 rgba(255,255,255,0.35),
-                inset 0 -4px 8px rgba(0,90,70,0.4);
+    background:
+      radial-gradient(circle at 36% 28%, #d6fbf0 0%, #7ef0d2 22%, #12cba6 52%, #009e7c 78%, #00674f 100%);
+    box-shadow: 0 0 36px rgba(0,212,170,0.5),
+                inset 0 3px 2px rgba(255,255,255,0.45),
+                inset 0 -10px 16px rgba(0,70,54,0.55),
+                inset 0 0 0 1px rgba(255,255,255,0.10);
     will-change: transform;
   }
-  .style-pulse .pulse-glow {
-    position: absolute; inset: 20px;
+  /* Specular highlight – the glossy hotspot that sells the 3D sphere. */
+  .style-pulse .pulse-spec {
+    position: absolute; z-index: 3;
+    width: 34px; height: 24px;
+    left: 50%; top: 50%;
+    transform: translate(-118%, -150%) rotate(-18deg);
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(0,212,170,0.55) 0%, rgba(0,212,170,0) 70%);
+    background: radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.35) 45%, rgba(255,255,255,0) 75%);
+    filter: blur(2px);
+    pointer-events: none;
+  }
+  .style-pulse .pulse-glow {
+    position: absolute; inset: 18px; z-index: 1;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,212,170,0.6) 0%, rgba(0,212,170,0) 70%);
     filter: blur(14px);
     will-change: transform, opacity;
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     6. RIBBON  (600×80 – flowing multi-strand ribbon)
+     6. RIBBON  (600×88 – flowing 3D band with shaded body + edge light)
+        A filled band (vertical gradient = light hitting the top, shadow
+        underneath) gives real volume instead of flat strokes; a bright
+        top-edge highlight and an offset back-shadow add depth.
      ═══════════════════════════════════════════════════════════════ */
   .style-ribbon {
     width: 100%; height: 100%;
@@ -184,17 +195,20 @@
     animation: fadeUp 0.4s ease-out;
   }
   .style-ribbon svg { width: 100%; height: 100%; overflow: visible; }
-  .style-ribbon path {
-    fill: none;
-    stroke-linecap: round;
+  .style-ribbon .ribbon-shadow {
+    fill: #00352a; opacity: 0.45;
+    filter: blur(5px);
+    transform: translateY(7px);
   }
-  .style-ribbon .strand1 { stroke: url(#rGrad1); stroke-width: 4;
-                           filter: drop-shadow(0 0 8px rgba(0,212,170,0.75))
-                                   drop-shadow(0 0 18px rgba(0,212,170,0.35)); }
-  .style-ribbon .strand2 { stroke: url(#rGrad2); stroke-width: 2.5; opacity: 0.85;
-                           filter: drop-shadow(0 0 6px rgba(110,231,196,0.55)); }
-  .style-ribbon .strand3 { stroke: url(#rGrad3); stroke-width: 2; opacity: 0.65;
-                           filter: drop-shadow(0 0 5px rgba(61,199,255,0.45)); }
+  .style-ribbon .ribbon-body {
+    fill: url(#ribBody);
+    filter: drop-shadow(0 0 10px rgba(0,212,170,0.35));
+  }
+  .style-ribbon .ribbon-top {
+    fill: none; stroke: #d6fbf0; stroke-width: 2; stroke-linecap: round;
+    opacity: 0.9;
+    filter: drop-shadow(0 0 4px rgba(214,251,240,0.6));
+  }
 
   /* ═══════════════════════════════════════════════════════════════
      7. SPECTRUM  (320×100 – gradient FFT bars with reflection)
@@ -205,40 +219,46 @@
      A solid translucent fill gives the same glass look without the cost. */
   .style-spectrum {
     position: relative;
-    width: 320px; height: 100px;
+    width: 320px; height: 104px;
     align-items: end;
-    padding: 14px 16px;
+    padding: 16px 16px 14px;
     gap: 3px;
-    background: rgba(12, 14, 20, 0.9);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 18px;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.4),
-                inset 0 1px 0 rgba(255,255,255,0.06);
+    background: linear-gradient(180deg, rgba(20,22,32,0.94) 0%, rgba(9,10,15,0.96) 100%);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 20px;
+    box-shadow: 0 14px 44px rgba(0,0,0,0.45),
+                inset 0 1px 0 rgba(255,255,255,0.08),
+                inset 0 -1px 0 rgba(0,0,0,0.35);
+    overflow: hidden;
     animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .style-spectrum .sb {
-    flex: 1;
-    min-height: 3px;
-    background: linear-gradient(to top,
-      rgba(0,212,170,0.0) 0%,
-      rgba(0,212,170,0.6) 25%,
-      rgba(110,231,196,1) 75%,
-      #b7f5e3 100%);
-    border-radius: 2px;
-    box-shadow: 0 0 6px rgba(0,212,170,0.5);
-    transition: height 0.04s ease-out;
-    will-change: height;
-    position: relative;
-  }
-  .style-spectrum .sb::after {
+  /* Soft mint floor-glow for depth under the bars. */
+  .style-spectrum::before {
     content: '';
-    position: absolute;
-    top: 100%; left: 0; right: 0;
-    height: 30%;
-    background: linear-gradient(to bottom, rgba(0,212,170,0.4), transparent);
-    transform: scaleY(-1);
-    transform-origin: top;
-    opacity: 0.4;
+    position: absolute; left: 0; right: 0; bottom: -24px; height: 64px;
+    background: radial-gradient(ellipse at 50% 100%, rgba(0,212,170,0.30), rgba(0,212,170,0) 70%);
+    pointer-events: none;
+  }
+  .style-spectrum .sb {
+    position: relative;
+    flex: 1; min-height: 3px;
+    border-radius: 3px 3px 1px 1px;
+    background: linear-gradient(to top,
+      rgba(0,150,120,0.0) 0%,
+      rgba(0,200,160,0.55) 22%,
+      rgba(54,224,196,0.95) 62%,
+      #c9fbef 100%);
+    box-shadow: 0 0 8px rgba(0,212,170,0.55);
+    transition: height 0.05s ease-out;
+    will-change: height;
+  }
+  /* Bright glowing cap at the tip of each bar. */
+  .style-spectrum .sb::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    border-radius: 3px;
+    background: #e8fef8;
+    box-shadow: 0 0 6px rgba(201,251,239,0.9);
   }
 
   /* ─── Shared keyframes ─────────────────────────────────────── */
@@ -317,31 +337,22 @@
     <div class="ripple r2"></div>
     <div class="ripple r3"></div>
     <div class="pulse-core" id="pulseCore"></div>
+    <div class="pulse-spec"></div>
   </div>
 
   <!-- ── 6. RIBBON ── -->
   <div class="style style-ribbon">
-    <svg viewBox="0 0 600 72" preserveAspectRatio="none">
+    <svg viewBox="0 0 600 88" preserveAspectRatio="none">
       <defs>
-        <linearGradient id="rGrad1" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%"   stop-color="#00d4aa" stop-opacity="0"/>
-          <stop offset="50%"  stop-color="#00d4aa" stop-opacity="1"/>
-          <stop offset="100%" stop-color="#00d4aa" stop-opacity="0"/>
-        </linearGradient>
-        <linearGradient id="rGrad2" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%"   stop-color="#6ee7c4" stop-opacity="0"/>
-          <stop offset="50%"  stop-color="#6ee7c4" stop-opacity="1"/>
-          <stop offset="100%" stop-color="#6ee7c4" stop-opacity="0"/>
-        </linearGradient>
-        <linearGradient id="rGrad3" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%"   stop-color="#3dc7ff" stop-opacity="0"/>
-          <stop offset="50%"  stop-color="#3dc7ff" stop-opacity="1"/>
-          <stop offset="100%" stop-color="#3dc7ff" stop-opacity="0"/>
+        <linearGradient id="ribBody" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stop-color="#9af3da" stop-opacity="0.95"/>
+          <stop offset="45%"  stop-color="#1fd6ab" stop-opacity="0.85"/>
+          <stop offset="100%" stop-color="#006f56" stop-opacity="0.55"/>
         </linearGradient>
       </defs>
-      <path id="ribPath1" class="strand1" d="M 0 36 Q 150 36 300 36 T 600 36" />
-      <path id="ribPath2" class="strand2" d="M 0 36 Q 150 36 300 36 T 600 36" />
-      <path id="ribPath3" class="strand3" d="M 0 36 Q 150 36 300 36 T 600 36" />
+      <path id="ribShadow"   class="ribbon-shadow" d="" />
+      <path id="ribBodyPath" class="ribbon-body"   d="" />
+      <path id="ribTop"      class="ribbon-top"    d="" />
     </svg>
   </div>
 
@@ -376,22 +387,26 @@
     particlesCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
     particlesCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
-  // Spawn 80 particles, life-cycled
-  const PARTICLE_COUNT = 80;
+  // Spawn 100 depth-layered particles. `depth` (0 far … 1 near) drives size,
+  // speed and brightness for a parallax sense of depth. The array is kept in
+  // far→near order so painter's-order layering is correct without per-frame
+  // sorting; respawns preserve a particle's depth band.
+  const PARTICLE_COUNT = 100;
   const particles = [];
-  function makeParticle(seedX) {
+  function makeParticle(seedX, depth) {
+    const d = depth != null ? depth : Math.random();
     return {
       x: seedX != null ? seedX : Math.random() * 640,
-      y: 48 + (Math.random() - 0.5) * 30,
-      vx: 0.6 + Math.random() * 1.4,
-      vy: (Math.random() - 0.5) * 0.4,
-      r: 1 + Math.random() * 2.5,
+      y: 48 + (Math.random() - 0.5) * 38,
+      vx: 0.5 + d * 1.7,                 // near particles move faster
+      vy: (Math.random() - 0.5) * 0.5,
+      r: 0.8 + d * 2.8,                  // near particles are bigger
+      depth: d,
       life: 0,
-      maxLife: 80 + Math.random() * 80,
-      hue: 165 + Math.random() * 20,  // teal-mint range
+      maxLife: 90 + Math.random() * 90,
     };
   }
-  for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(makeParticle());
+  for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(makeParticle(undefined, i / PARTICLE_COUNT));
   setTimeout(resizeParticlesCanvas, 0);
   window.addEventListener('resize', resizeParticlesCanvas);
 
@@ -420,9 +435,9 @@
   const wPath1 = document.getElementById('wPath1');
   const wPath2 = document.getElementById('wPath2');
   const wPath3 = document.getElementById('wPath3');
-  const ribPath1 = document.getElementById('ribPath1');
-  const ribPath2 = document.getElementById('ribPath2');
-  const ribPath3 = document.getElementById('ribPath3');
+  const ribShadow = document.getElementById('ribShadow');
+  const ribBody = document.getElementById('ribBodyPath');
+  const ribTop = document.getElementById('ribTop');
   const auroraCore = document.getElementById('auroraCore');
   const auroraGlow = document.getElementById('auroraGlow');
   const auroraBlob = document.querySelector('.style-aurora .aurora-blob');
@@ -527,8 +542,9 @@
 
       // Re-spawn just BEFORE the visible window so the fade-in is in front of
       // the viewer (looks like new particles materialise from thin air).
+      // Preserve the depth band so the parallax layering stays stable.
       if (p.x > w + 40 || p.life > p.maxLife) {
-        Object.assign(p, makeParticle(-40 - Math.random() * 60));
+        Object.assign(p, makeParticle(-40 - Math.random() * 60, p.depth));
         p.y = h / 2 + (Math.random() - 0.5) * h * 0.65;
       }
 
@@ -546,11 +562,12 @@
       // smoothstep so the fade is curve, not linear
       xFade = xFade * xFade * (3 - 2 * xFade);
 
-      const baseAlpha = xFade * (0.55 + amp * 0.45);
+      // Depth drives brightness: near particles brighter, far ones dimmer.
+      const baseAlpha = xFade * (0.35 + p.depth * 0.5) * (0.6 + amp * 0.5);
       if (baseAlpha < 0.01) continue;  // skip invisible particles entirely
 
       // Glow halo: draw the cached sprite (no per-frame gradient allocation).
-      const haloR = p.r * 5.5 + amp * 8;
+      const haloR = p.r * 5.5 + amp * 7;
       const d = haloR * 2;
       ctx.globalAlpha = Math.min(1, baseAlpha);
       ctx.drawImage(haloSprite, p.x - haloR, p.y - haloR, d, d);
@@ -572,21 +589,27 @@
     // Slower, calmer wave – frequencies roughly halved from the previous
     // hyperactive version. More control points (10 instead of 6) for visibly
     // smoother curves at the cost of a few extra path segments.
-    const W = 600, CY = 36, ctrls = 10;
-    const buildPath = (phase, mag) => {
-      const pts = [];
-      for (let i = 0; i <= ctrls; i++) {
-        const x = (i / ctrls) * W;
-        const n = i / ctrls;
-        const edge = Math.min(1, Math.min(n, 1 - n) / 0.18);
-        // Two slow sines layered – no fast frequency component anymore.
-        const y = CY + (
-          Math.sin(t * 0.45 + i * 0.65 + phase) * mag * 0.85 +
-          Math.sin(t * 0.85 + i * 0.45 + phase * 1.4) * mag * 0.35
-        ) * edge * (amp + 0.15);
-        pts.push({ x, y });
-      }
-      // Smooth quadratic-curve path through the points
+    // A 3D band: compute a centre spine wave, then a variable thickness that
+    // tapers to 0 at both ends. The band is the area between the top and
+    // bottom edges, filled with a vertical gradient (light top → dark bottom).
+    const W = 600, CY = 44, STEPS = 22;
+    const top = [], bot = [], topPts = [];
+    for (let i = 0; i <= STEPS; i++) {
+      const x = (i / STEPS) * W;
+      const n = i / STEPS;
+      const edge = Math.min(1, Math.min(n, 1 - n) / 0.16);
+      const smooth = edge * edge * (3 - 2 * edge);
+      const yc = CY + (
+        Math.sin(t * 0.45 + i * 0.55) * 12 +
+        Math.sin(t * 0.85 + i * 0.32) * 6
+      ) * smooth * (amp + 0.2);
+      const th = (6 + (amp + 0.1) * 26) * smooth;   // thickness tapers at ends
+      top.push({ x, y: yc - th / 2 });
+      bot.push({ x, y: yc + th / 2 });
+      topPts.push({ x, y: yc - th / 2 });
+    }
+    // Smooth quadratic path through a point list (open).
+    const smoothOpen = (pts) => {
       let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(2)}`;
       for (let i = 1; i < pts.length; i++) {
         const xc = (pts[i - 1].x + pts[i].x) / 2;
@@ -596,10 +619,15 @@
       d += ` T ${pts[pts.length - 1].x.toFixed(1)} ${pts[pts.length - 1].y.toFixed(2)}`;
       return d;
     };
-    // Larger magnitudes – more visual presence at calmer speed.
-    ribPath1.setAttribute('d', buildPath(0,    28));
-    ribPath2.setAttribute('d', buildPath(2.1,  22));
-    ribPath3.setAttribute('d', buildPath(4.2,  16));
+    // Closed band: top edge L→R, then bottom edge R→L, close.
+    let band = `M ${top[0].x.toFixed(1)} ${top[0].y.toFixed(2)}`;
+    for (let i = 1; i <= STEPS; i++) band += ` L ${top[i].x.toFixed(1)} ${top[i].y.toFixed(2)}`;
+    for (let i = STEPS; i >= 0; i--) band += ` L ${bot[i].x.toFixed(1)} ${bot[i].y.toFixed(2)}`;
+    band += ' Z';
+
+    ribBody.setAttribute('d', band);
+    ribShadow.setAttribute('d', band);
+    ribTop.setAttribute('d', smoothOpen(topPts));
   }
 
   function renderSpectrum(t, amp) {

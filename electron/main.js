@@ -483,11 +483,11 @@ function handlePythonMessage(line) {
 const OVERLAY_STYLES = {
   wave_classic: { w: 600, h: 48,  anchor: 'bottom', offset: 60 },
   wave:         { w: 600, h: 72,  anchor: 'bottom', offset: 60 },
-  aurora:       { w: 320, h: 320, anchor: 'lower',  offset: 0  },
+  aurora:       { w: 168, h: 168, anchor: 'lower',  offset: 0  },
   particles:    { w: 640, h: 96,  anchor: 'bottom', offset: 56 },
-  pulse:        { w: 180, h: 180, anchor: 'lower',  offset: 0  },
-  ribbon:       { w: 600, h: 80,  anchor: 'bottom', offset: 60 },
-  spectrum:     { w: 320, h: 100, anchor: 'bottom', offset: 60 },
+  pulse:        { w: 190, h: 190, anchor: 'lower',  offset: 0  },
+  ribbon:       { w: 600, h: 88,  anchor: 'bottom', offset: 60 },
+  spectrum:     { w: 320, h: 104, anchor: 'bottom', offset: 60 },
 };
 const DEFAULT_OVERLAY_STYLE = 'wave';
 
