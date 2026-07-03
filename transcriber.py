@@ -186,21 +186,55 @@ class Transcriber:
         # model toward custom vocabulary (product names, jargon, etc.) – the
         # simplest form of vocabulary customization without fine-tuning.
         # Inference is serialised via the class-level lock – see comment above.
-        with Transcriber.inference_lock:
-            segments, info = self._model.transcribe(
-                audio,
-                language=whisper_lang,
-                beam_size=actual_beam,
-                vad_filter=True,
-                vad_parameters=dict(
-                    min_silence_duration_ms=vad_sensitivity,
-                    speech_pad_ms=150,
-                ),
-                initial_prompt=(initial_prompt.strip() if initial_prompt else None),
-            )
-            # Force segments to materialise inside the lock – the generator
-            # does the actual model work lazily as we iterate it.
-            segments = list(segments)
+        def _run_inference():
+            with Transcriber.inference_lock:
+                segments, info = self._model.transcribe(
+                    audio,
+                    language=whisper_lang,
+                    beam_size=actual_beam,
+                    vad_filter=True,
+                    vad_parameters=dict(
+                        min_silence_duration_ms=vad_sensitivity,
+                        speech_pad_ms=150,
+                    ),
+                    initial_prompt=(initial_prompt.strip() if initial_prompt else None),
+                    # Anti-hallucination guards. Whisper invents text on noise and
+                    # loops on silence ("sehr sehr sehr...") – these thresholds drop
+                    # such segments instead of inserting them:
+                    # - no context carry-over, so one hallucinated segment can't
+                    #   poison every following segment (initial_prompt is unaffected)
+                    condition_on_previous_text=False,
+                    # - discard segments whose token stream is repetitive garbage
+                    compression_ratio_threshold=2.4,
+                    # - discard segments the model itself is unsure about / flags
+                    #   as non-speech
+                    log_prob_threshold=-1.0,
+                    no_speech_threshold=0.6,
+                )
+                # Force segments to materialise inside the lock – the generator
+                # does the actual model work lazily as we iterate it.
+                return list(segments), info
+
+        compute_fallback = False
+        try:
+            segments, info = _run_inference()
+        except RuntimeError as e:
+            # int8 GEMM can be unsupported at INFERENCE time even though the
+            # model LOADED fine (e.g. Blackwell GPUs + int8_float16 raise
+            # CUBLAS_STATUS_NOT_SUPPORTED on the first matmul). Reload as
+            # float16 and retry once instead of failing the dictation.
+            if "CUBLAS" not in str(e).upper() or self.compute_type == "float16":
+                raise
+            logger.warning(f"cuBLAS rejected compute_type={self.compute_type}, "
+                           f"falling back to float16: {e}")
+            with Transcriber._cache_lock:
+                Transcriber._model_cache.pop(
+                    (self.model_size, self.device, self.compute_type), None)
+            self._model = None
+            self.compute_type = "float16"
+            self.load_model()
+            compute_fallback = True
+            segments, info = _run_inference()
 
         # Collect all segments. `segments` is a generator – iterating it is what
         # actually runs the model. We push each chunk through `on_segment` as it
@@ -227,6 +261,9 @@ class Transcriber:
             "text": result,
             "beam": actual_beam,
             "compute_type": self.compute_type,
+            # True when this call had to downgrade to float16 – the caller
+            # should persist that so future sessions skip the failed attempt.
+            "compute_fallback": compute_fallback,
             "duration": round(audio_duration, 1),
             "vad_ms": vad_sensitivity,
         }

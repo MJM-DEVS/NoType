@@ -49,6 +49,9 @@ from audio_recorder import AudioRecorder
 from transcriber import Transcriber
 from text_output import insert_text
 from config import load_config, save_config, get_config, CONFIG_DIR
+from postprocess import (clean_transcript, warm_up, reset_availability_cache,
+                         DEFAULT_LLM_MODEL)
+import ollama_manager
 
 # Log to file only (stdout is for IPC). Rotate so the log file never grows unbounded.
 # CONFIG_DIR is %APPDATA%/NoType — same directory the frontend uses, survives rebuilds.
@@ -101,7 +104,10 @@ class Backend:
         self.send("status", {"message": f"Loading model '{model_size}'..."})
         logger.info(f"Loading model: {model_size}")
 
-        self.transcriber = Transcriber(model_size=model_size)
+        self.transcriber = Transcriber(
+            model_size=model_size,
+            compute_type=self.config.get("compute_type", "auto"),
+        )
         try:
             self.transcriber.load_model(
                 on_progress=lambda msg: self.send("status", {"message": msg})
@@ -189,6 +195,24 @@ class Backend:
                 "duration": result["duration"],
             }
 
+            # The transcriber downgraded an unsupported compute type mid-call
+            # (cuBLAS refusal) – persist the working one so the next app start
+            # doesn't repeat the failed load+retry cycle.
+            if result.get("compute_fallback"):
+                self.config["compute_type"] = result["compute_type"]
+                save_config(self.config)
+                logger.info(f"Persisted compute_type fallback: {result['compute_type']}")
+
+            if text:
+                cleaned = clean_transcript(
+                    text,
+                    mode=self.config.get("cleanup_mode", "fast"),
+                    llm_model=self.config.get("llm_model", DEFAULT_LLM_MODEL),
+                )
+                text = cleaned["text"] or text
+                stats["cleanup"] = cleaned["engine"]
+                stats["cleanup_ms"] = cleaned["ms"]
+
             if text:
                 logger.info(f"Transcribed: '{_safe_str(text[:80])}'")
                 time.sleep(0.15)
@@ -202,15 +226,61 @@ class Backend:
             logger.error(f"Transcription error: {e}", exc_info=True)
             self.send("error", {"message": f"Transcription failed: {e}"})
 
+    def _llm_model(self) -> str:
+        return self.config.get("llm_model", DEFAULT_LLM_MODEL)
+
+    def _ensure_ai_ready(self):
+        """Bring Ollama up (if installed) and preload the cleanup LLM.
+        Runs in a background thread – never blocks the dictation path."""
+        if ollama_manager.ensure_running_if_installed():
+            reset_availability_cache()
+            warm_up(self._llm_model())
+
+    def handle_ollama_status(self):
+        self.send("ollama_status", ollama_manager.status(self._llm_model()))
+
+    def handle_ollama_setup(self):
+        """Install portable Ollama + pull the LLM, streaming progress to the
+        UI. Runs in a background thread; finishes by enabling AI cleanup."""
+        def progress(stage, percent, message):
+            self.send("ollama_progress",
+                      {"stage": stage, "percent": percent, "message": message})
+
+        def worker():
+            ok = ollama_manager.setup(self._llm_model(), on_progress=progress)
+            if ok:
+                reset_availability_cache()
+                warm_up(self._llm_model())
+                # Setup was an explicit user action – switch cleanup to AI.
+                self.config["cleanup_mode"] = "ai"
+                save_config(self.config)
+                self.send("config", self.config)
+            # "final" marks end-of-setup so the UI can unlock its button –
+            # routine status refreshes while setup runs are ignored there.
+            self.send("ollama_status",
+                      {**ollama_manager.status(self._llm_model()), "final": True})
+
+        threading.Thread(target=worker, daemon=True).start()
+
     def handle_save_config(self, new_config):
         """Save config and reload if needed."""
         old_model = self.config.get("model_size")
+        old_cleanup = self.config.get("cleanup_mode", "fast")
         self.config.update(new_config)
         save_config(self.config)
 
         # Reload model if size changed
         if new_config.get("model_size") and new_config["model_size"] != old_model:
             threading.Thread(target=self.init_transcriber, daemon=True).start()
+
+        # AI mode switched on → bring Ollama up and preload the LLM.
+        # Switched off → stop our portable server to free RAM/VRAM ("pause").
+        new_cleanup = self.config.get("cleanup_mode", "fast")
+        if new_cleanup == "ai" and old_cleanup != "ai":
+            threading.Thread(target=self._ensure_ai_ready, daemon=True).start()
+        elif new_cleanup != "ai" and old_cleanup == "ai":
+            threading.Thread(target=ollama_manager.stop, daemon=True).start()
+            reset_availability_cache()
 
         self.send("config_saved", self.config)
 
@@ -230,6 +300,11 @@ class Backend:
 
         # Load model in background
         threading.Thread(target=self.init_transcriber, daemon=True).start()
+
+        # AI cleanup enabled → start Ollama (if installed) and preload the
+        # LLM in the background so the first dictation pays no cold-start.
+        if self.config.get("cleanup_mode", "fast") == "ai":
+            threading.Thread(target=self._ensure_ai_ready, daemon=True).start()
 
         for line in sys.stdin:
             line = line.strip()
@@ -284,11 +359,16 @@ class Backend:
                     self.handle_save_config(msg.get("data", {}))
                 elif cmd == "get_config":
                     self.handle_get_config()
+                elif cmd == "ollama_status":
+                    self.handle_ollama_status()
+                elif cmd == "ollama_setup":
+                    self.handle_ollama_setup()
                 elif cmd == "ping":
                     self.send("pong")
                 elif cmd == "quit":
                     logger.info("Quit command received")
                     self._running = False
+                    ollama_manager.stop()  # don't orphan our serve child
                     break
                 else:
                     logger.warning(f"Unknown command: {cmd}")
@@ -299,6 +379,9 @@ class Backend:
                 logger.error(f"Command error: {e}", exc_info=True)
                 self.send("error", {"message": str(e)})
 
+        # Also reached when Electron dies and stdin closes – never orphan
+        # the portable ollama serve child.
+        ollama_manager.stop()
         logger.info("Backend stopped.")
 
 

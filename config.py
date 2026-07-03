@@ -61,6 +61,8 @@ DEFAULT_CONFIG = {
     "overlay_enabled": True,
     "overlay_style": "wave",         # wave | wave_classic | aurora | particles | pulse | ribbon | spectrum
     "initial_prompt": "",            # custom-vocab bias for Whisper
+    "cleanup_mode": "fast",          # off | fast (rules) | ai (local LLM via Ollama)
+    "llm_model": "qwen2.5:3b-instruct",  # Ollama model for cleanup_mode="ai"
     "gpu_safe_mode": False,          # disable HW acceleration (flaky-driver escape hatch)
     "first_run_complete": False,
 }

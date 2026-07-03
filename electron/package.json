@@ -1,6 +1,6 @@
 {
   "name": "notype",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "NoType – Local Voice Dictation (Privacy-First)",
   "main": "main.js",
   "scripts": {

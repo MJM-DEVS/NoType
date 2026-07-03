@@ -405,14 +405,33 @@
     <div class="field" style="flex-direction: column; align-items: stretch; gap: 8px;">
       <div>
         <div class="field-label">Eigene Begriffe (Initial Prompt)</div>
-        <div class="field-desc">Z.&nbsp;B. Firmen-, Produkt- oder Eigennamen, damit Whisper sie versteht. Max ~200 Zeichen.</div>
+        <div class="field-desc">Z.&nbsp;B. Firmen-, Produkt- oder Eigennamen, damit Whisper sie versteht. Max ~850 Zeichen (224 Whisper-Tokens).</div>
       </div>
-      <input type="text" id="initialPromptInput" maxlength="220"
+      <input type="text" id="initialPromptInput" maxlength="850"
              placeholder="z.B. MetricDash, Supabase, Mijo, Jonas Strambach"
              style="width: 100%; padding: 8px 12px; font-size: 13px;
                     font-family: inherit; background: var(--input-bg);
                     color: var(--fg); border: 1px solid var(--input-border);
                     border-radius: 8px; outline: none;">
+    </div>
+    <div class="field">
+      <div>
+        <div class="field-label">Text-Bereinigung</div>
+        <div class="field-desc">Entfernt F&uuml;llw&ouml;rter &amp; Versprecher nach dem Diktat</div>
+      </div>
+      <select id="cleanupSelect">
+        <option value="off">Aus – Rohtext</option>
+        <option value="fast">Schnell – Regelbasiert</option>
+        <option value="ai">KI – Lokales LLM (Ollama)</option>
+      </select>
+    </div>
+    <div class="field">
+      <div>
+        <div class="field-label">KI-Engine (Ollama)</div>
+        <div class="field-desc" id="ollamaDesc">Status wird gepr&uuml;ft...</div>
+      </div>
+      <button class="btn-sm" id="ollamaBtn" style="display:none;">Installieren</button>
+      <span class="status-badge loading" id="ollamaBadge" style="display:none;">…</span>
     </div>
   </div>
 
@@ -434,7 +453,7 @@
     <div class="field">
       <div>
         <div class="field-label">Quantisierung</div>
-        <div class="field-desc">int8_float16 = schnellst bei gleicher Qualität</div>
+        <div class="field-desc">float16 = sicher &uuml;berall; int8_float16 wird nicht von jeder GPU unterst&uuml;tzt (autom. Fallback)</div>
       </div>
       <select id="computeSelect">
         <option value="float16">float16 (Standard)</option>
@@ -587,6 +606,7 @@
     $('overlayStyleSelect').value = cfg.overlay_style || 'wave';
     $('gpuSafeModeToggle').checked = !!cfg.gpu_safe_mode;
     $('initialPromptInput').value = cfg.initial_prompt || '';
+    $('cleanupSelect').value = cfg.cleanup_mode || 'fast';
 
     // Performance
     $('beamSelect').value = cfg.beam_size || 'auto';
@@ -596,7 +616,40 @@
 
     // Load mic devices
     window.notype.listDevices();
+    // Refresh Ollama status
+    window.notype.ollamaStatus();
   }
+
+  // ── Ollama (KI-Bereinigung) ──
+  let ollamaBusy = false;   // true while an in-app setup is running
+
+  function renderOllamaStatus(s) {
+    const btn = $('ollamaBtn'), badge = $('ollamaBadge'), desc = $('ollamaDesc');
+    if (s.running && s.model_pulled) {
+      badge.textContent = 'Aktiv ✓';
+      badge.className = 'status-badge ok';
+      badge.style.display = '';
+      btn.style.display = 'none';
+      desc.textContent = 'Lokales LLM bereit – Modus „KI" nutzt es automatisch';
+    } else if (s.installed) {
+      badge.style.display = 'none';
+      btn.textContent = s.running ? 'KI-Modell laden' : 'Aktivieren';
+      btn.style.display = '';
+      desc.textContent = 'Installiert, aber noch nicht einsatzbereit';
+    } else {
+      badge.style.display = 'none';
+      btn.textContent = 'Installieren (~2,5 GB)';
+      btn.style.display = '';
+      desc.textContent = 'Einmaliger Download – danach läuft die KI-Bereinigung komplett lokal';
+    }
+  }
+
+  $('ollamaBtn').onclick = () => {
+    ollamaBusy = true;
+    $('ollamaBtn').disabled = true;
+    $('ollamaBtn').textContent = 'Läuft...';
+    window.notype.ollamaSetup();
+  };
 
   // ── Save ──
   $('saveBtn').onclick = () => {
@@ -611,6 +664,7 @@
       overlay_style: $('overlayStyleSelect').value,
       gpu_safe_mode: $('gpuSafeModeToggle').checked,
       initial_prompt: $('initialPromptInput').value.trim(),
+      cleanup_mode: $('cleanupSelect').value,
       mic_device_index: micVal === '' ? null : parseInt(micVal),
       beam_size: $('beamSelect').value,
       compute_type: $('computeSelect').value,
@@ -653,6 +707,25 @@
       // Set current value
       if (currentConfig.mic_device_index != null) {
         sel.value = currentConfig.mic_device_index;
+      }
+    });
+    let lastOllamaMsg = '';
+    window.notype.onOllamaProgress((p) => {
+      const pct = (p.stage === 'install' || p.stage === 'pull') ? ` (${p.percent}%)` : '';
+      lastOllamaMsg = p.message + pct;
+      $('ollamaDesc').textContent = lastOllamaMsg;
+    });
+    window.notype.onOllamaStatus((s) => {
+      if (!s) return;
+      // While a setup runs, only its own final status may update the UI –
+      // routine refreshes (e.g. settings reopened) must not unlock the button.
+      if (ollamaBusy && !s.final) return;
+      ollamaBusy = false;
+      $('ollamaBtn').disabled = false;
+      renderOllamaStatus(s);
+      // Setup ended but didn't reach "active"? Keep the error visible.
+      if (s.final && !(s.running && s.model_pulled) && lastOllamaMsg) {
+        $('ollamaDesc').textContent = lastOllamaMsg;
       }
     });
     window.notype.getConfig();

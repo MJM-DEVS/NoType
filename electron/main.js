@@ -460,6 +460,18 @@ function handlePythonMessage(line) {
         }
         break;
 
+      case 'ollama_status':
+        if (settingsWin && !settingsWin.isDestroyed()) {
+          settingsWin.webContents.send('ollama-status', data);
+        }
+        break;
+
+      case 'ollama_progress':
+        if (settingsWin && !settingsWin.isDestroyed()) {
+          settingsWin.webContents.send('ollama-progress', data);
+        }
+        break;
+
       case 'error':
         console.error('Backend error:', data.message);
         // CRITICAL: if an error arrives while we were mid-transcription,
@@ -931,6 +943,8 @@ function openSettings() {
 ipcMain.on('save-config', (_, newConfig) => sendToPython('save_config', newConfig));
 ipcMain.on('get-config', () => sendToPython('get_config'));
 ipcMain.on('list-devices', () => sendToPython('list_devices'));
+ipcMain.on('ollama-status', () => sendToPython('ollama_status'));
+ipcMain.on('ollama-setup', () => sendToPython('ollama_setup'));
 ipcMain.on('close-settings', () => {
   if (settingsWin && !settingsWin.isDestroyed()) settingsWin.close();
 });

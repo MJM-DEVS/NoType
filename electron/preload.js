@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld('notype', {
   onConfig: (callback) => ipcRenderer.on('config', (_, data) => callback(data)),
   onDevices: (callback) => ipcRenderer.on('devices', (_, data) => callback(data)),
   onToastData: (callback) => ipcRenderer.on('toast-data', (_, data) => callback(data)),
+  onOllamaStatus: (callback) => ipcRenderer.on('ollama-status', (_, data) => callback(data)),
+  onOllamaProgress: (callback) => ipcRenderer.on('ollama-progress', (_, data) => callback(data)),
 
   // Send messages to main process
   saveConfig: (config) => ipcRenderer.send('save-config', config),
@@ -24,4 +26,6 @@ contextBridge.exposeInMainWorld('notype', {
   closeSettings: () => ipcRenderer.send('close-settings'),
   closeToast: () => ipcRenderer.send('close-toast'),
   registerHotkey: (key) => ipcRenderer.send('register-hotkey', key),
+  ollamaStatus: () => ipcRenderer.send('ollama-status'),
+  ollamaSetup: () => ipcRenderer.send('ollama-setup'),
 });
