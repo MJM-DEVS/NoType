@@ -371,12 +371,7 @@
       <div>
         <div class="field-label">Sprache</div>
       </div>
-      <select id="langSelect">
-        <option value="de">Deutsch</option>
-        <option value="en">English</option>
-        <option value="pl">Polski</option>
-        <option value="hr">Hrvatski</option>
-      </select>
+      <select id="langSelect"></select>
     </div>
     <div class="field">
       <div>
@@ -627,6 +622,50 @@
       $('hotkeyValue').textContent = Array.from(hotkeyParts).join('+');
     }
   });
+
+  // ── Languages ──
+  // Every language Whisper actually supports (large models, 99 languages).
+  // Frequently used ones pinned on top, the rest alphabetical.
+  const WHISPER_LANGUAGES = [
+    ['de', 'Deutsch'], ['en', 'English'], ['pl', 'Polski'], ['hr', 'Hrvatski'],
+    ['af', 'Afrikaans'], ['sq', 'Shqip'], ['am', 'አማርኛ'], ['ar', 'العربية'],
+    ['hy', 'Հայերեն'], ['as', 'অসমীয়া'], ['az', 'Azərbaycan'], ['ba', 'Башҡорт'],
+    ['eu', 'Euskara'], ['be', 'Беларуская'], ['bn', 'বাংলা'], ['bs', 'Bosanski'],
+    ['br', 'Brezhoneg'], ['bg', 'Български'], ['my', 'မြန်မာ'], ['ca', 'Català'],
+    ['zh', '中文'], ['cs', 'Čeština'], ['da', 'Dansk'], ['nl', 'Nederlands'],
+    ['et', 'Eesti'], ['fo', 'Føroyskt'], ['fi', 'Suomi'], ['fr', 'Français'],
+    ['gl', 'Galego'], ['ka', 'ქართული'], ['el', 'Ελληνικά'], ['gu', 'ગુજરાતી'],
+    ['ht', 'Kreyòl ayisyen'], ['ha', 'Hausa'], ['haw', 'ʻŌlelo Hawaiʻi'],
+    ['he', 'עברית'], ['hi', 'हिन्दी'], ['hu', 'Magyar'], ['is', 'Íslenska'],
+    ['id', 'Bahasa Indonesia'], ['it', 'Italiano'], ['ja', '日本語'],
+    ['jw', 'Basa Jawa'], ['kn', 'ಕನ್ನಡ'], ['kk', 'Қазақша'], ['km', 'ខ្មែរ'],
+    ['ko', '한국어'], ['lo', 'ລາວ'], ['la', 'Latina'], ['lv', 'Latviešu'],
+    ['ln', 'Lingála'], ['lt', 'Lietuvių'], ['lb', 'Lëtzebuergesch'],
+    ['mk', 'Македонски'], ['mg', 'Malagasy'], ['ms', 'Bahasa Melayu'],
+    ['ml', 'മലയാളം'], ['mt', 'Malti'], ['mi', 'Te Reo Māori'], ['mr', 'मराठी'],
+    ['mn', 'Монгол'], ['ne', 'नेपाली'], ['no', 'Norsk'], ['nn', 'Nynorsk'],
+    ['oc', 'Occitan'], ['ps', 'پښتو'], ['fa', 'فارسی'], ['pt', 'Português'],
+    ['pa', 'ਪੰਜਾਬੀ'], ['ro', 'Română'], ['ru', 'Русский'], ['sa', 'संस्कृतम्'],
+    ['sr', 'Српски'], ['sn', 'chiShona'], ['sd', 'سنڌي'], ['si', 'සිංහල'],
+    ['sk', 'Slovenčina'], ['sl', 'Slovenščina'], ['so', 'Soomaali'],
+    ['es', 'Español'], ['su', 'Basa Sunda'], ['sw', 'Kiswahili'],
+    ['sv', 'Svenska'], ['tl', 'Tagalog'], ['tg', 'Тоҷикӣ'], ['ta', 'தமிழ்'],
+    ['tt', 'Татарча'], ['te', 'తెలుగు'], ['th', 'ไทย'], ['bo', 'བོད་སྐད་'],
+    ['tr', 'Türkçe'], ['tk', 'Türkmen'], ['uk', 'Українська'], ['ur', 'اردو'],
+    ['uz', 'Oʻzbek'], ['vi', 'Tiếng Việt'], ['cy', 'Cymraeg'], ['yi', 'ייִדיש'],
+    ['yo', 'Yorùbá'],
+  ];
+  {
+    const sel = $('langSelect');
+    const pinned = WHISPER_LANGUAGES.slice(0, 4);
+    const rest = WHISPER_LANGUAGES.slice(4).sort((a, b) => a[1].localeCompare(b[1]));
+    for (const [code, name] of [...pinned, ...rest]) {
+      const opt = document.createElement('option');
+      opt.value = code;
+      opt.textContent = name;
+      sel.appendChild(opt);
+    }
+  }
 
   // ── Populate from config ──
   function applyConfig(cfg) {

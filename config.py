@@ -51,8 +51,7 @@ def _migrate_from_legacy_path() -> None:
 _migrate_from_legacy_path()
 
 DEFAULT_CONFIG = {
-    "language": "de",
-    "languages_enabled": ["de", "en", "pl", "hr"],
+    "language": "de",  # any Whisper language code – the UI offers all 99
     "model_size": "small",
     "hotkey": "ctrl+shift+space",
     "mode": "hold_to_speak",  # "hold_to_speak" or "press_to_speak"

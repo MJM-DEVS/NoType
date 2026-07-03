@@ -10,13 +10,10 @@ from faster_whisper import WhisperModel
 
 logger = logging.getLogger("NoType.Transcriber")
 
-# Map of our language codes to Whisper language codes
-LANGUAGE_MAP = {
-    "de": "de",  # German
-    "en": "en",  # English
-    "pl": "pl",  # Polish
-    "hr": "hr",  # Croatian
-}
+# Language codes pass through to Whisper as-is – every language the loaded
+# model supports (99 for the large models) is available. The map only exists
+# as a hook for engines whose codes differ from ISO 639-1.
+LANGUAGE_MAP: dict = {}
 
 MODEL_SIZES = ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"]
 
