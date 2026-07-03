@@ -66,20 +66,24 @@ The first launch downloads your chosen speech model once; after that everything 
 
 ## Supported models
 
-NoType lets you choose the speech model that fits your hardware. Bigger models are more accurate — especially for mixed-language speech and technical vocabulary.
+NoType ships a curated catalog of ten open-weight speech models. Pick the one that fits your hardware and language — bigger models are more accurate, especially for mixed-language speech and technical vocabulary.
 
-| Model | Accuracy | Languages | VRAM/RAM needed | Recommended for |
-|---|---|---|---|---|
-| Whisper Tiny | basic | 99 | ~1 GB | very old machines, quick notes |
-| Whisper Base | fair | 99 | ~1.5 GB | CPU-only laptops |
-| Whisper Small | good | 99 | ~2 GB | CPU-only machines, older GPUs |
-| Whisper Medium | very good | 99 | ~5 GB | mid-range GPUs |
-| Whisper Large v3 | best | 99 | ~10 GB | high-end GPUs, maximum accuracy |
-| **Whisper Large v3 Turbo** | best-in-class speed/accuracy | 99 | ~6 GB | **any modern NVIDIA GPU — our recommendation** |
+| Model | Languages | VRAM/RAM | Best for |
+|---|---|---|---|
+| Whisper Tiny | 99 | ~1 GB | very old machines, quick notes |
+| Whisper Base | 99 | ~1.5 GB | CPU-only laptops |
+| Whisper Small | 99 | ~2 GB | CPU-only machines, older GPUs |
+| Whisper Medium | 99 | ~5 GB | mid-range GPUs |
+| Whisper Large v2 | 99 | ~10 GB | languages where v2 hallucinates less than v3 |
+| Whisper Large v3 | 99 | ~10 GB | maximum accuracy on high-end GPUs |
+| **Whisper Large v3 Turbo** | 99 | ~6 GB | **any modern NVIDIA GPU — our recommendation** |
+| Distil-Whisper Large v3 | English | ~3 GB | fast English-only dictation |
+| Distil-Whisper Large v3.5 | English | ~3 GB | the best fast English-only choice |
+| Whisper Large v3 Turbo German | German | ~6 GB | dictation in pure German (no mixed-in English) |
 
-All models run locally via [faster-whisper](https://github.com/SYSTRAN/faster-whisper) with GPU acceleration and automatic CPU fallback. Quantization (`float16` / `int8`) is handled automatically — if your GPU rejects a mode, NoType silently falls back to one that works.
+All models run locally through one engine, [faster-whisper](https://github.com/SYSTRAN/faster-whisper), with GPU acceleration and automatic CPU fallback. Quantization is handled automatically — if your GPU rejects a mode, NoType silently falls back to one that works. Single-language models lock their language automatically.
 
-**What about Parakeet and Nemotron?** We continuously benchmark alternative engines. In our current tests on real dictation workloads, NVIDIA's Parakeet TDT (0.6B, 25 European languages) was both slower and less accurate than Whisper Large v3 Turbo for German and mixed German/English speech, and it does not support custom vocabulary. We will add alternative engines the moment they beat what we ship — not just to have a longer list.
+**Why no Parakeet, Canary, Nemotron or Voxtral?** We benchmark alternative engines on real dictation workloads before adding them. In our current tests, NVIDIA Parakeet TDT 0.6B v3 and Canary 1B (v2 and Flash) were slower on consumer Windows GPUs and less accurate on German and mixed German/English speech than Whisper Large v3 Turbo — and none of them support custom vocabulary, which matters most for everyday dictation. CrisperWhisper's verbatim output format is incompatible with clean dictation. Mistral's Voxtral currently has no practical local Windows runtime. We add engines the moment they beat what we ship — not just to have a longer list.
 
 ---
 
@@ -112,7 +116,7 @@ The AI mode uses a small language model running in [Ollama](https://ollama.com/)
 |---|---|
 | Hotkey & mode | Any key combination; hold-to-speak or press-to-toggle |
 | Language | One of 99 languages, or automatic detection per recording |
-| Model | From Tiny to Large v3 Turbo — see [Supported models](#supported-models) |
+| Model | Ten open-weight models — see [Supported models](#supported-models) |
 | Custom vocabulary | Names and terms NoType should spell correctly (up to 850 characters) |
 | Text cleanup | Off / Fast / AI — see [The AI cleanup](#the-ai-cleanup-explained) |
 | Live transcript | Show recognized text in the overlay while recording |

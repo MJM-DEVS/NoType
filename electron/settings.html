@@ -389,12 +389,22 @@
         <div class="field-desc">Größer = genauer, aber langsamer</div>
       </div>
       <select id="modelSelect">
-        <option value="tiny">Tiny (~1GB RAM)</option>
-        <option value="base">Base (~1.5GB RAM)</option>
-        <option value="small">Small (~2GB RAM)</option>
-        <option value="medium">Medium (~5GB RAM)</option>
-        <option value="large-v3">Large v3 (~10GB RAM)</option>
-        <option value="large-v3-turbo">Large v3 Turbo (~6GB, schneller)</option>
+        <optgroup label="OpenAI Whisper – 99 Sprachen">
+          <option value="tiny">Tiny (~1 GB, sehr schnell, Basis-Qualität)</option>
+          <option value="base">Base (~1,5 GB)</option>
+          <option value="small">Small (~2 GB, gut für CPU)</option>
+          <option value="medium">Medium (~5 GB)</option>
+          <option value="large-v2">Large v2 (~10 GB, weniger Halluzinationen)</option>
+          <option value="large-v3">Large v3 (~10 GB, max. Genauigkeit)</option>
+          <option value="large-v3-turbo">Large v3 Turbo (~6 GB, Empfehlung GPU)</option>
+        </optgroup>
+        <optgroup label="Distil-Whisper – nur Englisch, schneller">
+          <option value="distil-large-v3">Distil Large v3 (~3 GB)</option>
+          <option value="distil-large-v3.5">Distil Large v3.5 (~3 GB, beste EN-Wahl)</option>
+        </optgroup>
+        <optgroup label="Spezialisiert">
+          <option value="german-turbo">Large v3 Turbo German (~6 GB, rein deutsche Diktate)</option>
+        </optgroup>
       </select>
     </div>
     <div class="field" style="flex-direction: column; align-items: stretch; gap: 8px;">

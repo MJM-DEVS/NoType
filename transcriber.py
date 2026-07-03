@@ -15,7 +15,27 @@ logger = logging.getLogger("NoType.Transcriber")
 # as a hook for engines whose codes differ from ISO 639-1.
 LANGUAGE_MAP: dict = {}
 
-MODEL_SIZES = ["tiny", "base", "small", "medium", "large-v3", "large-v3-turbo"]
+# Curated catalog of local open-weight models – all served by the same
+# faster-whisper/CTranslate2 engine (no extra runtimes). `repo` is what
+# WhisperModel() loads (built-in name or Hugging Face repo id). `lang` pins
+# single-language models to their language regardless of the UI setting.
+# Benchmarked against alternatives (NVIDIA Parakeet TDT v3, Canary 1B v2 /
+# Flash via onnx-asr, CrisperWhisper): none beat large-v3-turbo on German or
+# mixed DE/EN dictation on consumer GPUs, so they are deliberately absent.
+MODEL_CATALOG = {
+    "tiny":              {"repo": "tiny",           "lang": None},
+    "base":              {"repo": "base",           "lang": None},
+    "small":             {"repo": "small",          "lang": None},
+    "medium":            {"repo": "medium",         "lang": None},
+    "large-v2":          {"repo": "large-v2",       "lang": None},
+    "large-v3":          {"repo": "large-v3",       "lang": None},
+    "large-v3-turbo":    {"repo": "large-v3-turbo", "lang": None},
+    "distil-large-v3":   {"repo": "distil-large-v3", "lang": "en"},
+    "distil-large-v3.5": {"repo": "distil-whisper/distil-large-v3.5-ct2", "lang": "en"},
+    "german-turbo":      {"repo": "jimmymeister/whisper-large-v3-turbo-german-ct2", "lang": "de"},
+}
+
+MODEL_SIZES = list(MODEL_CATALOG)
 
 # Compute type options (user-facing labels → faster-whisper values)
 COMPUTE_TYPES = {
@@ -49,6 +69,10 @@ class Transcriber:
             compute_type: "int8_float16" (fastest GPU), "float16", "int8", or "auto"
         """
         self.model_size = model_size
+        entry = MODEL_CATALOG.get(model_size, {"repo": model_size, "lang": None})
+        self._repo = entry["repo"]
+        # Single-language models ignore the configured/auto language.
+        self.forced_language = entry["lang"]
         self._model = None
 
         # Auto-detect device
@@ -80,7 +104,7 @@ class Transcriber:
         (model_size, device, compute_type) reuses the existing WhisperModel
         instead of re-reading it from disk.
         """
-        cache_key = (self.model_size, self.device, self.compute_type)
+        cache_key = (self._repo, self.device, self.compute_type)
         with Transcriber._cache_lock:
             cached = Transcriber._model_cache.get(cache_key)
         if cached is not None:
@@ -97,7 +121,7 @@ class Transcriber:
 
         try:
             self._model = WhisperModel(
-                self.model_size,
+                self._repo,
                 device=self.device,
                 compute_type=self.compute_type,
             )
@@ -109,11 +133,11 @@ class Transcriber:
                 if on_progress:
                     on_progress("int8_float16 nicht unterstützt, nutze float16...")
                 self._model = WhisperModel(
-                    self.model_size,
+                    self._repo,
                     device=self.device,
                     compute_type="float16",
                 )
-                cache_key = (self.model_size, self.device, self.compute_type)
+                cache_key = (self._repo, self.device, self.compute_type)
             else:
                 raise
 
@@ -175,9 +199,12 @@ class Transcriber:
         logger.info(f"Transcribing: {audio_duration:.1f}s audio, beam={actual_beam}, "
                     f"compute={self.compute_type}, vad_ms={vad_sensitivity}")
 
-        # Determine language parameter for whisper
+        # Determine language parameter for whisper. Single-language models
+        # (distil = en, german fine-tune = de) always win over the UI setting.
         whisper_lang = None
-        if language and not auto_detect:
+        if self.forced_language:
+            whisper_lang = self.forced_language
+        elif language and not auto_detect:
             whisper_lang = LANGUAGE_MAP.get(language, language)
 
         # Transcribe with optimized parameters. `initial_prompt` biases the
@@ -227,7 +254,7 @@ class Transcriber:
                            f"falling back to float16: {e}")
             with Transcriber._cache_lock:
                 Transcriber._model_cache.pop(
-                    (self.model_size, self.device, self.compute_type), None)
+                    (self._repo, self.device, self.compute_type), None)
             self._model = None
             self.compute_type = "float16"
             self.load_model()
