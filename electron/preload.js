@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('notype', {
   onToastData: (callback) => ipcRenderer.on('toast-data', (_, data) => callback(data)),
   onOllamaStatus: (callback) => ipcRenderer.on('ollama-status', (_, data) => callback(data)),
   onOllamaProgress: (callback) => ipcRenderer.on('ollama-progress', (_, data) => callback(data)),
+  onPreviewText: (callback) => ipcRenderer.on('preview-text', (_, text) => callback(text)),
+  onPreviewEnabled: (callback) => ipcRenderer.on('preview-enabled', (_, enabled) => callback(enabled)),
 
   // Send messages to main process
   saveConfig: (config) => ipcRenderer.send('save-config', config),

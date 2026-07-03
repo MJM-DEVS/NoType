@@ -17,7 +17,7 @@ No cloud. No account. No data leaves your machine. Powered by [faster‑whisper]
 ![Electron](https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white)
 ![Whisper](https://img.shields.io/badge/faster--whisper-CUDA-00d4aa)
 ![Privacy](https://img.shields.io/badge/privacy-100%25%20local-success)
-![License](https://img.shields.io/badge/license-MIT-blue)
+![License](https://img.shields.io/badge/license-FSL--1.1--MIT-blue)
 
 </div>
 
@@ -62,14 +62,16 @@ Everything runs **on your own machine**. The speech model is downloaded once and
 - 🎙️ **Push‑to‑talk dictation** — hold‑to‑speak or press‑to‑toggle, your choice.
 - 🔒 **100% local & private** — local Whisper inference, no network, no telemetry, no account.
 - ⚡ **GPU‑accelerated** — CUDA `float16` / `int8_float16` via faster‑whisper; automatic CPU fallback.
-- 🌍 **Multilingual** — German, English, Polish, Croatian, with optional automatic language detection.
-- 🧠 **Custom vocabulary** — bias the model toward your product names, brands and jargon with an *initial prompt*.
+- 🤖 **AI transcript cleanup** — an optional local LLM (via Ollama, installed **in‑app with one click**) removes filler words and polishes grammar. Rule‑based instant cleanup as default; hard latency budget so the LLM never slows you down.
+- 🛡️ **Anti‑hallucination** — noise and silence no longer become "sehr sehr sehr": repetitive/low‑confidence segments are dropped at the decoder level.
+- 📺 **Live transcript** — watch your words appear in the overlay while you're still speaking (optional).
+- 🌍 **Multilingual** — German, English, Polish, Croatian, with optional automatic language detection. Tuned for mixed DE/EN speech.
+- 🧠 **Custom vocabulary** — bias the model toward your product names, brands and jargon (up to 850 characters / Whisper's full 224‑token prompt budget).
 - 🎚️ **Tunable quality/speed** — pick the model (`tiny` → `large‑v3‑turbo`), beam size, quantization and VAD sensitivity.
 - ✨ **Seven animated overlays** — voice‑reactive visualizers from a minimal sine wave to a Siri‑style aurora.
-- 📋 **Smart paste** — clipboard + native `SendInput` Ctrl+V for maximum app compatibility.
+- 📋 **Smart insert** — clipboard + native `SendInput` Ctrl+V with an automatic direct‑typing fallback for terminals and paste‑resistant apps.
 - 🗂️ **History & stats** — last 10 transcriptions plus today / 7‑day / 30‑day word counts, right in the tray.
-- 🔔 **Unobtrusive feedback** — a glassy toast confirms each transcription with word count and timing.
-- 🛟 **Self‑healing** — backend auto‑restart with a circuit breaker, IPC watchdog, atomic settings with rolling backups.
+- 🛟 **Self‑healing** — backend auto‑restart with a circuit breaker, IPC watchdog, GPU compute‑type auto‑fallback, startup inference self‑test, atomic settings with rolling backups.
 - 🖥️ **Native Windows 11 feel** — Mica/dark‑mode settings window, system‑tray control, single‑instance.
 
 ---
@@ -108,10 +110,11 @@ flowchart LR
 **The recording loop:**
 
 1. You press the hotkey → Electron shows the overlay and tells the backend to start recording.
-2. `sounddevice` captures 16 kHz mono audio; per‑block RMS amplitude streams to the overlay so the visualizer reacts to your voice.
-3. You release → the backend runs faster‑whisper (with VAD filtering) on the captured audio.
-4. The transcript is placed on the clipboard and pasted with a simulated Ctrl+V via the Windows `SendInput` API.
-5. A toast confirms the result; the tray history and stats update.
+2. `sounddevice` captures 16 kHz mono audio; per‑block RMS amplitude streams to the overlay so the visualizer reacts to your voice. With live preview enabled, a rolling low‑latency Whisper pass paints the recognized text into the overlay while you speak.
+3. You release → the backend runs the full‑quality faster‑whisper pass (VAD filtering + anti‑hallucination thresholds) on the captured audio.
+4. The transcript is cleaned up — instant rule‑based filler removal, optionally polished by a local LLM (Ollama) within a strict latency budget.
+5. The text is inserted at your cursor: clipboard + simulated Ctrl+V via the Windows `SendInput` API, with an automatic direct‑typing fallback.
+6. The tray history and stats update (an optional toast can confirm each dictation).
 
 ---
 
@@ -202,7 +205,11 @@ All settings live in the **Settings** window (system tray → ⚙) and are store
 | **Quantization** | `float16` · `int8_float16` · `int8` | `float16` | `int8_float16` is fastest on Turing+ GPUs |
 | **VAD sensitivity** | 100–500 ms | 300 ms | Silence filtering aggressiveness |
 | **Microphone** | system default or a specific device | system | |
-| **Custom vocabulary** | free text (*initial prompt*) | — | e.g. brand/product names so Whisper spells them right |
+| **Custom vocabulary** | free text (*initial prompt*), up to 850 chars | — | e.g. brand/product names so Whisper spells them right |
+| **Text cleanup** | off · fast (rules) · AI (local LLM) | fast | AI mode uses Ollama (one‑click in‑app install) and falls back to rules when unavailable or over budget |
+| **Live transcript** | on / off | on | Rolling recognized text in the overlay while recording |
+| **Insert method** | auto (Ctrl+V + typing fallback) · always type | auto | "Always type" for terminals/apps that ignore Ctrl+V |
+| **Success popup** | on / off | off | Errors and warnings always show |
 | **Overlay style** | 7 styles | Wave | See [Overlay styles](#overlay-styles) |
 | **Dark mode overlay** | on / off | off | |
 | **GPU safe mode** | on / off | off | Disables hardware acceleration — see [Troubleshooting](#troubleshooting) |
@@ -221,7 +228,7 @@ All persistent state lives in `%APPDATA%\NoType\`:
 | `history.json` | Last 10 transcriptions + per‑day word/usage stats |
 | `notype.log` | Rotating diagnostic log (5 MB × 3) |
 
-The only network access in the entire app is the **one‑time model download** from Hugging Face on first use of a given model. After that, dictation works completely offline.
+Network access is limited to **one‑time downloads**: the Whisper model from Hugging Face on first use, and — only if you enable AI cleanup — the portable Ollama runtime and its LLM (stored under `%APPDATA%\NoType\ollama\`, removed with the app). Dictation itself, including the AI cleanup, works completely offline.
 
 ---
 
@@ -233,6 +240,8 @@ NoType is hardened against the failure modes of a long‑running, GPU‑heavy de
 - **Backend circuit breaker** — if the native backend dies, it auto‑restarts with exponential backoff and gives up after repeated fast crashes (rather than hammering a wedged GPU driver forever).
 - **IPC watchdog** — a ping/pong heartbeat detects a frozen backend and recycles it.
 - **Atomic settings** — `settings.json` is written via temp‑file + rename with three rolling backups and automatic recovery from corruption.
+- **Compute‑type auto‑fallback** — GPUs that accept `int8_float16` at load time but reject it at inference time (cuBLAS `NOT_SUPPORTED`) are downgraded to `float16` on the fly; the working setting is persisted. A startup self‑test triggers this before your first dictation ever sees it.
+- **Lifetime‑bound Ollama** — the AI‑cleanup runtime is tied to the backend with a kill‑on‑close Job Object, so even a force‑killed app never leaves an orphaned server behind.
 - **GPU‑safe overlay** — the visualizer is frame‑rate‑capped and avoids the compositing constructs (live `backdrop-filter`, `mix-blend-mode`, per‑frame `box-shadow`/gradient allocation) that trigger driver TDR on transparent always‑on‑top windows.
 - **Single‑instance lock** + resilient tray creation so boot‑time launches never end up headless.
 
@@ -286,8 +295,10 @@ Add them to **Settings → Custom vocabulary (initial prompt)** — e.g. `Anthro
 No Type/
 ├── backend.py            # Python backend: IPC loop, recording, transcription orchestration
 ├── audio_recorder.py     # sounddevice capture, RMS amplitude, pause/resume
-├── transcriber.py        # faster-whisper wrapper, model cache, inference lock
-├── text_output.py        # clipboard + Windows SendInput Ctrl+V paste
+├── transcriber.py        # faster-whisper wrapper, model cache, inference lock, cuBLAS fallback
+├── postprocess.py        # transcript cleanup: rules (fillers, stutter) + local LLM via Ollama
+├── ollama_manager.py     # portable Ollama install, serve lifecycle (job object), model pull
+├── text_output.py        # clipboard + SendInput Ctrl+V, Unicode typing fallback
 ├── config.py             # atomic settings load/save with rolling backups (%APPDATA%/NoType)
 ├── backend.spec          # PyInstaller build (--onedir, console=False)
 ├── requirements.txt
@@ -310,6 +321,7 @@ No Type/
 | Layer | Technology |
 |---|---|
 | Speech‑to‑text | [faster‑whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2) on CUDA / CPU |
+| AI text cleanup | [Ollama](https://ollama.com/) (portable, in‑app managed) + Qwen 2.5 3B, fully local |
 | Audio capture | [sounddevice](https://python-sounddevice.readthedocs.io/) (PortAudio), NumPy |
 | Backend packaging | [PyInstaller](https://pyinstaller.org/) (`--onedir`) |
 | Desktop shell | [Electron 33](https://www.electronjs.org/) |
@@ -321,7 +333,9 @@ No Type/
 
 ## License
 
-Released under the **MIT License**. See [`LICENSE`](LICENSE) for details.
+Released under the **Functional Source License 1.1 (FSL‑1.1‑MIT)**. See [`LICENSE`](LICENSE) for the full text.
+
+In plain words: you can use NoType freely — personally, at work, for education and research — and read, modify and share the code. What you may **not** do is take it and offer it as a **competing commercial product or service**. Each release automatically becomes available under the plain MIT license two years after publication.
 
 <div align="center">
 <br/>

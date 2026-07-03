@@ -403,16 +403,30 @@
       </select>
     </div>
     <div class="field" style="flex-direction: column; align-items: stretch; gap: 8px;">
-      <div>
-        <div class="field-label">Eigene Begriffe (Initial Prompt)</div>
-        <div class="field-desc">Z.&nbsp;B. Firmen-, Produkt- oder Eigennamen, damit Whisper sie versteht. Max ~850 Zeichen (224 Whisper-Tokens).</div>
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <div>
+          <div class="field-label">Eigene Begriffe (Initial Prompt)</div>
+          <div class="field-desc">Z.&nbsp;B. Firmen-, Produkt- oder Eigennamen, damit Whisper sie versteht.</div>
+        </div>
+        <span id="promptCounter" style="font-size: 11px; color: #888; white-space: nowrap;">0 / 850</span>
       </div>
-      <input type="text" id="initialPromptInput" maxlength="850"
+      <textarea id="initialPromptInput" maxlength="850" rows="3"
              placeholder="z.B. MetricDash, Supabase, Mijo, Jonas Strambach"
              style="width: 100%; padding: 8px 12px; font-size: 13px;
                     font-family: inherit; background: var(--input-bg);
                     color: var(--fg); border: 1px solid var(--input-border);
-                    border-radius: 8px; outline: none;">
+                    border-radius: 8px; outline: none; resize: vertical;
+                    min-height: 60px;"></textarea>
+    </div>
+    <div class="field">
+      <div>
+        <div class="field-label">Live-Text im Overlay</div>
+        <div class="field-desc">Zeigt den erkannten Text schon w&auml;hrend der Aufnahme</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="livePreviewToggle">
+        <span class="slider"></span>
+      </label>
     </div>
     <div class="field">
       <div>
@@ -525,6 +539,26 @@
     </div>
     <div class="field">
       <div>
+        <div class="field-label">Erfolgs-Popup nach Diktat</div>
+        <div class="field-desc">Fehler werden immer angezeigt</div>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" id="successToastToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="field">
+      <div>
+        <div class="field-label">Einf&uuml;gemethode</div>
+        <div class="field-desc">&bdquo;Tippen&ldquo; f&uuml;r Terminals/Apps, die Strg+V ignorieren</div>
+      </div>
+      <select id="insertMethodSelect">
+        <option value="auto">Automatisch (Strg+V, Fallback Tippen)</option>
+        <option value="type">Immer tippen</option>
+      </select>
+    </div>
+    <div class="field">
+      <div>
         <div class="field-label">GPU-Sicherheitsmodus</div>
         <div class="field-desc">Bei Grafik-Abst&uuml;rzen / Artefakten aktivieren. Deaktiviert die Hardware-Beschleunigung (Neustart der App n&ouml;tig).</div>
       </div>
@@ -606,7 +640,11 @@
     $('overlayStyleSelect').value = cfg.overlay_style || 'wave';
     $('gpuSafeModeToggle').checked = !!cfg.gpu_safe_mode;
     $('initialPromptInput').value = cfg.initial_prompt || '';
+    updatePromptCounter();
     $('cleanupSelect').value = cfg.cleanup_mode || 'fast';
+    $('livePreviewToggle').checked = cfg.live_preview_enabled !== false;
+    $('successToastToggle').checked = cfg.success_toast === true;
+    $('insertMethodSelect').value = cfg.insert_method || 'auto';
 
     // Performance
     $('beamSelect').value = cfg.beam_size || 'auto';
@@ -665,6 +703,9 @@
       gpu_safe_mode: $('gpuSafeModeToggle').checked,
       initial_prompt: $('initialPromptInput').value.trim(),
       cleanup_mode: $('cleanupSelect').value,
+      live_preview_enabled: $('livePreviewToggle').checked,
+      success_toast: $('successToastToggle').checked,
+      insert_method: $('insertMethodSelect').value,
       mic_device_index: micVal === '' ? null : parseInt(micVal),
       beam_size: $('beamSelect').value,
       compute_type: $('computeSelect').value,
@@ -679,6 +720,12 @@
   $('vadSlider').oninput = () => {
     $('vadValue').textContent = $('vadSlider').value + 'ms';
   };
+
+  // Vocabulary character counter
+  function updatePromptCounter() {
+    $('promptCounter').textContent = `${$('initialPromptInput').value.length} / 850`;
+  }
+  $('initialPromptInput').oninput = updatePromptCounter;
 
   // ── Theme ──
   if (window.notype && window.notype.onSetTheme) {

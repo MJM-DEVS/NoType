@@ -163,7 +163,8 @@ def _llm_clean(text: str, model: str) -> str | None:
 
 
 def clean_transcript(text: str, mode: str = "fast",
-                     llm_model: str = DEFAULT_LLM_MODEL) -> dict:
+                     llm_model: str = DEFAULT_LLM_MODEL,
+                     llm_min_words: int = 8) -> dict:
     """Clean a transcript according to `mode`.
 
     Returns {"text": str, "engine": "off"|"rules"|"llm", "ms": int}.
@@ -176,7 +177,11 @@ def clean_transcript(text: str, mode: str = "fast",
     ruled = rule_clean(text) or text
     engine, result = "rules", ruled
 
-    if mode == "ai" and _ollama_available(llm_model):
+    # Short dictations don't benefit from an LLM pass – the rules already
+    # handle fillers, and ~300 ms extra latency on a 5-word command is worse
+    # than a marginally smoother sentence.
+    wants_llm = mode == "ai" and len(ruled.split()) >= llm_min_words
+    if wants_llm and _ollama_available(llm_model):
         llm_out = _llm_clean(ruled, llm_model)
         if llm_out:
             engine, result = "llm", llm_out

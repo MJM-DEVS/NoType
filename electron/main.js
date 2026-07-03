@@ -207,6 +207,8 @@ function loadConfig() {
     auto_language_detect: true,
     overlay_enabled: true,
     overlay_style: 'wave',
+    live_preview_enabled: true,
+    success_toast: false,
     gpu_safe_mode: false,
     first_run_complete: false,
     ...config,
@@ -389,17 +391,28 @@ function handlePythonMessage(line) {
         updateTray('processing');
         break;
 
+      case 'preview':
+        // Rolling live transcript while recording – overlay caption only.
+        if (overlayWin && !overlayWin.isDestroyed() && isRecording) {
+          overlayWin.webContents.send('preview-text', data.text);
+        }
+        break;
+
 
       case 'transcription_done':
         finishTranscription();
         if (data && data.text && !data.empty) {
           addToHistory(data.text);
           trackStats(data.text);
-          showToast(data.text, 'success', {
-            beam: data.beam,
-            compute_type: data.compute_type,
-            duration: data.duration,
-          });
+          // Success popup is opt-in – the inserted text IS the feedback.
+          // Warnings and errors always show.
+          if (config.success_toast === true) {
+            showToast(data.text, 'success', {
+              beam: data.beam,
+              compute_type: data.compute_type,
+              duration: data.duration,
+            });
+          }
         } else if (data && data.reason === 'too_short') {
           showToast('Aufnahme zu kurz – verworfen', 'warning');
         }
@@ -502,9 +515,15 @@ const OVERLAY_STYLES = {
   spectrum:     { w: 320, h: 104, anchor: 'bottom', offset: 60 },
 };
 const DEFAULT_OVERLAY_STYLE = 'wave';
+// Extra window height above the animation for the live-transcript caption.
+const PREVIEW_CAPTION_H = 30;
 
 function getStyleConfig(name) {
   return OVERLAY_STYLES[name] || OVERLAY_STYLES[DEFAULT_OVERLAY_STYLE];
+}
+
+function previewCaptionH() {
+  return config.live_preview_enabled !== false ? PREVIEW_CAPTION_H : 0;
 }
 
 // Apply the right size + anchor for the current overlay style.
@@ -517,15 +536,18 @@ function applyOverlayBounds() {
   const display = screen.getDisplayNearestPoint(cursor);
   const { x, y, width, height } = display.workArea;
 
-  overlayWin.setBounds({ width: s.w, height: s.h, x: 0, y: 0 });
+  // Caption space sits ABOVE the animation – the anchor math keeps the
+  // animation itself at the same screen position with or without it.
+  const cap = previewCaptionH();
+  overlayWin.setBounds({ width: s.w, height: s.h + cap, x: 0, y: 0 });
 
   const posX = x + Math.round((width - s.w) / 2);
   let posY;
   switch (s.anchor) {
     case 'top':    posY = y + s.offset; break;
-    case 'lower':  posY = y + Math.round(height * 0.62); break;
+    case 'lower':  posY = y + Math.round(height * 0.62) - cap; break;
     case 'bottom':
-    default:       posY = y + height - s.h - s.offset; break;
+    default:       posY = y + height - s.h - cap - s.offset; break;
   }
   overlayWin.setPosition(posX, posY);
 }
@@ -534,7 +556,7 @@ function createOverlay() {
   const initial = getStyleConfig(config.overlay_style);
   overlayWin = new BrowserWindow({
     width: initial.w,
-    height: initial.h,
+    height: initial.h + previewCaptionH(),
     show: false,
     frame: false,
     transparent: true,
@@ -571,6 +593,7 @@ function pushOverlayState() {
   const styleName = OVERLAY_STYLES[config.overlay_style] ? config.overlay_style : DEFAULT_OVERLAY_STYLE;
   const send = () => {
     if (!overlayWin || overlayWin.isDestroyed()) return;
+    overlayWin.webContents.send('preview-enabled', config.live_preview_enabled !== false);
     overlayWin.webContents.send('set-style', styleName);
     overlayWin.webContents.send('set-theme', currentTheme());
     overlayWin.webContents.send('recording-started');
@@ -976,7 +999,11 @@ function addToHistory(text) {
 function showToast(text, type = 'success', stats = null) {
   if (toastWin && !toastWin.isDestroyed()) toastWin.close();
 
-  toastWin = new BrowserWindow({
+  // Local reference for all handlers below. The global `toastWin` can be
+  // nulled/replaced while this window is still loading (a newer toast closes
+  // this one; the async 'closed' handler then nulls the global) – handlers
+  // touching the global raced that and crashed with "getBounds of null".
+  const win = new BrowserWindow({
     width: 520,
     height: 56,
     show: false,
@@ -996,29 +1023,31 @@ function showToast(text, type = 'success', stats = null) {
     },
   });
 
-  toastWin.setIgnoreMouseEvents(true);
-  toastWin.loadFile(path.join(__dirname, 'toast.html'));
+  toastWin = win;
+  win.setIgnoreMouseEvents(true);
+  win.loadFile(path.join(__dirname, 'toast.html'));
 
-  toastWin.once('ready-to-show', () => {
+  win.once('ready-to-show', () => {
+    if (win.isDestroyed()) return;
     const cursor = screen.getCursorScreenPoint();
     const display = screen.getDisplayNearestPoint(cursor);
     const { x, y, width, height } = display.workArea;
-    const b = toastWin.getBounds();
-    toastWin.setPosition(
+    const b = win.getBounds();
+    win.setPosition(
       x + Math.round((width - b.width) / 2),
       y + height - b.height - 50
     );
-    toastWin.webContents.send('set-theme', currentTheme());
-    toastWin.showInactive();
-    toastWin.webContents.send('toast-data', { text, type, stats });
+    win.webContents.send('set-theme', currentTheme());
+    win.showInactive();
+    win.webContents.send('toast-data', { text, type, stats });
   });
 
   // Auto-close after 3 seconds
   setTimeout(() => {
-    if (toastWin && !toastWin.isDestroyed()) toastWin.close();
+    if (!win.isDestroyed()) win.close();
   }, 3000);
 
-  toastWin.on('closed', () => { toastWin = null; });
+  win.on('closed', () => { if (toastWin === win) toastWin = null; });
 }
 
 // ── App Lifecycle ──

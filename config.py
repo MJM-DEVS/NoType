@@ -63,6 +63,10 @@ DEFAULT_CONFIG = {
     "initial_prompt": "",            # custom-vocab bias for Whisper
     "cleanup_mode": "fast",          # off | fast (rules) | ai (local LLM via Ollama)
     "llm_model": "qwen2.5:3b-instruct",  # Ollama model for cleanup_mode="ai"
+    "llm_min_words": 8,              # below this, "ai" mode uses rules only (latency)
+    "insert_method": "auto",         # auto (Ctrl+V, fallback typing) | type
+    "live_preview_enabled": True,    # rolling transcript in the overlay while recording
+    "success_toast": False,          # popup after successful dictation (errors always show)
     "gpu_safe_mode": False,          # disable HW acceleration (flaky-driver escape hatch)
     "first_run_complete": False,
 }

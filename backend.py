@@ -112,6 +112,7 @@ class Backend:
             self.transcriber.load_model(
                 on_progress=lambda msg: self.send("status", {"message": msg})
             )
+            self._inference_selftest()
             device_info = self.transcriber.get_device_info()
             self.send("model_ready", {"device": device_info, "model": model_size})
             logger.info(f"Model loaded on {device_info}")
@@ -125,6 +126,31 @@ class Backend:
                 self.send("model_ready", {"device": "CPU (int8)", "model": model_size})
             except Exception as e2:
                 self.send("error", {"message": f"CPU fallback failed: {e2}"})
+
+    def _inference_selftest(self):
+        """Push half a second of audio through the freshly loaded model with
+        VAD off, so the GPU GEMM path actually runs. Some GPUs accept a
+        compute type at LOAD time but reject it at INFERENCE time (cuBLAS
+        NOT_SUPPORTED) – trigger that here, where transcribe()'s float16
+        fallback fixes it invisibly, instead of on the user's first dictation.
+        Runs inside the model-loading background thread."""
+        try:
+            silence = np.zeros(8000, dtype=np.float32)  # 0.5s @ 16kHz
+            result = self.transcriber.transcribe(
+                silence, language="de", auto_detect=False,
+                beam_size="1", vad_filter=False,
+            )
+            if result.get("compute_fallback"):
+                self.config["compute_type"] = result["compute_type"]
+                save_config(self.config)
+                logger.info(f"Selftest downgraded compute_type to "
+                            f"{result['compute_type']} (persisted)")
+            else:
+                logger.info("Inference selftest OK")
+        except Exception as e:
+            # Selftest must never block startup – a real inference problem
+            # will surface (and be handled) on the first dictation anyway.
+            logger.warning(f"Inference selftest failed (non-fatal): {e}")
 
     def _amplitude_sender(self):
         """Send amplitude data to Electron while recording."""
@@ -147,6 +173,41 @@ class Backend:
         self.recorder.start()
         self._record_start_time = time.time()
         self.send("recording_started")
+
+        if (self.config.get("live_preview_enabled", True)
+                and self.transcriber and self.transcriber.is_loaded):
+            threading.Thread(target=self._preview_loop,
+                             args=(self.recorder,), daemon=True).start()
+
+    def _preview_loop(self, recorder):
+        """Live preview: while recording, transcribe a rolling window of the
+        most recent audio (beam 1, cheap) and stream the tail to the overlay.
+
+        Throwaway text – the final full-quality pass after stop is what gets
+        inserted. Uses the shared inference lock, so a preview pass in flight
+        can delay the final pass by at most one window (~0.3 s)."""
+        language = self.config.get("language", "de")
+        while self._running and recorder.is_recording:
+            time.sleep(1.2)
+            # Recorder may have been stopped/replaced while we slept.
+            if not recorder.is_recording or recorder is not self.recorder:
+                break
+            audio = recorder.get_recent_audio(8.0)
+            if len(audio) < 16000:  # need at least 1s to say anything useful
+                continue
+            try:
+                result = self.transcriber.transcribe(
+                    audio, language=language, auto_detect=False,
+                    beam_size="1",
+                )
+            except Exception as e:
+                logger.warning(f"Preview pass failed, stopping preview: {e}")
+                break
+            if not recorder.is_recording or recorder is not self.recorder:
+                break
+            tail = result["text"][-120:]
+            if tail:
+                self.send("preview", {"text": _safe_str(tail)})
 
     def handle_stop_recording(self):
         """Stop recording and transcribe."""
@@ -208,6 +269,7 @@ class Backend:
                     text,
                     mode=self.config.get("cleanup_mode", "fast"),
                     llm_model=self.config.get("llm_model", DEFAULT_LLM_MODEL),
+                    llm_min_words=self.config.get("llm_min_words", 8),
                 )
                 text = cleaned["text"] or text
                 stats["cleanup"] = cleaned["engine"]
@@ -215,8 +277,7 @@ class Backend:
 
             if text:
                 logger.info(f"Transcribed: '{_safe_str(text[:80])}'")
-                time.sleep(0.15)
-                insert_text(text)
+                insert_text(text, method=self.config.get("insert_method", "auto"))
                 self.send("transcription_done", {"text": text, **stats})
             else:
                 logger.info("No speech detected")

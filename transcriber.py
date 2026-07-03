@@ -151,6 +151,7 @@ class Transcriber:
                    auto_detect: bool = True, beam_size: str = "auto",
                    vad_sensitivity: int = 300,
                    initial_prompt: str = None,
+                   vad_filter: bool = True,
                    on_segment=None) -> dict:
         """
         Transcribe audio to text.
@@ -192,7 +193,7 @@ class Transcriber:
                     audio,
                     language=whisper_lang,
                     beam_size=actual_beam,
-                    vad_filter=True,
+                    vad_filter=vad_filter,
                     vad_parameters=dict(
                         min_silence_duration_ms=vad_sensitivity,
                         speech_pad_ms=150,

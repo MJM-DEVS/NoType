@@ -8,6 +8,8 @@ If the user already has a system-wide Ollama running (service on :11434),
 we simply use it and never manage a portable copy.
 """
 
+import ctypes
+import ctypes.wintypes
 import json
 import logging
 import os
@@ -31,6 +33,78 @@ DOWNLOAD_URL = "https://github.com/ollama/ollama/releases/latest/download/ollama
 
 _serve_proc = None
 _state_lock = threading.Lock()
+_job_handle = None
+
+
+# ── Kill-on-close Job Object ─────────────────────────────────────────
+# Ties the spawned `ollama serve` (and its llama-server children) to THIS
+# backend process: when the backend dies for ANY reason – crash, force-kill,
+# task manager – Windows closes the job handle and kills the whole ollama
+# tree. Without this, a force-killed app leaves an orphaned ollama behind
+# (which once blocked our own build because it pinned DLLs).
+
+class _JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
+    _fields_ = [
+        ("PerProcessUserTimeLimit", ctypes.c_int64),
+        ("PerJobUserTimeLimit", ctypes.c_int64),
+        ("LimitFlags", ctypes.wintypes.DWORD),
+        ("MinimumWorkingSetSize", ctypes.c_size_t),
+        ("MaximumWorkingSetSize", ctypes.c_size_t),
+        ("ActiveProcessLimit", ctypes.wintypes.DWORD),
+        ("Affinity", ctypes.c_size_t),
+        ("PriorityClass", ctypes.wintypes.DWORD),
+        ("SchedulingClass", ctypes.wintypes.DWORD),
+    ]
+
+
+class _IO_COUNTERS(ctypes.Structure):
+    _fields_ = [(name, ctypes.c_uint64) for name in (
+        "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+        "ReadTransferCount", "WriteTransferCount", "OtherTransferCount")]
+
+
+class _JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
+    _fields_ = [
+        ("BasicLimitInformation", _JOBOBJECT_BASIC_LIMIT_INFORMATION),
+        ("IoInfo", _IO_COUNTERS),
+        ("ProcessMemoryLimit", ctypes.c_size_t),
+        ("JobMemoryLimit", ctypes.c_size_t),
+        ("PeakProcessMemoryUsed", ctypes.c_size_t),
+        ("PeakJobMemoryUsed", ctypes.c_size_t),
+    ]
+
+
+_JobObjectExtendedLimitInformation = 9
+_JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
+
+
+def _bind_to_job(proc) -> None:
+    """Assign `proc` to a kill-on-close job object owned by this process.
+    Best-effort: on failure ollama simply isn't lifetime-bound (old behavior)."""
+    global _job_handle
+    try:
+        kernel32 = ctypes.windll.kernel32
+        if _job_handle is None:
+            handle = kernel32.CreateJobObjectW(None, None)
+            if not handle:
+                return
+            info = _JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+            info.BasicLimitInformation.LimitFlags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            if not kernel32.SetInformationJobObject(
+                    handle, _JobObjectExtendedLimitInformation,
+                    ctypes.byref(info), ctypes.sizeof(info)):
+                kernel32.CloseHandle(handle)
+                return
+            # Deliberately never closed while we live – closing it is exactly
+            # what kills the job. Process exit closes it for us.
+            _job_handle = handle
+        if not kernel32.AssignProcessToJobObject(_job_handle, int(proc._handle)):
+            logger.warning("AssignProcessToJobObject failed "
+                           f"(error {ctypes.GetLastError()})")
+        else:
+            logger.info("ollama serve bound to kill-on-close job object")
+    except Exception as e:
+        logger.warning(f"Job object binding failed (non-fatal): {e}")
 
 
 # ── Status probes ────────────────────────────────────────────────────
@@ -161,6 +235,7 @@ def start() -> bool:
                     stderr=subprocess.DEVNULL,
                     creationflags=subprocess.CREATE_NO_WINDOW,
                 )
+                _bind_to_job(_serve_proc)
                 logger.info(f"Spawned ollama serve (pid={_serve_proc.pid})")
             except Exception as e:
                 logger.error(f"Failed to spawn ollama serve: {e}")
