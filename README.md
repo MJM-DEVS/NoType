@@ -121,7 +121,7 @@ The AI mode uses a small language model running in [Ollama](https://ollama.com/)
 | Text cleanup | Off / Fast / AI — see [The AI cleanup](#the-ai-cleanup-explained) |
 | Live transcript | Show recognized text in the overlay while recording |
 | Insert method | Automatic (paste with typing fallback) or always type — for terminals |
-| Overlay style | Seven voice-reactive visualizers, light and dark |
+| Overlay style | Ten voice-reactive visualizers — including an AMOLED family (pure-black bar top/bottom or centered card, brand-color synth, transcript inside) |
 | Microphone | System default or a specific device, with a built-in level test |
 | Success popup | Optional confirmation toast; errors always show |
 

@@ -513,6 +513,11 @@ const OVERLAY_STYLES = {
   pulse:        { w: 190, h: 190, anchor: 'lower',  offset: 0  },
   ribbon:       { w: 600, h: 88,  anchor: 'bottom', offset: 60 },
   spectrum:     { w: 320, h: 104, anchor: 'bottom', offset: 60 },
+  // AMOLED family: pure-black pill/card with the live transcript INSIDE –
+  // no external caption, so previewCaptionH() is 0 for these.
+  amoled_top:    { w: 680, h: 64,  anchor: 'top',    offset: 16 },
+  amoled_bottom: { w: 680, h: 64,  anchor: 'bottom', offset: 28 },
+  amoled_center: { w: 560, h: 200, anchor: 'center', offset: 0  },
 };
 const DEFAULT_OVERLAY_STYLE = 'wave';
 // Extra window height above the animation for the live-transcript caption.
@@ -523,6 +528,8 @@ function getStyleConfig(name) {
 }
 
 function previewCaptionH() {
+  // AMOLED styles render the transcript inside the pill/card themselves.
+  if ((config.overlay_style || '').startsWith('amoled')) return 0;
   return config.live_preview_enabled !== false ? PREVIEW_CAPTION_H : 0;
 }
 
@@ -545,6 +552,7 @@ function applyOverlayBounds() {
   let posY;
   switch (s.anchor) {
     case 'top':    posY = y + s.offset; break;
+    case 'center': posY = y + Math.round((height - s.h - cap) / 2); break;
     case 'lower':  posY = y + Math.round(height * 0.62) - cap; break;
     case 'bottom':
     default:       posY = y + height - s.h - cap - s.offset; break;
