@@ -284,7 +284,7 @@ function startPython() {
       backendGaveUp = true;
       console.error('Backend crash-looping – giving up auto-restart');
       if (!crashToastShown) {
-        showToast('Backend startet nicht – bitte NoType neu starten', 'error');
+        showToast(trayT().backendDead, 'error');
         crashToastShown = true;
       }
       updateTray('loading');
@@ -294,7 +294,7 @@ function startPython() {
     // Exponential backoff: 2s, 4s, 8s, 16s, 32s (capped at 60s).
     const delay = Math.min(60_000, 2_000 * 2 ** consecutiveFastCrashes);
     if (!crashToastShown) {
-      showToast('Backend abgestürzt – starte neu', 'error');
+      showToast(trayT().backendCrashed, 'error');
       crashToastShown = true;
     }
     console.log(`Restarting backend in ${delay} ms (fast-crash streak ${consecutiveFastCrashes})`);
@@ -414,7 +414,7 @@ function handlePythonMessage(line) {
             });
           }
         } else if (data && data.reason === 'too_short') {
-          showToast('Aufnahme zu kurz – verworfen', 'warning');
+          showToast(trayT().tooShort, 'warning');
         }
         break;
 
@@ -515,9 +515,11 @@ const OVERLAY_STYLES = {
   spectrum:     { w: 320, h: 104, anchor: 'bottom', offset: 60 },
   // AMOLED family: pure-black pill/card with the live transcript INSIDE –
   // no external caption, so previewCaptionH() is 0 for these.
-  amoled_top:    { w: 680, h: 64,  anchor: 'top',    offset: 16 },
-  amoled_bottom: { w: 680, h: 64,  anchor: 'bottom', offset: 28 },
-  amoled_center: { w: 560, h: 200, anchor: 'center', offset: 0  },
+  // +28 px on each dimension = 14 px in-window padding so the pill's glow
+  // fades out inside the window instead of clipping into a hard rectangle.
+  amoled_top:    { w: 708, h: 92,  anchor: 'top',    offset: 2  },
+  amoled_bottom: { w: 708, h: 92,  anchor: 'bottom', offset: 14 },
+  amoled_center: { w: 588, h: 228, anchor: 'center', offset: 0  },
 };
 const DEFAULT_OVERLAY_STYLE = 'wave';
 // Extra window height above the animation for the live-transcript caption.
@@ -602,6 +604,7 @@ function pushOverlayState() {
   const send = () => {
     if (!overlayWin || overlayWin.isDestroyed()) return;
     overlayWin.webContents.send('preview-enabled', config.live_preview_enabled !== false);
+    overlayWin.webContents.send('app-lang', config.app_language || 'de');
     overlayWin.webContents.send('set-style', styleName);
     overlayWin.webContents.send('set-theme', currentTheme());
     overlayWin.webContents.send('recording-started');
@@ -839,12 +842,13 @@ function createTrayWithRetry(attempt = 0) {
 function updateTray(status) {
   if (!tray) return;
   const colors = { ready: '#00d4aa', recording: '#ff4444', processing: '#ffaa00', loading: '#888888', paused: '#ffaa00' };
+  const T = trayT();
   const labels = {
-    ready: '✓ Bereit',
-    recording: '● Aufnahme...',
-    processing: '⟳ Transkribiere...',
-    loading: '⏳ Modell lädt...',
-    paused: '⏸ Pausiert',
+    ready: T.ready,
+    recording: T.recording,
+    processing: T.processing,
+    loading: T.loading,
+    paused: T.paused,
   };
 
   // Override status if model not loaded
@@ -853,20 +857,48 @@ function updateTray(status) {
   try {
     tray.setImage(createTrayImage(colors[status] || '#00d4aa', status === 'recording'));
     const hotkeyLabel = config.hotkey || 'Ctrl+Shift+Space';
-    tray.setToolTip(`NoType – ${labels[status] || 'Bereit'} (${hotkeyLabel})`);
+    tray.setToolTip(`NoType – ${labels[status] || T.ready} (${hotkeyLabel})`);
     tray.setContextMenu(buildTrayMenu(status));
   } catch (e) {
     console.error('Tray update error:', e);
   }
 }
 
+// Minimal tray/toast i18n – the settings window has its own dictionary.
+function trayT() {
+  const de = {
+    ready: '✓ Bereit', recording: '● Aufnahme...', processing: '⟳ Transkribiere...',
+    loading: '⏳ Modell lädt...', paused: '⏸ Pausiert',
+    today: 'Heute', words: 'Wörter', transcriptions: 'Transkriptionen',
+    last7: 'Letzte 7 Tage', last30: 'Letzte 30 Tage',
+    history: 'Letzte Transkriptionen', settings: '⚙  Einstellungen', quit: '✕  Beenden',
+    tooShort: 'Aufnahme zu kurz – verworfen',
+    backendCrashed: 'Backend abgestürzt – starte neu',
+    backendDead: 'Backend startet nicht – bitte NoType neu starten',
+    locale: 'de-DE',
+  };
+  const en = {
+    ready: '✓ Ready', recording: '● Recording...', processing: '⟳ Transcribing...',
+    loading: '⏳ Loading model...', paused: '⏸ Paused',
+    today: 'Today', words: 'words', transcriptions: 'transcriptions',
+    last7: 'Last 7 days', last30: 'Last 30 days',
+    history: 'Recent transcriptions', settings: '⚙  Settings', quit: '✕  Quit',
+    tooShort: 'Recording too short – discarded',
+    backendCrashed: 'Backend crashed – restarting',
+    backendDead: 'Backend won\'t start – please restart NoType',
+    locale: 'en-US',
+  };
+  return config.app_language === 'en' ? en : de;
+}
+
 function buildTrayMenu(status = 'ready') {
+  const T = trayT();
   const labels = {
-    ready: '✓ Bereit',
-    recording: '● Aufnahme...',
-    processing: '⟳ Transkribiere...',
-    loading: '⏳ Modell lädt...',
-    paused: '⏸ Pausiert',
+    ready: T.ready,
+    recording: T.recording,
+    processing: T.processing,
+    loading: T.loading,
+    paused: T.paused,
   };
   const hotkeyLabel = config.hotkey || 'Ctrl+Shift+Space';
 
@@ -892,14 +924,14 @@ function buildTrayMenu(status = 'ready') {
   const w30 = sumRange(30);
 
   const items = [
-    { label: `NoType – ${labels[status] || 'Bereit'}`, enabled: false },
+    { label: `NoType – ${labels[status] || T.ready}`, enabled: false },
     { label: `Hotkey: ${hotkeyLabel}`, enabled: false },
     {
-      label: `Heute: ${todayStats.count} · ~${todayStats.words} Wörter`,
+      label: `${T.today}: ${todayStats.count} · ~${todayStats.words} ${T.words}`,
       submenu: [
-        { label: `Heute:        ${todayStats.count} Transkriptionen, ~${todayStats.words} Wörter`, enabled: false },
-        { label: `Letzte 7 Tage:  ${w7.count} Transkriptionen, ~${w7.words} Wörter`, enabled: false },
-        { label: `Letzte 30 Tage: ${w30.count} Transkriptionen, ~${w30.words} Wörter`, enabled: false },
+        { label: `${T.today}: ${todayStats.count} ${T.transcriptions}, ~${todayStats.words} ${T.words}`, enabled: false },
+        { label: `${T.last7}: ${w7.count} ${T.transcriptions}, ~${w7.words} ${T.words}`, enabled: false },
+        { label: `${T.last30}: ${w30.count} ${T.transcriptions}, ~${w30.words} ${T.words}`, enabled: false },
       ],
     },
     { type: 'separator' },
@@ -907,10 +939,10 @@ function buildTrayMenu(status = 'ready') {
 
   // Clipboard history
   if (clipboardHistory.length > 0) {
-    items.push({ label: 'Letzte Transkriptionen', enabled: false });
+    items.push({ label: T.history, enabled: false });
     clipboardHistory.forEach((entry, i) => {
       const preview = entry.text.length > 45 ? entry.text.slice(0, 45) + '…' : entry.text;
-      const time = new Date(entry.time).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      const time = new Date(entry.time).toLocaleTimeString(T.locale, { hour: '2-digit', minute: '2-digit' });
       items.push({
         label: `  ${time}  ${preview}`,
         click: () => {
@@ -922,9 +954,9 @@ function buildTrayMenu(status = 'ready') {
   }
 
   items.push(
-    { label: '⚙  Einstellungen', click: () => openSettings() },
+    { label: T.settings, click: () => openSettings() },
     { type: 'separator' },
-    { label: '✕  Beenden', click: () => quitApp() },
+    { label: T.quit, click: () => quitApp() },
   );
 
   return Menu.buildFromTemplate(items);
@@ -938,10 +970,10 @@ function openSettings() {
   }
 
   settingsWin = new BrowserWindow({
-    width: 560,
-    height: 780,
-    minWidth: 480,
-    minHeight: 600,
+    width: 920,
+    height: 700,
+    minWidth: 780,
+    minHeight: 560,
     show: false,
     resizable: true,
     frame: false,

@@ -20,9 +20,17 @@ import time
 import urllib.request
 import zipfile
 
-from config import CONFIG_DIR
+from config import CONFIG_DIR, get_config
 
 logger = logging.getLogger("NoType.Ollama")
+
+
+def _t(de: str, en: str) -> str:
+    """User-facing progress strings follow the app language."""
+    try:
+        return en if get_config().get("app_language") == "en" else de
+    except Exception:
+        return de
 
 OLLAMA_URL = "http://127.0.0.1:11434"
 OLLAMA_DIR = os.path.join(CONFIG_DIR, "ollama")
@@ -159,7 +167,7 @@ def install(on_progress=None) -> bool:
     tmp_zip = os.path.join(OLLAMA_DIR, "ollama.zip.part")
 
     try:
-        report(0, "Lade Ollama herunter...")
+        report(0, _t("Lade Ollama herunter...", "Downloading Ollama..."))
         req = urllib.request.Request(DOWNLOAD_URL, headers={"User-Agent": "NoType"})
         with urllib.request.urlopen(req, timeout=30) as resp:
             total = int(resp.headers.get("Content-Length") or 0)
@@ -176,24 +184,24 @@ def install(on_progress=None) -> bool:
                         pct = int(done * 90 / total)  # download = 0-90%
                         if pct != last_pct:
                             last_pct = pct
-                            report(pct, f"Lade Ollama herunter... {done // (1024*1024)} MB")
+                            report(pct, _t("Lade Ollama herunter...", "Downloading Ollama...") + f" {done // (1024*1024)} MB")
 
-        report(92, "Entpacke...")
+        report(92, _t("Entpacke...", "Extracting..."))
         with zipfile.ZipFile(tmp_zip) as zf:
             zf.extractall(OLLAMA_DIR)
         os.remove(tmp_zip)
 
         if not os.path.exists(OLLAMA_EXE):
-            report(100, "Fehler: ollama.exe nicht im Archiv")
+            report(100, _t("Fehler: ollama.exe nicht im Archiv", "Error: ollama.exe missing from archive"))
             return False
 
-        report(100, "Ollama installiert ✓")
+        report(100, _t("Ollama installiert ✓", "Ollama installed ✓"))
         logger.info(f"Portable Ollama installed at {OLLAMA_DIR}")
         return True
 
     except Exception as e:
         logger.error(f"Ollama install failed: {e}")
-        report(100, f"Installation fehlgeschlagen: {e}")
+        report(100, _t("Installation fehlgeschlagen", "Installation failed") + f": {e}")
         try:
             if os.path.exists(tmp_zip):
                 os.remove(tmp_zip)
@@ -278,7 +286,7 @@ def pull_model(model: str, on_progress=None) -> bool:
         if on_progress:
             on_progress("pull", pct, msg)
 
-    report(0, f"Lade KI-Modell '{model}'...")
+    report(0, _t("Lade KI-Modell", "Downloading AI model") + f" '{model}'...")
     payload = json.dumps({"name": model, "stream": True}).encode("utf-8")
     req = urllib.request.Request(
         OLLAMA_URL + "/api/pull", data=payload,
@@ -293,7 +301,7 @@ def pull_model(model: str, on_progress=None) -> bool:
                     continue
                 info = json.loads(line)
                 if info.get("error"):
-                    report(100, f"Fehler: {info['error']}")
+                    report(100, _t("Fehler", "Error") + f": {info['error']}")
                     return False
                 total = info.get("total") or 0
                 completed = info.get("completed") or 0
@@ -301,14 +309,14 @@ def pull_model(model: str, on_progress=None) -> bool:
                     pct = int(completed * 100 / total)
                     if pct != last_pct:
                         last_pct = pct
-                        report(pct, f"Lade KI-Modell... {completed // (1024*1024)} / {total // (1024*1024)} MB")
+                        report(pct, _t("Lade KI-Modell...", "Downloading AI model...") + f" {completed // (1024*1024)} / {total // (1024*1024)} MB")
                 if info.get("status") == "success":
-                    report(100, "KI-Modell bereit ✓")
+                    report(100, _t("KI-Modell bereit ✓", "AI model ready ✓"))
                     return True
         return model_pulled(model)
     except Exception as e:
         logger.error(f"Model pull failed: {e}")
-        report(100, f"Modell-Download fehlgeschlagen: {e}")
+        report(100, _t("Modell-Download fehlgeschlagen", "Model download failed") + f": {e}")
         return False
 
 
@@ -323,7 +331,7 @@ def setup(model: str, on_progress=None) -> bool:
 
     if not start():
         if on_progress:
-            on_progress("serve", 100, "Ollama-Server startet nicht")
+            on_progress("serve", 100, _t("Ollama-Server startet nicht", "Ollama server failed to start"))
         return False
 
     if not model_pulled(model):
@@ -331,7 +339,7 @@ def setup(model: str, on_progress=None) -> bool:
             return False
 
     if on_progress:
-        on_progress("done", 100, "KI-Bereinigung aktiv ✓")
+        on_progress("done", 100, _t("KI-Bereinigung aktiv ✓", "AI cleanup active ✓"))
     return True
 
 

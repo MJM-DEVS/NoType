@@ -12,6 +12,7 @@
     --fg: #1a1a1a;
     --fg-muted: #333;
     --fg-dim: #999;
+    --accent: #00b894;
     --card-bg: #fafafa;
     --card-border: #f0f0f0;
     --input-bg: #ffffff;
@@ -29,7 +30,6 @@
     --save-fg: #ffffff;
     --bar-track: #eeeeee;
     --shadow: rgba(0,0,0,0.15);
-    --select-arrow: '%23999';
   }
 
   [data-theme="dark"] {
@@ -37,6 +37,7 @@
     --fg: #f5f5f5;
     --fg-muted: #d4d4d4;
     --fg-dim: #999999;
+    --accent: #00d4aa;
     --card-bg: rgba(255, 255, 255, 0.04);
     --card-border: rgba(255, 255, 255, 0.08);
     --input-bg: rgba(255, 255, 255, 0.06);
@@ -54,7 +55,6 @@
     --save-fg: #1a1a1a;
     --bar-track: rgba(255, 255, 255, 0.10);
     --shadow: rgba(0,0,0,0.4);
-    --select-arrow: '%23bbb';
   }
 
   body {
@@ -62,18 +62,17 @@
     background: var(--bg);
     color: var(--fg);
     -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
-    overflow-y: auto;
     user-select: none;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb {
-    background: var(--scroll-thumb);
-    border-radius: 3px;
-  }
+  ::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); }
 
   /* ── Titlebar ── */
@@ -84,42 +83,53 @@
     padding: 14px 20px;
     -webkit-app-region: drag;
     border-bottom: 1px solid var(--card-border);
+    flex: 0 0 auto;
   }
-
-  .titlebar h1 {
-    font-size: 14px;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-  }
-
+  .titlebar h1 { font-size: 14px; font-weight: 700; letter-spacing: 0.5px; }
   .titlebar .close-btn {
     -webkit-app-region: no-drag;
-    width: 28px;
-    height: 28px;
-    border: none;
-    background: none;
-    cursor: pointer;
-    border-radius: 6px;
-    font-size: 16px;
-    color: var(--fg-dim);
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    width: 28px; height: 28px;
+    border: none; background: none; cursor: pointer;
+    border-radius: 6px; font-size: 16px; color: var(--fg-dim);
+    display: flex; align-items: center; justify-content: center;
     transition: all 0.15s;
   }
+  .titlebar .close-btn:hover { background: var(--hover-bg); color: var(--fg); }
 
-  .titlebar .close-btn:hover {
-    background: var(--hover-bg);
-    color: var(--fg);
-  }
+  /* ── Layout: sidebar + panes ── */
+  .layout { flex: 1 1 auto; display: flex; min-height: 0; }
 
-  /* ── Content ── */
-  .content {
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
+  .sidebar {
+    flex: 0 0 208px;
+    padding: 16px 12px;
+    border-right: 1px solid var(--card-border);
+    display: flex; flex-direction: column; gap: 4px;
+    overflow-y: auto;
   }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    border: none; background: none; cursor: pointer;
+    border-radius: 8px;
+    font-size: 13px; font-weight: 500; font-family: inherit;
+    color: var(--fg-muted);
+    text-align: left;
+    transition: background 0.15s, color 0.15s;
+    position: relative;
+  }
+  .nav-item:hover { background: var(--hover-bg); }
+  .nav-item.active { background: var(--hover-bg); color: var(--fg); }
+  .nav-item.active::before {
+    content: '';
+    position: absolute; left: 0; top: 20%; bottom: 20%;
+    width: 3px; border-radius: 2px;
+    background: var(--accent);
+  }
+  .nav-item .nav-ico { width: 18px; text-align: center; opacity: 0.75; flex: 0 0 auto; }
+
+  .panes { flex: 1 1 auto; overflow-y: auto; padding: 20px; }
+  .pane { display: none; flex-direction: column; gap: 20px; }
+  .pane.active { display: flex; }
 
   /* ── Cards ── */
   .card {
@@ -128,43 +138,22 @@
     border-radius: 12px;
     padding: 18px;
   }
-
   .card-title {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--fg-dim);
-    margin-bottom: 14px;
+    font-size: 11px; font-weight: 700; letter-spacing: 1px;
+    text-transform: uppercase; color: var(--fg-dim); margin-bottom: 14px;
   }
-
   .field {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    display: flex; align-items: center; justify-content: space-between;
     padding: 10px 0;
     border-bottom: 1px solid var(--card-border);
     gap: 12px;
   }
-
   .field:last-child { border-bottom: none; }
-
-  /* Let the label/description column take the remaining space and SHRINK so a
-     long description wraps instead of pushing the control (toggle/select) off
-     the right edge. The controls keep their own flex-shrink: 0. */
   .field > div:first-child { flex: 1 1 auto; min-width: 0; }
-
-  .field-label {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--fg-muted);
-  }
-
+  .field-label { font-size: 13px; font-weight: 500; color: var(--fg-muted); }
   .field-desc {
-    font-size: 11px;
-    color: var(--fg-dim);
-    margin-top: 2px;
-    overflow-wrap: anywhere;   /* wrap long descriptions, never overflow */
+    font-size: 11px; color: var(--fg-dim); margin-top: 2px;
+    overflow-wrap: anywhere;
   }
 
   /* ── Select ── */
@@ -174,81 +163,43 @@
     border: 1px solid var(--input-border);
     border-radius: 8px;
     padding: 8px 32px 8px 12px;
-    font-size: 13px;
-    font-family: inherit;
-    color: var(--fg);
-    cursor: pointer;
-    outline: none;
+    font-size: 13px; font-family: inherit;
+    color: var(--fg); cursor: pointer; outline: none;
     transition: border-color 0.15s;
-    max-width: 260px;
-    width: 260px;
-    min-width: 0;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    overflow: hidden;
+    max-width: 280px; width: 280px; min-width: 0;
+    text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
     background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23999' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 12px center;
     flex-shrink: 0;
   }
-
   select:hover { border-color: var(--input-border-hover); }
   select:focus { border-color: var(--input-focus); }
-
-  /* Native option menus are drawn by the OS – give them sensible colors in dark mode */
-  [data-theme="dark"] select option {
-    background: #1f1f1f;
-    color: #f5f5f5;
+  [data-theme="dark"] select option, [data-theme="dark"] select optgroup {
+    background: #1f1f1f; color: #f5f5f5;
   }
 
   /* ── Toggle Switch ── */
-  .toggle {
-    position: relative;
-    width: 44px;
-    height: 24px;
-    flex-shrink: 0;
-  }
-
-  .toggle input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-  }
-
+  .toggle { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
   .toggle .slider {
-    position: absolute;
-    inset: 0;
+    position: absolute; inset: 0;
     background: var(--toggle-off);
-    border-radius: 24px;
-    cursor: pointer;
+    border-radius: 24px; cursor: pointer;
     transition: background 0.2s;
   }
-
   .toggle .slider::before {
     content: '';
-    position: absolute;
-    height: 18px;
-    width: 18px;
-    left: 3px;
-    bottom: 3px;
-    background: var(--toggle-knob);
-    border-radius: 50%;
+    position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px;
+    background: var(--toggle-knob); border-radius: 50%;
     transition: transform 0.2s, background 0.2s;
     box-shadow: 0 1px 3px var(--shadow);
   }
-
   .toggle input:checked + .slider { background: var(--toggle-on); }
   .toggle input:checked + .slider::before { transform: translateX(20px); }
 
-  /* ── Hotkey Input ── */
-  .hotkey-display {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-shrink: 1;
-    min-width: 0;
-  }
-
+  /* ── Hotkey ── */
+  .hotkey-display { display: flex; align-items: center; gap: 8px; flex-shrink: 1; min-width: 0; }
   .hotkey-value {
     font-family: 'Consolas', 'SF Mono', monospace;
     font-size: 12px;
@@ -256,22 +207,15 @@
     border: 1px solid var(--input-border);
     border-radius: 8px;
     padding: 8px 14px;
-    min-width: 100px;
-    max-width: 180px;
-    text-align: center;
-    color: var(--fg);
+    min-width: 100px; max-width: 180px;
+    text-align: center; color: var(--fg);
     letter-spacing: 0.5px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-
   .hotkey-value.recording {
-    border-color: #ef4444;
-    color: #ef4444;
+    border-color: #ef4444; color: #ef4444;
     animation: hotkey-pulse 1s infinite;
   }
-
   @keyframes hotkey-pulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.2); }
     50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1); }
@@ -282,48 +226,67 @@
     border: 1px solid var(--input-border);
     background: var(--input-bg);
     border-radius: 8px;
-    font-size: 12px;
-    font-family: inherit;
-    cursor: pointer;
-    transition: all 0.15s;
+    font-size: 12px; font-family: inherit;
+    cursor: pointer; transition: all 0.15s;
     color: var(--fg-muted);
+    flex-shrink: 0;
   }
-
   .btn-sm:hover { border-color: var(--input-focus); background: var(--hover-bg); }
+  .btn-sm:disabled { opacity: 0.5; cursor: default; }
 
-  /* ── Save Button ── */
-  .save-bar {
-    padding: 16px 20px;
-    display: flex;
-    justify-content: flex-end;
+  /* ── Vocabulary table ── */
+  .vocab-add { display: flex; gap: 8px; margin-bottom: 12px; }
+  .vocab-add input {
+    flex: 1; padding: 9px 12px; font-size: 13px; font-family: inherit;
+    background: var(--input-bg); color: var(--fg);
+    border: 1px solid var(--input-border); border-radius: 8px; outline: none;
+    transition: border-color 0.15s;
   }
+  .vocab-add input:focus { border-color: var(--input-focus); }
+  .vocab-list {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    min-height: 40px; max-height: 300px; overflow-y: auto;
+  }
+  .vocab-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 8px 6px 12px;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 999px;
+    font-size: 12.5px; color: var(--fg-muted);
+  }
+  .vocab-chip button {
+    border: none; background: none; cursor: pointer;
+    width: 18px; height: 18px; border-radius: 50%;
+    color: var(--fg-dim); font-size: 12px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .vocab-chip button:hover { background: var(--hover-bg); color: #ef4444; }
+  .vocab-budget { font-size: 11px; color: var(--fg-dim); margin-top: 10px; }
+  .vocab-budget.full { color: #ef4444; font-weight: 600; }
 
+  /* ── Save bar ── */
+  .save-bar {
+    padding: 14px 20px;
+    display: flex; justify-content: flex-end;
+    border-top: 1px solid var(--card-border);
+    flex: 0 0 auto;
+  }
   .btn-save {
     padding: 10px 28px;
-    background: var(--save-bg);
-    color: var(--save-fg);
-    border: none;
-    border-radius: 10px;
-    font-size: 13px;
-    font-weight: 600;
-    font-family: inherit;
-    cursor: pointer;
-    transition: all 0.15s;
-    letter-spacing: 0.3px;
+    background: var(--save-bg); color: var(--save-fg);
+    border: none; border-radius: 10px;
+    font-size: 13px; font-weight: 600; font-family: inherit;
+    cursor: pointer; transition: all 0.15s; letter-spacing: 0.3px;
   }
-
   .btn-save:hover { background: var(--save-bg-hover); }
   .btn-save:active { transform: scale(0.98); }
 
   /* ── Status badge ── */
   .status-badge {
-    font-size: 10px;
-    padding: 4px 10px;
-    border-radius: 99px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
+    font-size: 10px; padding: 4px 10px; border-radius: 99px;
+    font-weight: 600; letter-spacing: 0.5px; flex-shrink: 0;
   }
-
   .status-badge.ok { background: #e6f9f0; color: #059669; }
   .status-badge.loading { background: #fff3e0; color: #d97706; }
   [data-theme="dark"] .status-badge.ok { background: rgba(34, 197, 94, 0.18); color: #34d399; }
@@ -334,262 +297,491 @@
 
 <!-- Titlebar -->
 <div class="titlebar">
-  <h1>NoType Settings</h1>
+  <h1>NoType</h1>
   <button class="close-btn" id="closeBtn">✕</button>
 </div>
 
-<div class="content">
-  <!-- Hotkey Card -->
-  <div class="card">
-    <div class="card-title">Hotkey</div>
-    <div class="field">
-      <div>
-        <div class="field-label">Tastenkombination</div>
-        <div class="field-desc">Drücke "Ändern" und dann deine gewünschte Kombination</div>
-      </div>
-      <div class="hotkey-display">
-        <div class="hotkey-value" id="hotkeyValue">Ctrl+Shift+Space</div>
-        <button class="btn-sm" id="hotkeyBtn">Ändern</button>
-      </div>
-    </div>
-    <div class="field">
-      <div>
-        <div class="field-label">Modus</div>
-        <div class="field-desc">Wie die Aufnahme gesteuert wird</div>
-      </div>
-      <select id="modeSelect">
-        <option value="hold_to_speak">Hold to Speak</option>
-        <option value="press_to_speak">Press to Speak</option>
-      </select>
-    </div>
-  </div>
+<div class="layout">
+  <!-- Sidebar navigation -->
+  <nav class="sidebar">
+    <button class="nav-item active" data-pane="general"><span class="nav-ico">⚙</span><span data-i18n="nav.general">Allgemein</span></button>
+    <button class="nav-item" data-pane="speech"><span class="nav-ico">🎙</span><span data-i18n="nav.speech">Sprache &amp; Modell</span></button>
+    <button class="nav-item" data-pane="vocab"><span class="nav-ico">📖</span><span data-i18n="nav.vocab">Eigene Begriffe</span></button>
+    <button class="nav-item" data-pane="cleanup"><span class="nav-ico">✨</span><span data-i18n="nav.cleanup">Text-Bereinigung</span></button>
+    <button class="nav-item" data-pane="overlay"><span class="nav-ico">〰</span><span data-i18n="nav.overlay">Overlay</span></button>
+    <button class="nav-item" data-pane="system"><span class="nav-ico">🖥</span><span data-i18n="nav.system">System</span></button>
+  </nav>
 
-  <!-- Speech Card -->
-  <div class="card">
-    <div class="card-title">Sprache & Modell</div>
-    <div class="field">
-      <div>
-        <div class="field-label">Sprache</div>
-      </div>
-      <select id="langSelect"></select>
-    </div>
-    <div class="field">
-      <div>
-        <div class="field-label">Automatische Spracherkennung</div>
-        <div class="field-desc">Erkennt die gesprochene Sprache automatisch</div>
-      </div>
-      <label class="toggle">
-        <input type="checkbox" id="autoLangToggle">
-        <span class="slider"></span>
-      </label>
-    </div>
-    <div class="field">
-      <div>
-        <div class="field-label">Whisper Modell</div>
-        <div class="field-desc">Größer = genauer, aber langsamer</div>
-      </div>
-      <select id="modelSelect">
-        <optgroup label="OpenAI Whisper – 99 Sprachen">
-          <option value="tiny">Tiny (~1 GB, sehr schnell, Basis-Qualität)</option>
-          <option value="base">Base (~1,5 GB)</option>
-          <option value="small">Small (~2 GB, gut für CPU)</option>
-          <option value="medium">Medium (~5 GB)</option>
-          <option value="large-v2">Large v2 (~10 GB, weniger Halluzinationen)</option>
-          <option value="large-v3">Large v3 (~10 GB, max. Genauigkeit)</option>
-          <option value="large-v3-turbo">Large v3 Turbo (~6 GB, Empfehlung GPU)</option>
-        </optgroup>
-        <optgroup label="Distil-Whisper – nur Englisch, schneller">
-          <option value="distil-large-v3">Distil Large v3 (~3 GB)</option>
-          <option value="distil-large-v3.5">Distil Large v3.5 (~3 GB, beste EN-Wahl)</option>
-        </optgroup>
-        <optgroup label="Spezialisiert">
-          <option value="german-turbo">Large v3 Turbo German (~6 GB, rein deutsche Diktate)</option>
-        </optgroup>
-      </select>
-    </div>
-    <div class="field" style="flex-direction: column; align-items: stretch; gap: 8px;">
-      <div style="display: flex; justify-content: space-between; align-items: baseline;">
-        <div>
-          <div class="field-label">Eigene Begriffe (Initial Prompt)</div>
-          <div class="field-desc">Z.&nbsp;B. Firmen-, Produkt- oder Eigennamen, damit Whisper sie versteht.</div>
-        </div>
-        <span id="promptCounter" style="font-size: 11px; color: #888; white-space: nowrap;">0 / 850</span>
-      </div>
-      <textarea id="initialPromptInput" maxlength="850" rows="3"
-             placeholder="z.B. MetricDash, Supabase, Mijo, Jonas Strambach"
-             style="width: 100%; padding: 8px 12px; font-size: 13px;
-                    font-family: inherit; background: var(--input-bg);
-                    color: var(--fg); border: 1px solid var(--input-border);
-                    border-radius: 8px; outline: none; resize: vertical;
-                    min-height: 60px;"></textarea>
-    </div>
-    <div class="field">
-      <div>
-        <div class="field-label">Live-Text im Overlay</div>
-        <div class="field-desc">Zeigt den erkannten Text schon w&auml;hrend der Aufnahme</div>
-      </div>
-      <label class="toggle">
-        <input type="checkbox" id="livePreviewToggle">
-        <span class="slider"></span>
-      </label>
-    </div>
-    <div class="field">
-      <div>
-        <div class="field-label">Text-Bereinigung</div>
-        <div class="field-desc">Entfernt F&uuml;llw&ouml;rter &amp; Versprecher nach dem Diktat</div>
-      </div>
-      <select id="cleanupSelect">
-        <option value="off">Aus – Rohtext</option>
-        <option value="fast">Schnell – Regelbasiert</option>
-        <option value="ai">KI – Lokales LLM (Ollama)</option>
-      </select>
-    </div>
-    <div class="field">
-      <div>
-        <div class="field-label">KI-Engine (Ollama)</div>
-        <div class="field-desc" id="ollamaDesc">Status wird gepr&uuml;ft...</div>
-      </div>
-      <button class="btn-sm" id="ollamaBtn" style="display:none;">Installieren</button>
-      <span class="status-badge loading" id="ollamaBadge" style="display:none;">…</span>
-    </div>
-  </div>
+  <div class="panes">
 
-  <!-- Performance Card -->
-  <div class="card">
-    <div class="card-title">Performance</div>
-    <div class="field">
-      <div>
-        <div class="field-label">Beam Size</div>
-        <div class="field-desc">Auto = dynamisch je nach Länge</div>
-      </div>
-      <select id="beamSelect">
-        <option value="auto">Auto (Empfohlen)</option>
-        <option value="1">1 – Schnellste</option>
-        <option value="3">3 – Balanciert</option>
-        <option value="5">5 – Höchste Qualität</option>
-      </select>
-    </div>
-    <div class="field">
-      <div>
-        <div class="field-label">Quantisierung</div>
-        <div class="field-desc">float16 = sicher &uuml;berall; int8_float16 wird nicht von jeder GPU unterst&uuml;tzt (autom. Fallback)</div>
-      </div>
-      <select id="computeSelect">
-        <option value="float16">float16 (Standard)</option>
-        <option value="int8_float16">int8_float16 (Schneller, Turing+ GPU)</option>
-        <option value="int8">int8 (Minimaler RAM)</option>
-      </select>
-    </div>
-    <div class="field" style="flex-direction: column; align-items: stretch; gap: 8px;">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div>
-          <div class="field-label">VAD Empfindlichkeit</div>
-          <div class="field-desc">Niedrig = aggressiver Stille-Filter</div>
+    <!-- ═══ Pane: Allgemein ═══ -->
+    <section class="pane active" id="pane-general">
+      <div class="card">
+        <div class="card-title" data-i18n="general.app">App</div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="general.applang">App-Sprache</div>
+            <div class="field-desc" data-i18n="general.applang.desc">Sprache der Benutzeroberfläche</div>
+          </div>
+          <select id="appLangSelect">
+            <option value="de">Deutsch</option>
+            <option value="en">English</option>
+          </select>
         </div>
-        <span id="vadValue" style="font-size: 12px; color: #666; font-weight: 500;">300ms</span>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="general.toast">Erfolgs-Popup nach Diktat</div>
+            <div class="field-desc" data-i18n="general.toast.desc">Fehler werden immer angezeigt</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="successToastToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
       </div>
-      <input type="range" id="vadSlider" min="100" max="500" step="50" value="300" style="width: 100%; accent-color: var(--toggle-on);">
-    </div>
-  </div>
 
-  <!-- System Card -->
-  <div class="card">
-    <div class="card-title">System</div>
-    <div class="field">
-      <div>
-        <div class="field-label">Mikrofon</div>
-        <div class="field-desc">Audioeingangsgerät auswählen</div>
-      </div>
-      <select id="micSelect">
-        <option value="">Standard (System)</option>
-      </select>
-    </div>
-    <!-- Mic test meter -->
-    <div class="field" style="flex-direction: column; align-items: stretch; gap: 8px;">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div>
-          <div class="field-label">Mikrofon-Test</div>
-          <div class="field-desc">Prüfe ob dein Mikrofon funktioniert</div>
+      <div class="card">
+        <div class="card-title" data-i18n="general.hotkey">Hotkey</div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="general.combo">Tastenkombination</div>
+            <div class="field-desc" data-i18n="general.combo.desc">Drücke „Ändern" und dann deine gewünschte Kombination</div>
+          </div>
+          <div class="hotkey-display">
+            <div class="hotkey-value" id="hotkeyValue">Ctrl+Shift+Space</div>
+            <button class="btn-sm" id="hotkeyBtn" data-i18n="general.change">Ändern</button>
+          </div>
         </div>
-        <button class="btn-sm" id="micTestBtn">🎤 Test</button>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="general.mode">Modus</div>
+            <div class="field-desc" data-i18n="general.mode.desc">Wie die Aufnahme gesteuert wird</div>
+          </div>
+          <select id="modeSelect">
+            <option value="hold_to_speak" data-i18n="general.mode.hold">Halten zum Sprechen</option>
+            <option value="press_to_speak" data-i18n="general.mode.press">Drücken für Start/Stopp</option>
+          </select>
+        </div>
       </div>
-      <div style="background: var(--bar-track); border-radius: 6px; height: 8px; overflow: hidden; position: relative;">
-        <div id="micTestBar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #22c55e, #4ade80); border-radius: 6px; transition: width 0.08s ease-out;"></div>
+    </section>
+
+    <!-- ═══ Pane: Sprache & Modell ═══ -->
+    <section class="pane" id="pane-speech">
+      <div class="card">
+        <div class="card-title" data-i18n="speech.title">Sprache</div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="speech.lang">Sprache</div>
+            <div class="field-desc" data-i18n="speech.lang.desc">99 Sprachen verfügbar</div>
+          </div>
+          <select id="langSelect"></select>
+        </div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="speech.autodetect">Automatische Spracherkennung</div>
+            <div class="field-desc" data-i18n="speech.autodetect.desc">Erkennt die gesprochene Sprache automatisch</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="autoLangToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
       </div>
-    </div>
-    <div class="field">
-      <div>
-        <div class="field-label">Overlay-Stil</div>
-        <div class="field-desc">Aussehen der Aufnahme-Anzeige</div>
+
+      <div class="card">
+        <div class="card-title" data-i18n="speech.model.title">Modell</div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="speech.model">Spracherkennungs-Modell</div>
+            <div class="field-desc" data-i18n="speech.model.desc">Größer = genauer. Einsprachige Modelle fixieren ihre Sprache.</div>
+          </div>
+          <select id="modelSelect">
+            <optgroup label="OpenAI Whisper – 99 Sprachen" data-i18n-label="model.grp.whisper">
+              <option value="tiny" data-i18n="model.tiny">Tiny (~1 GB, sehr schnell, Basis-Qualität)</option>
+              <option value="base" data-i18n="model.base">Base (~1,5 GB)</option>
+              <option value="small" data-i18n="model.small">Small (~2 GB, gut für CPU)</option>
+              <option value="medium" data-i18n="model.medium">Medium (~5 GB)</option>
+              <option value="large-v2" data-i18n="model.largev2">Large v2 (~10 GB, weniger Halluzinationen)</option>
+              <option value="large-v3" data-i18n="model.largev3">Large v3 (~10 GB, max. Genauigkeit)</option>
+              <option value="large-v3-turbo" data-i18n="model.turbo">Large v3 Turbo (~6 GB, Empfehlung GPU)</option>
+            </optgroup>
+            <optgroup label="Distil-Whisper – nur Englisch, schneller" data-i18n-label="model.grp.distil">
+              <option value="distil-large-v3" data-i18n="model.distil3">Distil Large v3 (~3 GB)</option>
+              <option value="distil-large-v3.5" data-i18n="model.distil35">Distil Large v3.5 (~3 GB, beste EN-Wahl)</option>
+            </optgroup>
+            <optgroup label="Spezialisiert" data-i18n-label="model.grp.special">
+              <option value="german-turbo" data-i18n="model.german">Large v3 Turbo German (~6 GB, rein deutsche Diktate)</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="speech.status">Modell-Status</div>
+          </div>
+          <span class="status-badge loading" id="modelStatus" data-i18n="speech.status.loading">Laden...</span>
+        </div>
       </div>
-      <select id="overlayStyleSelect">
-        <option value="wave">Wave – mehrlagige Sinuswellen mit Glow</option>
-        <option value="wave_classic">Wave Classic – Original-Sinuslinie</option>
-        <option value="aurora">Aurora – rotierende Farb-Vortex (Siri-Style)</option>
-        <option value="particles">Particles – fließender Partikelstrom</option>
-        <option value="pulse">Pulse – atmender Orb mit Ripples</option>
-        <option value="ribbon">Ribbon – fließende Multi-Strang-Bänder</option>
-        <option value="spectrum">Spectrum – Glas-Card mit FFT-Bars</option>
-        <option value="amoled_bottom">AMOLED Bar – unten, Schwarz + Live-Text</option>
-        <option value="amoled_top">AMOLED Bar – oben, Schwarz + Live-Text</option>
-        <option value="amoled_center">AMOLED Card – Bildschirmmitte, gro&szlig;er Synth</option>
-      </select>
-    </div>
-    <div class="field">
-      <div>
-        <div class="field-label">Dark Mode Overlay</div>
-        <div class="field-desc">Dunkler Overlay-Hintergrund</div>
+
+      <div class="card">
+        <div class="card-title" data-i18n="speech.perf">Performance</div>
+        <div class="field">
+          <div>
+            <div class="field-label">Beam Size</div>
+            <div class="field-desc" data-i18n="speech.beam.desc">Auto = dynamisch je nach Länge</div>
+          </div>
+          <select id="beamSelect">
+            <option value="auto" data-i18n="speech.beam.auto">Auto (Empfohlen)</option>
+            <option value="1" data-i18n="speech.beam.1">1 – Schnellste</option>
+            <option value="3" data-i18n="speech.beam.3">3 – Balanciert</option>
+            <option value="5" data-i18n="speech.beam.5">5 – Höchste Qualität</option>
+          </select>
+        </div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="speech.quant">Quantisierung</div>
+            <div class="field-desc" data-i18n="speech.quant.desc">float16 = sicher überall; int8_float16 nicht auf jeder GPU (autom. Fallback)</div>
+          </div>
+          <select id="computeSelect">
+            <option value="float16">float16 (Standard)</option>
+            <option value="int8_float16">int8_float16</option>
+            <option value="int8">int8</option>
+          </select>
+        </div>
+        <div class="field" style="flex-direction: column; align-items: stretch; gap: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div class="field-label" data-i18n="speech.vad">VAD-Empfindlichkeit</div>
+              <div class="field-desc" data-i18n="speech.vad.desc">Niedrig = aggressiver Stille-Filter</div>
+            </div>
+            <span id="vadValue" style="font-size: 12px; color: #666; font-weight: 500;">300ms</span>
+          </div>
+          <input type="range" id="vadSlider" min="100" max="500" step="50" value="300" style="width: 100%; accent-color: var(--accent);">
+        </div>
       </div>
-      <label class="toggle">
-        <input type="checkbox" id="darkModeToggle">
-        <span class="slider"></span>
-      </label>
-    </div>
-    <div class="field">
-      <div>
-        <div class="field-label">Erfolgs-Popup nach Diktat</div>
-        <div class="field-desc">Fehler werden immer angezeigt</div>
+    </section>
+
+    <!-- ═══ Pane: Eigene Begriffe ═══ -->
+    <section class="pane" id="pane-vocab">
+      <div class="card">
+        <div class="card-title" data-i18n="vocab.title">Eigene Begriffe</div>
+        <div class="field-desc" style="margin-bottom: 14px;" data-i18n="vocab.desc">
+          Firmen-, Produkt- oder Eigennamen, damit sie korrekt geschrieben werden.
+          Ein Begriff pro Eintrag – Enter oder „+" zum Hinzufügen.
+        </div>
+        <div class="vocab-add">
+          <input type="text" id="vocabInput" maxlength="80"
+                 placeholder="z.B. MetricDash, Supabase, Mijo …" data-i18n-placeholder="vocab.placeholder">
+          <button class="btn-sm" id="vocabAddBtn">+</button>
+        </div>
+        <div class="vocab-list" id="vocabList"></div>
+        <div class="vocab-budget" id="vocabBudget">0 / 850</div>
       </div>
-      <label class="toggle">
-        <input type="checkbox" id="successToastToggle">
-        <span class="slider"></span>
-      </label>
-    </div>
-    <div class="field">
-      <div>
-        <div class="field-label">Einf&uuml;gemethode</div>
-        <div class="field-desc">&bdquo;Tippen&ldquo; f&uuml;r Terminals/Apps, die Strg+V ignorieren</div>
+    </section>
+
+    <!-- ═══ Pane: Text-Bereinigung ═══ -->
+    <section class="pane" id="pane-cleanup">
+      <div class="card">
+        <div class="card-title" data-i18n="cleanup.title">Text-Bereinigung</div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="cleanup.mode">Bereinigungsmodus</div>
+            <div class="field-desc" data-i18n="cleanup.mode.desc">Entfernt Füllwörter &amp; Versprecher nach dem Diktat</div>
+          </div>
+          <select id="cleanupSelect">
+            <option value="off" data-i18n="cleanup.off">Aus – Rohtext</option>
+            <option value="fast" data-i18n="cleanup.fast">Schnell – Regelbasiert</option>
+            <option value="ai" data-i18n="cleanup.ai">KI – Lokales LLM (Ollama)</option>
+          </select>
+        </div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="cleanup.engine">KI-Engine (Ollama)</div>
+            <div class="field-desc" id="ollamaDesc" data-i18n="cleanup.checking">Status wird geprüft...</div>
+          </div>
+          <button class="btn-sm" id="ollamaBtn" style="display:none;" data-i18n="cleanup.install">Installieren</button>
+          <span class="status-badge loading" id="ollamaBadge" style="display:none;">…</span>
+        </div>
       </div>
-      <select id="insertMethodSelect">
-        <option value="auto">Automatisch (Strg+V, Fallback Tippen)</option>
-        <option value="type">Immer tippen</option>
-      </select>
-    </div>
-    <div class="field">
-      <div>
-        <div class="field-label">GPU-Sicherheitsmodus</div>
-        <div class="field-desc">Bei Grafik-Abst&uuml;rzen / Artefakten aktivieren. Deaktiviert die Hardware-Beschleunigung (Neustart der App n&ouml;tig).</div>
+    </section>
+
+    <!-- ═══ Pane: Overlay ═══ -->
+    <section class="pane" id="pane-overlay">
+      <div class="card">
+        <div class="card-title" data-i18n="overlay.title">Overlay</div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="overlay.style">Overlay-Stil</div>
+            <div class="field-desc" data-i18n="overlay.style.desc">Aussehen der Aufnahme-Anzeige</div>
+          </div>
+          <select id="overlayStyleSelect">
+            <option value="amoled_bottom" data-i18n="ovl.amoled_bottom">AMOLED Bar – unten, Schwarz + Live-Text</option>
+            <option value="amoled_top" data-i18n="ovl.amoled_top">AMOLED Bar – oben, Schwarz + Live-Text</option>
+            <option value="amoled_center" data-i18n="ovl.amoled_center">AMOLED Card – Bildschirmmitte</option>
+            <option value="wave" data-i18n="ovl.wave">Wave – mehrlagige Sinuswellen</option>
+            <option value="wave_classic" data-i18n="ovl.wave_classic">Wave Classic – Original-Sinuslinie</option>
+            <option value="aurora" data-i18n="ovl.aurora">Aurora – rotierender Farb-Vortex</option>
+            <option value="particles" data-i18n="ovl.particles">Particles – Partikelstrom</option>
+            <option value="pulse" data-i18n="ovl.pulse">Pulse – atmender Orb</option>
+            <option value="ribbon" data-i18n="ovl.ribbon">Ribbon – fließende Bänder</option>
+            <option value="spectrum" data-i18n="ovl.spectrum">Spectrum – Glas-Card mit FFT-Bars</option>
+          </select>
+        </div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="overlay.dark">Dark Mode Overlay</div>
+            <div class="field-desc" data-i18n="overlay.dark.desc">Dunkler Overlay-Hintergrund</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="darkModeToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="overlay.live">Live-Text im Overlay</div>
+            <div class="field-desc" data-i18n="overlay.live.desc">Zeigt den erkannten Text schon während der Aufnahme</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="livePreviewToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
       </div>
-      <label class="toggle">
-        <input type="checkbox" id="gpuSafeModeToggle">
-        <span class="slider"></span>
-      </label>
-    </div>
-    <div class="field">
-      <div>
-        <div class="field-label">Modell-Status</div>
+    </section>
+
+    <!-- ═══ Pane: System ═══ -->
+    <section class="pane" id="pane-system">
+      <div class="card">
+        <div class="card-title" data-i18n="system.audio">Audio</div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="system.mic">Mikrofon</div>
+            <div class="field-desc" data-i18n="system.mic.desc">Audioeingangsgerät auswählen</div>
+          </div>
+          <select id="micSelect">
+            <option value="" data-i18n="system.mic.default">Standard (System)</option>
+          </select>
+        </div>
+        <div class="field" style="flex-direction: column; align-items: stretch; gap: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div class="field-label" data-i18n="system.mictest">Mikrofon-Test</div>
+              <div class="field-desc" data-i18n="system.mictest.desc">Prüfe ob dein Mikrofon funktioniert</div>
+            </div>
+            <button class="btn-sm" id="micTestBtn">🎤 Test</button>
+          </div>
+          <div style="background: var(--bar-track); border-radius: 6px; height: 8px; overflow: hidden; position: relative;">
+            <div id="micTestBar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #22c55e, #4ade80); border-radius: 6px; transition: width 0.08s ease-out;"></div>
+          </div>
+        </div>
       </div>
-      <span class="status-badge loading" id="modelStatus">Laden...</span>
-    </div>
+
+      <div class="card">
+        <div class="card-title" data-i18n="system.insert">Texteingabe</div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="system.method">Einfügemethode</div>
+            <div class="field-desc" data-i18n="system.method.desc">„Tippen" für Terminals/Apps, die Strg+V ignorieren</div>
+          </div>
+          <select id="insertMethodSelect">
+            <option value="auto" data-i18n="system.method.auto">Automatisch (Strg+V, Fallback Tippen)</option>
+            <option value="type" data-i18n="system.method.type">Immer tippen</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title" data-i18n="system.advanced">Erweitert</div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="system.gpusafe">GPU-Sicherheitsmodus</div>
+            <div class="field-desc" data-i18n="system.gpusafe.desc">Bei Grafik-Abstürzen aktivieren. Deaktiviert Hardware-Beschleunigung (Neustart nötig).</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="gpuSafeModeToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+    </section>
+
   </div>
 </div>
 
 <div class="save-bar">
-  <button class="btn-save" id="saveBtn">Speichern</button>
+  <button class="btn-save" id="saveBtn" data-i18n="save">Speichern</button>
 </div>
 
 <script>
   const $ = (id) => document.getElementById(id);
+
+  // ── i18n ─────────────────────────────────────────────────────────
+  const I18N = {
+    de: {
+      'nav.general': 'Allgemein', 'nav.speech': 'Sprache & Modell', 'nav.vocab': 'Eigene Begriffe',
+      'nav.cleanup': 'Text-Bereinigung', 'nav.overlay': 'Overlay', 'nav.system': 'System',
+      'general.app': 'App', 'general.applang': 'App-Sprache',
+      'general.applang.desc': 'Sprache der Benutzeroberfläche',
+      'general.toast': 'Erfolgs-Popup nach Diktat', 'general.toast.desc': 'Fehler werden immer angezeigt',
+      'general.hotkey': 'Hotkey', 'general.combo': 'Tastenkombination',
+      'general.combo.desc': 'Drücke „Ändern" und dann deine gewünschte Kombination',
+      'general.change': 'Ändern', 'general.waiting': 'Warte auf Eingabe...',
+      'general.mode': 'Modus', 'general.mode.desc': 'Wie die Aufnahme gesteuert wird',
+      'general.mode.hold': 'Halten zum Sprechen', 'general.mode.press': 'Drücken für Start/Stopp',
+      'speech.title': 'Sprache', 'speech.lang': 'Sprache', 'speech.lang.desc': '99 Sprachen verfügbar',
+      'speech.autodetect': 'Automatische Spracherkennung',
+      'speech.autodetect.desc': 'Erkennt die gesprochene Sprache automatisch',
+      'speech.model.title': 'Modell', 'speech.model': 'Spracherkennungs-Modell',
+      'speech.model.desc': 'Größer = genauer. Einsprachige Modelle fixieren ihre Sprache.',
+      'model.grp.whisper': 'OpenAI Whisper – 99 Sprachen',
+      'model.grp.distil': 'Distil-Whisper – nur Englisch, schneller',
+      'model.grp.special': 'Spezialisiert',
+      'model.tiny': 'Tiny (~1 GB, sehr schnell, Basis-Qualität)', 'model.base': 'Base (~1,5 GB)',
+      'model.small': 'Small (~2 GB, gut für CPU)', 'model.medium': 'Medium (~5 GB)',
+      'model.largev2': 'Large v2 (~10 GB, weniger Halluzinationen)',
+      'model.largev3': 'Large v3 (~10 GB, max. Genauigkeit)',
+      'model.turbo': 'Large v3 Turbo (~6 GB, Empfehlung GPU)',
+      'model.distil3': 'Distil Large v3 (~3 GB)', 'model.distil35': 'Distil Large v3.5 (~3 GB, beste EN-Wahl)',
+      'model.german': 'Large v3 Turbo German (~6 GB, rein deutsche Diktate)',
+      'speech.status': 'Modell-Status', 'speech.status.loading': 'Laden...',
+      'speech.perf': 'Performance', 'speech.beam.desc': 'Auto = dynamisch je nach Länge',
+      'speech.beam.auto': 'Auto (Empfohlen)', 'speech.beam.1': '1 – Schnellste',
+      'speech.beam.3': '3 – Balanciert', 'speech.beam.5': '5 – Höchste Qualität',
+      'speech.quant': 'Quantisierung',
+      'speech.quant.desc': 'float16 = sicher überall; int8_float16 nicht auf jeder GPU (autom. Fallback)',
+      'speech.vad': 'VAD-Empfindlichkeit', 'speech.vad.desc': 'Niedrig = aggressiver Stille-Filter',
+      'vocab.title': 'Eigene Begriffe',
+      'vocab.desc': 'Firmen-, Produkt- oder Eigennamen, damit sie korrekt geschrieben werden. Ein Begriff pro Eintrag – Enter oder „+" zum Hinzufügen.',
+      'vocab.placeholder': 'z.B. MetricDash, Supabase, Mijo …',
+      'cleanup.title': 'Text-Bereinigung', 'cleanup.mode': 'Bereinigungsmodus',
+      'cleanup.mode.desc': 'Entfernt Füllwörter & Versprecher nach dem Diktat',
+      'cleanup.off': 'Aus – Rohtext', 'cleanup.fast': 'Schnell – Regelbasiert',
+      'cleanup.ai': 'KI – Lokales LLM (Ollama)',
+      'cleanup.engine': 'KI-Engine (Ollama)', 'cleanup.checking': 'Status wird geprüft...',
+      'cleanup.install': 'Installieren', 'cleanup.install.size': 'Installieren (~2,5 GB)',
+      'cleanup.activate': 'Aktivieren', 'cleanup.loadmodel': 'KI-Modell laden',
+      'cleanup.running': 'Läuft...',
+      'cleanup.active': 'Aktiv ✓', 'cleanup.ready.desc': 'Lokales LLM bereit – Modus „KI" nutzt es automatisch',
+      'cleanup.installed.desc': 'Installiert, aber noch nicht einsatzbereit',
+      'cleanup.notinstalled.desc': 'Einmaliger Download – danach läuft die KI-Bereinigung komplett lokal',
+      'overlay.title': 'Overlay', 'overlay.style': 'Overlay-Stil',
+      'overlay.style.desc': 'Aussehen der Aufnahme-Anzeige',
+      'ovl.amoled_bottom': 'AMOLED Bar – unten, Schwarz + Live-Text',
+      'ovl.amoled_top': 'AMOLED Bar – oben, Schwarz + Live-Text',
+      'ovl.amoled_center': 'AMOLED Card – Bildschirmmitte',
+      'ovl.wave': 'Wave – mehrlagige Sinuswellen', 'ovl.wave_classic': 'Wave Classic – Original-Sinuslinie',
+      'ovl.aurora': 'Aurora – rotierender Farb-Vortex', 'ovl.particles': 'Particles – Partikelstrom',
+      'ovl.pulse': 'Pulse – atmender Orb', 'ovl.ribbon': 'Ribbon – fließende Bänder',
+      'ovl.spectrum': 'Spectrum – Glas-Card mit FFT-Bars',
+      'overlay.dark': 'Dark Mode Overlay', 'overlay.dark.desc': 'Dunkler Overlay-Hintergrund',
+      'overlay.live': 'Live-Text im Overlay',
+      'overlay.live.desc': 'Zeigt den erkannten Text schon während der Aufnahme',
+      'system.audio': 'Audio', 'system.mic': 'Mikrofon', 'system.mic.desc': 'Audioeingangsgerät auswählen',
+      'system.mic.default': 'Standard (System)', 'system.mic.defaulttag': ' (Standard)',
+      'system.mictest': 'Mikrofon-Test', 'system.mictest.desc': 'Prüfe ob dein Mikrofon funktioniert',
+      'system.insert': 'Texteingabe', 'system.method': 'Einfügemethode',
+      'system.method.desc': '„Tippen" für Terminals/Apps, die Strg+V ignorieren',
+      'system.method.auto': 'Automatisch (Strg+V, Fallback Tippen)', 'system.method.type': 'Immer tippen',
+      'system.advanced': 'Erweitert', 'system.gpusafe': 'GPU-Sicherheitsmodus',
+      'system.gpusafe.desc': 'Bei Grafik-Abstürzen aktivieren. Deaktiviert Hardware-Beschleunigung (Neustart nötig).',
+      'save': 'Speichern',
+    },
+    en: {
+      'nav.general': 'General', 'nav.speech': 'Language & Model', 'nav.vocab': 'Custom Vocabulary',
+      'nav.cleanup': 'Text Cleanup', 'nav.overlay': 'Overlay', 'nav.system': 'System',
+      'general.app': 'App', 'general.applang': 'App language',
+      'general.applang.desc': 'Language of the user interface',
+      'general.toast': 'Success popup after dictation', 'general.toast.desc': 'Errors are always shown',
+      'general.hotkey': 'Hotkey', 'general.combo': 'Key combination',
+      'general.combo.desc': 'Press "Change", then your desired combination',
+      'general.change': 'Change', 'general.waiting': 'Waiting for input...',
+      'general.mode': 'Mode', 'general.mode.desc': 'How recording is controlled',
+      'general.mode.hold': 'Hold to speak', 'general.mode.press': 'Press to start/stop',
+      'speech.title': 'Language', 'speech.lang': 'Language', 'speech.lang.desc': '99 languages available',
+      'speech.autodetect': 'Automatic language detection',
+      'speech.autodetect.desc': 'Detects the spoken language automatically',
+      'speech.model.title': 'Model', 'speech.model': 'Speech recognition model',
+      'speech.model.desc': 'Bigger = more accurate. Single-language models pin their language.',
+      'model.grp.whisper': 'OpenAI Whisper – 99 languages',
+      'model.grp.distil': 'Distil-Whisper – English only, faster',
+      'model.grp.special': 'Specialized',
+      'model.tiny': 'Tiny (~1 GB, very fast, basic quality)', 'model.base': 'Base (~1.5 GB)',
+      'model.small': 'Small (~2 GB, good for CPU)', 'model.medium': 'Medium (~5 GB)',
+      'model.largev2': 'Large v2 (~10 GB, fewer hallucinations)',
+      'model.largev3': 'Large v3 (~10 GB, max accuracy)',
+      'model.turbo': 'Large v3 Turbo (~6 GB, recommended on GPU)',
+      'model.distil3': 'Distil Large v3 (~3 GB)', 'model.distil35': 'Distil Large v3.5 (~3 GB, best EN pick)',
+      'model.german': 'Large v3 Turbo German (~6 GB, pure-German dictation)',
+      'speech.status': 'Model status', 'speech.status.loading': 'Loading...',
+      'speech.perf': 'Performance', 'speech.beam.desc': 'Auto = scales with clip length',
+      'speech.beam.auto': 'Auto (recommended)', 'speech.beam.1': '1 – fastest',
+      'speech.beam.3': '3 – balanced', 'speech.beam.5': '5 – highest quality',
+      'speech.quant': 'Quantization',
+      'speech.quant.desc': 'float16 = safe everywhere; int8_float16 not on every GPU (auto fallback)',
+      'speech.vad': 'VAD sensitivity', 'speech.vad.desc': 'Low = more aggressive silence filter',
+      'vocab.title': 'Custom Vocabulary',
+      'vocab.desc': 'Company, product or personal names so they are spelled correctly. One term per entry – Enter or "+" to add.',
+      'vocab.placeholder': 'e.g. MetricDash, Supabase, Mijo …',
+      'cleanup.title': 'Text Cleanup', 'cleanup.mode': 'Cleanup mode',
+      'cleanup.mode.desc': 'Removes filler words & stutters after dictation',
+      'cleanup.off': 'Off – raw text', 'cleanup.fast': 'Fast – rule-based',
+      'cleanup.ai': 'AI – local LLM (Ollama)',
+      'cleanup.engine': 'AI engine (Ollama)', 'cleanup.checking': 'Checking status...',
+      'cleanup.install': 'Install', 'cleanup.install.size': 'Install (~2.5 GB)',
+      'cleanup.activate': 'Activate', 'cleanup.loadmodel': 'Download AI model',
+      'cleanup.running': 'Working...',
+      'cleanup.active': 'Active ✓', 'cleanup.ready.desc': 'Local LLM ready – "AI" mode uses it automatically',
+      'cleanup.installed.desc': 'Installed, but not ready yet',
+      'cleanup.notinstalled.desc': 'One-time download – afterwards AI cleanup runs fully local',
+      'overlay.title': 'Overlay', 'overlay.style': 'Overlay style',
+      'overlay.style.desc': 'Look of the recording indicator',
+      'ovl.amoled_bottom': 'AMOLED bar – bottom, black + live text',
+      'ovl.amoled_top': 'AMOLED bar – top, black + live text',
+      'ovl.amoled_center': 'AMOLED card – screen center',
+      'ovl.wave': 'Wave – layered sine waves', 'ovl.wave_classic': 'Wave Classic – original sine line',
+      'ovl.aurora': 'Aurora – rotating color vortex', 'ovl.particles': 'Particles – particle stream',
+      'ovl.pulse': 'Pulse – breathing orb', 'ovl.ribbon': 'Ribbon – flowing bands',
+      'ovl.spectrum': 'Spectrum – glass card with FFT bars',
+      'overlay.dark': 'Dark mode overlay', 'overlay.dark.desc': 'Dark overlay background',
+      'overlay.live': 'Live text in overlay',
+      'overlay.live.desc': 'Shows recognized text while you are still speaking',
+      'system.audio': 'Audio', 'system.mic': 'Microphone', 'system.mic.desc': 'Select the audio input device',
+      'system.mic.default': 'Default (system)', 'system.mic.defaulttag': ' (default)',
+      'system.mictest': 'Microphone test', 'system.mictest.desc': 'Check that your microphone works',
+      'system.insert': 'Text insertion', 'system.method': 'Insert method',
+      'system.method.desc': '"Type" for terminals/apps that ignore Ctrl+V',
+      'system.method.auto': 'Automatic (Ctrl+V, typing fallback)', 'system.method.type': 'Always type',
+      'system.advanced': 'Advanced', 'system.gpusafe': 'GPU safe mode',
+      'system.gpusafe.desc': 'Enable on graphics crashes. Disables hardware acceleration (restart required).',
+      'save': 'Save',
+    },
+  };
+
+  let uiLang = 'de';
+  const t = (key) => (I18N[uiLang] && I18N[uiLang][key]) || I18N.de[key] || key;
+
+  function applyI18n(lang) {
+    uiLang = I18N[lang] ? lang : 'de';
+    document.documentElement.lang = uiLang;
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      el.textContent = t(el.dataset.i18n);
+    });
+    document.querySelectorAll('[data-i18n-label]').forEach(el => {
+      el.label = t(el.dataset.i18nLabel);
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+      el.placeholder = t(el.dataset.i18nPlaceholder);
+    });
+  }
+
+  // ── Sidebar navigation ──
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.onclick = () => {
+      document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('.pane').forEach(p =>
+        p.classList.toggle('active', p.id === 'pane-' + btn.dataset.pane));
+    };
+  });
 
   // ── State ──
   let currentConfig = {};
@@ -604,7 +796,7 @@
     if (recordingHotkey) return;
     recordingHotkey = true;
     hotkeyParts.clear();
-    $('hotkeyValue').textContent = 'Warte auf Eingabe...';
+    $('hotkeyValue').textContent = t('general.waiting');
     $('hotkeyValue').classList.add('recording');
     $('hotkeyBtn').textContent = '...';
   };
@@ -631,7 +823,7 @@
     if (hotkeyParts.size > 0) {
       recordingHotkey = false;
       $('hotkeyValue').classList.remove('recording');
-      $('hotkeyBtn').textContent = 'Ändern';
+      $('hotkeyBtn').textContent = t('general.change');
       $('hotkeyValue').textContent = Array.from(hotkeyParts).join('+');
     }
   });
@@ -680,9 +872,91 @@
     }
   }
 
+  // ── Vocabulary (chip table) ──
+  const VOCAB_BUDGET = 850;  // Whisper's 224-token initial-prompt budget
+  let vocabTerms = [];
+
+  function vocabJoined() { return vocabTerms.join(', '); }
+
+  function renderVocab() {
+    const list = $('vocabList');
+    list.innerHTML = '';
+    vocabTerms.forEach((term, i) => {
+      const chip = document.createElement('span');
+      chip.className = 'vocab-chip';
+      const label = document.createElement('span');
+      label.textContent = term;
+      const del = document.createElement('button');
+      del.textContent = '✕';
+      del.onclick = () => { vocabTerms.splice(i, 1); renderVocab(); };
+      chip.appendChild(label);
+      chip.appendChild(del);
+      list.appendChild(chip);
+    });
+    const used = vocabJoined().length;
+    const budget = $('vocabBudget');
+    budget.textContent = `${used} / ${VOCAB_BUDGET}`;
+    budget.classList.toggle('full', used > VOCAB_BUDGET - 40);
+  }
+
+  function addVocabTerm() {
+    const term = $('vocabInput').value.trim().replace(/,+$/, '');
+    if (!term) return;
+    if (vocabTerms.some(v => v.toLowerCase() === term.toLowerCase())) {
+      $('vocabInput').value = '';
+      return;
+    }
+    const wouldBe = vocabTerms.concat(term).join(', ').length;
+    if (wouldBe > VOCAB_BUDGET) {
+      $('vocabBudget').classList.add('full');
+      return;
+    }
+    vocabTerms.push(term);
+    $('vocabInput').value = '';
+    renderVocab();
+  }
+
+  $('vocabAddBtn').onclick = addVocabTerm;
+  $('vocabInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addVocabTerm(); }
+  });
+
+  // ── Ollama (KI-Bereinigung) ──
+  let ollamaBusy = false;   // true while an in-app setup is running
+
+  function renderOllamaStatus(s) {
+    const btn = $('ollamaBtn'), badge = $('ollamaBadge'), desc = $('ollamaDesc');
+    if (s.running && s.model_pulled) {
+      badge.textContent = t('cleanup.active');
+      badge.className = 'status-badge ok';
+      badge.style.display = '';
+      btn.style.display = 'none';
+      desc.textContent = t('cleanup.ready.desc');
+    } else if (s.installed) {
+      badge.style.display = 'none';
+      btn.textContent = s.running ? t('cleanup.loadmodel') : t('cleanup.activate');
+      btn.style.display = '';
+      desc.textContent = t('cleanup.installed.desc');
+    } else {
+      badge.style.display = 'none';
+      btn.textContent = t('cleanup.install.size');
+      btn.style.display = '';
+      desc.textContent = t('cleanup.notinstalled.desc');
+    }
+  }
+
+  $('ollamaBtn').onclick = () => {
+    ollamaBusy = true;
+    $('ollamaBtn').disabled = true;
+    $('ollamaBtn').textContent = t('cleanup.running');
+    window.notype.ollamaSetup();
+  };
+
   // ── Populate from config ──
   function applyConfig(cfg) {
     currentConfig = cfg;
+    applyI18n(cfg.app_language || 'de');
+    $('appLangSelect').value = I18N[cfg.app_language] ? cfg.app_language : 'de';
     $('hotkeyValue').textContent = cfg.hotkey || 'ctrl+shift+space';
     $('modeSelect').value = cfg.mode || 'hold_to_speak';
     $('langSelect').value = cfg.language || 'de';
@@ -691,8 +965,9 @@
     $('darkModeToggle').checked = cfg.overlay_theme === 'dark';
     $('overlayStyleSelect').value = cfg.overlay_style || 'wave';
     $('gpuSafeModeToggle').checked = !!cfg.gpu_safe_mode;
-    $('initialPromptInput').value = cfg.initial_prompt || '';
-    updatePromptCounter();
+    vocabTerms = (cfg.initial_prompt || '')
+      .split(',').map(s => s.trim()).filter(Boolean);
+    renderVocab();
     $('cleanupSelect').value = cfg.cleanup_mode || 'fast';
     $('livePreviewToggle').checked = cfg.live_preview_enabled !== false;
     $('successToastToggle').checked = cfg.success_toast === true;
@@ -700,7 +975,7 @@
 
     // Performance
     $('beamSelect').value = cfg.beam_size || 'auto';
-    $('computeSelect').value = cfg.compute_type || 'int8_float16';
+    $('computeSelect').value = cfg.compute_type || 'float16';
     $('vadSlider').value = cfg.vad_sensitivity || 300;
     $('vadValue').textContent = ($('vadSlider').value) + 'ms';
 
@@ -710,41 +985,14 @@
     window.notype.ollamaStatus();
   }
 
-  // ── Ollama (KI-Bereinigung) ──
-  let ollamaBusy = false;   // true while an in-app setup is running
-
-  function renderOllamaStatus(s) {
-    const btn = $('ollamaBtn'), badge = $('ollamaBadge'), desc = $('ollamaDesc');
-    if (s.running && s.model_pulled) {
-      badge.textContent = 'Aktiv ✓';
-      badge.className = 'status-badge ok';
-      badge.style.display = '';
-      btn.style.display = 'none';
-      desc.textContent = 'Lokales LLM bereit – Modus „KI" nutzt es automatisch';
-    } else if (s.installed) {
-      badge.style.display = 'none';
-      btn.textContent = s.running ? 'KI-Modell laden' : 'Aktivieren';
-      btn.style.display = '';
-      desc.textContent = 'Installiert, aber noch nicht einsatzbereit';
-    } else {
-      badge.style.display = 'none';
-      btn.textContent = 'Installieren (~2,5 GB)';
-      btn.style.display = '';
-      desc.textContent = 'Einmaliger Download – danach läuft die KI-Bereinigung komplett lokal';
-    }
-  }
-
-  $('ollamaBtn').onclick = () => {
-    ollamaBusy = true;
-    $('ollamaBtn').disabled = true;
-    $('ollamaBtn').textContent = 'Läuft...';
-    window.notype.ollamaSetup();
-  };
+  // Live language switch (before saving)
+  $('appLangSelect').onchange = () => applyI18n($('appLangSelect').value);
 
   // ── Save ──
   $('saveBtn').onclick = () => {
     const micVal = $('micSelect').value;
     const newConfig = {
+      app_language: $('appLangSelect').value,
       hotkey: $('hotkeyValue').textContent.trim(),
       mode: $('modeSelect').value,
       language: $('langSelect').value,
@@ -753,7 +1001,7 @@
       overlay_theme: $('darkModeToggle').checked ? 'dark' : 'light',
       overlay_style: $('overlayStyleSelect').value,
       gpu_safe_mode: $('gpuSafeModeToggle').checked,
-      initial_prompt: $('initialPromptInput').value.trim(),
+      initial_prompt: vocabJoined(),
       cleanup_mode: $('cleanupSelect').value,
       live_preview_enabled: $('livePreviewToggle').checked,
       success_toast: $('successToastToggle').checked,
@@ -772,12 +1020,6 @@
   $('vadSlider').oninput = () => {
     $('vadValue').textContent = $('vadSlider').value + 'ms';
   };
-
-  // Vocabulary character counter
-  function updatePromptCounter() {
-    $('promptCounter').textContent = `${$('initialPromptInput').value.length} / 850`;
-  }
-  $('initialPromptInput').oninput = updatePromptCounter;
 
   // ── Theme ──
   if (window.notype && window.notype.onSetTheme) {
@@ -800,7 +1042,7 @@
       devices.forEach(d => {
         const opt = document.createElement('option');
         opt.value = d.index;
-        opt.textContent = d.name + (d.default ? ' (Standard)' : '');
+        opt.textContent = d.name + (d.default ? t('system.mic.defaulttag') : '');
         sel.appendChild(opt);
       });
       // Set current value
@@ -877,7 +1119,7 @@
 
   function stopMicTest() {
     if (micTestAnimId) cancelAnimationFrame(micTestAnimId);
-    if (micTestStream) micTestStream.getTracks().forEach(t => t.stop());
+    if (micTestStream) micTestStream.getTracks().forEach(t2 => t2.stop());
     if (micTestContext) micTestContext.close();
     micTestStream = null;
     micTestContext = null;

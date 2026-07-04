@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('notype', {
   onOllamaProgress: (callback) => ipcRenderer.on('ollama-progress', (_, data) => callback(data)),
   onPreviewText: (callback) => ipcRenderer.on('preview-text', (_, text) => callback(text)),
   onPreviewEnabled: (callback) => ipcRenderer.on('preview-enabled', (_, enabled) => callback(enabled)),
+  onAppLang: (callback) => ipcRenderer.on('app-lang', (_, lang) => callback(lang)),
 
   // Send messages to main process
   saveConfig: (config) => ipcRenderer.send('save-config', config),

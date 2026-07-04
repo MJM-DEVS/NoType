@@ -60,13 +60,17 @@
   .style-amoled-bar, .style-amoled-center {
     width: 100%; height: 100%;
     align-items: center; justify-content: center;
+    /* Breathing room so the outer glow fades out INSIDE the transparent
+       window – a glow that reaches the window edge gets clipped into a
+       visible rectangular gradient. Keep padding > blur radius. */
+    padding: 14px; box-sizing: border-box;
   }
   .ampill {
     width: 100%; height: 100%;
     background: #000;
     border: 1px solid rgba(0, 212, 170, 0.32);
     border-radius: 999px;
-    box-shadow: 0 0 26px rgba(0, 212, 170, 0.16),
+    box-shadow: 0 0 12px rgba(0, 212, 170, 0.16),
                 inset 0 0 20px rgba(0, 212, 170, 0.05);
     display: flex; align-items: center; gap: 16px;
     padding: 0 24px 0 16px; box-sizing: border-box;
@@ -90,7 +94,7 @@
     background: #000;
     border: 1px solid rgba(0, 212, 170, 0.32);
     border-radius: 28px;
-    box-shadow: 0 0 44px rgba(0, 212, 170, 0.18),
+    box-shadow: 0 0 12px rgba(0, 212, 170, 0.2),
                 inset 0 0 28px rgba(0, 212, 170, 0.04);
     display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 18px;
@@ -452,6 +456,7 @@
   let targetAmp = 0.15;
   let frame = 0;
   let currentStyle = 'wave';
+  let listenText = 'Ich höre zu…';   // swapped by app-lang IPC
 
   // ── Build spectrum bars ──
   const SPEC_BAR_COUNT = 36;
@@ -838,7 +843,7 @@
       document.getElementById('livePreviewText').textContent = '';
       for (const id of ['amBarText', 'amCenterText']) {
         const el = document.getElementById(id);
-        el.textContent = 'Ich höre zu…';
+        el.textContent = listenText;
         el.classList.add('dim');
       }
       playChime('start');
@@ -863,6 +868,15 @@
     if (window.notype.onPreviewEnabled) {
       window.notype.onPreviewEnabled((enabled) => {
         document.body.classList.toggle('with-preview', !!enabled);
+      });
+    }
+    if (window.notype.onAppLang) {
+      window.notype.onAppLang((lang) => {
+        listenText = lang === 'en' ? 'Listening…' : 'Ich höre zu…';
+        for (const id of ['amBarText', 'amCenterText']) {
+          const el = document.getElementById(id);
+          if (el.classList.contains('dim')) el.textContent = listenText;
+        }
       });
     }
     if (window.notype.onPreviewText) {
