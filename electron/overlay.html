@@ -46,9 +46,14 @@
   body[data-style="pulse"]        .style-pulse,
   body[data-style="ribbon"]       .style-ribbon,
   body[data-style="spectrum"]     .style-spectrum { display: flex; }
-  body[data-style="amoled_top"]    .style-amoled-bar,
-  body[data-style="amoled_bottom"] .style-amoled-bar,
-  body[data-style="amoled_center"] .style-amoled-center { display: flex; }
+  body[data-style="amoled"]      .style-amoled-bar,
+  body[data-style="amoled_card"] .style-amoled-center { display: flex; }
+
+  /* Exit: main.js sends 'overlay-leaving' ~170 ms before hiding the window. */
+  body.leaving .style, body.leaving #livePreview {
+    opacity: 0 !important;
+    transition: opacity 0.15s ease;
+  }
 
   /* ═══════════════════════════════════════════════════════════════
      AMOLED family – pure black, brand-mint synth, transcript inside.
@@ -60,6 +65,7 @@
   .style-amoled-bar, .style-amoled-center {
     width: 100%; height: 100%;
     align-items: center; justify-content: center;
+    animation: fadeUp 0.32s cubic-bezier(0.16, 1, 0.3, 1);
     /* Breathing room so the outer glow fades out INSIDE the transparent
        window – a glow that reaches the window edge gets clipped into a
        visible rectangular gradient. Keep padding > blur radius. */
@@ -868,9 +874,8 @@
       case 'pulse':        renderPulse(t, amp); break;
       case 'ribbon':       renderRibbon(t, amp); break;
       case 'spectrum':     renderSpectrum(t, amp); break;
-      case 'amoled_top':
-      case 'amoled_bottom': renderAmoledSynth(amBarCtx, amBarCanvas, t, amp); break;
-      case 'amoled_center': renderAmoledSynth(amCenterCtx, amCenterCanvas, t, amp); break;
+      case 'amoled':       renderAmoledSynth(amBarCtx, amBarCanvas, t, amp); break;
+      case 'amoled_card':  renderAmoledSynth(amCenterCtx, amCenterCanvas, t, amp); break;
     }
   }
   requestAnimationFrame(loop);
@@ -880,7 +885,12 @@
     window.notype.onAmplitude((val) => { targetAmp = Math.max(val, 0.08); });
     window.notype.onRecordingStarted(() => {
       targetAmp = 0.15;
-      document.body.classList.remove('processing', 'done', 'busy');
+      document.body.classList.remove('processing', 'done', 'busy', 'leaving');
+      // Replay the active style's entry animation – the element stays in
+      // the DOM between dictations, so CSS alone would only animate once.
+      const active = document.querySelector('.style-' + currentStyle.replace(/_/g, '-')
+        .replace('amoled-card', 'amoled-center').replace(/^amoled$/, 'amoled-bar'));
+      if (active) { active.style.animation = 'none'; void active.offsetWidth; active.style.animation = ''; }
       // Particle stream reset
       for (let i = 0; i < particles.length; i++) {
         Object.assign(particles[i], makeParticle());
@@ -910,8 +920,25 @@
     if (window.notype.onTranscriptionDone) {
       window.notype.onTranscriptionDone((data) => {
         document.body.classList.remove('processing');
-        if (data && data.ok) document.body.classList.add('done');
+        if (!data || !data.ok) return;
+        document.body.classList.add('done');
+        // Show the sentence that was actually inserted (main.js keeps the
+        // window up ~1.4 s for this) – the preview was only a rough draft.
+        if (data.text) {
+          for (const id of ['amBarText', 'amCenterText']) {
+            const el = document.getElementById(id);
+            el.textContent = data.text;
+            el.classList.remove('dim');
+          }
+          document.getElementById('livePreviewText').textContent = data.text;
+          if (document.body.classList.contains('with-preview')) {
+            document.getElementById('livePreview').classList.add('visible');
+          }
+        }
       });
+    }
+    if (window.notype.onOverlayLeaving) {
+      window.notype.onOverlayLeaving(() => document.body.classList.add('leaving'));
     }
     if (window.notype.onBusy) {
       window.notype.onBusy(() => {
@@ -928,7 +955,10 @@
     if (window.notype.onSetStyle) {
       window.notype.onSetStyle((style) => {
         const valid = ['wave_classic', 'wave', 'aurora', 'particles', 'pulse', 'ribbon', 'spectrum',
-                       'amoled_top', 'amoled_bottom', 'amoled_center'];
+                       'amoled', 'amoled_card'];
+        // Pre-2.6 ids carried the position; placement is main.js's job now.
+        const legacy = { amoled_top: 'amoled', amoled_bottom: 'amoled', amoled_center: 'amoled_card' };
+        style = legacy[style] || style;
         currentStyle = valid.includes(style) ? style : 'wave';
         document.body.dataset.style = currentStyle;
         // canvases need a re-measure when switched in (element was display:none)

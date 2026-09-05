@@ -59,7 +59,8 @@ DEFAULT_CONFIG = {
     "autostart": False,
     "auto_language_detect": True,
     "overlay_enabled": True,
-    "overlay_style": "wave",         # wave | wave_classic | aurora | particles | pulse | ribbon | spectrum
+    "overlay_style": "wave",         # wave | wave_classic | aurora | particles | pulse | ribbon | spectrum | amoled | amoled_card
+    "overlay_position": "bottom",    # bottom | top | center – applies to every style
     "initial_prompt": "",            # custom-vocab bias for Whisper
     "cleanup_mode": "fast",          # off | fast (rules) | ai (local LLM via Ollama)
     "llm_model": "qwen2.5:3b-instruct",  # Ollama model for cleanup_mode="ai"

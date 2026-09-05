@@ -1,6 +1,6 @@
 {
   "name": "notype",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "description": "NoType – Local Voice Dictation (Privacy-First)",
   "main": "main.js",
   "scripts": {
@@ -31,11 +31,24 @@
       "!node_modules/**/{CHANGELOG.md,README.md,readme.md,*.d.ts,*.map,*.tsbuildinfo}"
     ],
     "extraResources": [
-      { "from": "../dist/backend",      "to": "backend",     "filter": ["**/*"] }
+      {
+        "from": "../dist/backend",
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
+      }
     ],
     "asar": false,
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "assets/icon.ico",
       "artifactName": "NoType-Setup-${version}.${ext}"
     },

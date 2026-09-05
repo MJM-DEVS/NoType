@@ -20,12 +20,31 @@ from PyInstaller.utils.hooks import collect_all
 fw_datas, fw_binaries, fw_hidden = collect_all('faster_whisper')
 ct_datas, ct_binaries, ct_hidden = collect_all('ctranslate2')
 
+# CUDA runtime libraries. The ctranslate2 wheel ships cuDNN but NOT cuBLAS –
+# ctranslate2.dll imports cublas64_12.dll (which pulls cublasLt64_12.dll) at
+# load time. Without them the GPU path fails on every machine that doesn't
+# happen to have a CUDA 12 toolkit on PATH, and the backend silently falls
+# back to CPU. Source: the `nvidia-cublas-cu12` pip package in the venv.
+# Placed next to cudnn64_9.dll inside ctranslate2/ – the directory the
+# package registers with os.add_dll_directory, so the loader finds them.
+import glob, os, sysconfig
+_site = sysconfig.get_paths()['purelib']
+cuda_binaries = [
+    (p, 'ctranslate2')
+    for p in glob.glob(os.path.join(_site, 'nvidia', 'cublas', 'bin', 'cublas*64_12.dll'))
+]
+if not cuda_binaries:
+    raise SystemExit(
+        "cuBLAS DLLs not found – run: venv\\Scripts\\pip install nvidia-cublas-cu12 "
+        "(the GPU path needs them bundled, see comment in backend.spec)"
+    )
+
 block_cipher = None
 
 a = Analysis(
     ['backend.py'],
     pathex=[],
-    binaries=fw_binaries + ct_binaries,
+    binaries=fw_binaries + ct_binaries + cuda_binaries,
     datas=fw_datas + ct_datas,
     hiddenimports=[
         'sounddevice',

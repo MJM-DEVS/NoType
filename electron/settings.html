@@ -507,6 +507,18 @@
         </div>
         <div class="field">
           <div>
+            <div class="field-label" data-i18n="cleanup.model">KI-Modell</div>
+            <div class="field-desc" data-i18n="cleanup.model.desc">Größer = bessere Korrekturen, aber langsamer. Antwortet das Modell nicht in 2,5 s, wird der regelbasierte Text eingefügt.</div>
+          </div>
+          <select id="llmModelSelect">
+            <option value="qwen2.5:3b-instruct" data-i18n="llm.qwen3">Qwen 2.5 3B – Standard, ~2 GB, schnell</option>
+            <option value="qwen2.5:7b-instruct" data-i18n="llm.qwen7">Qwen 2.5 7B – ~4,7 GB, genauer (GPU ≥ 8 GB)</option>
+            <option value="llama3.2:3b" data-i18n="llm.llama3">Llama 3.2 3B – ~2 GB, stark auf Englisch</option>
+            <option value="gemma2:2b" data-i18n="llm.gemma2">Gemma 2 2B – ~1,6 GB, am schnellsten</option>
+          </select>
+        </div>
+        <div class="field">
+          <div>
             <div class="field-label" data-i18n="cleanup.engine">KI-Engine (Ollama)</div>
             <div class="field-desc" id="ollamaDesc" data-i18n="cleanup.checking">Status wird geprüft...</div>
           </div>
@@ -526,9 +538,8 @@
             <div class="field-desc" data-i18n="overlay.style.desc">Aussehen der Aufnahme-Anzeige</div>
           </div>
           <select id="overlayStyleSelect">
-            <option value="amoled_bottom" data-i18n="ovl.amoled_bottom">AMOLED Bar – unten, Schwarz + Live-Text</option>
-            <option value="amoled_top" data-i18n="ovl.amoled_top">AMOLED Bar – oben, Schwarz + Live-Text</option>
-            <option value="amoled_center" data-i18n="ovl.amoled_center">AMOLED Card – Bildschirmmitte</option>
+            <option value="amoled" data-i18n="ovl.amoled">AMOLED Bar – Schwarz + Live-Text</option>
+            <option value="amoled_card" data-i18n="ovl.amoled_card">AMOLED Card – große Karte + Live-Text</option>
             <option value="wave" data-i18n="ovl.wave">Wave – mehrlagige Sinuswellen</option>
             <option value="wave_classic" data-i18n="ovl.wave_classic">Wave Classic – Original-Sinuslinie</option>
             <option value="aurora" data-i18n="ovl.aurora">Aurora – rotierender Farb-Vortex</option>
@@ -536,6 +547,17 @@
             <option value="pulse" data-i18n="ovl.pulse">Pulse – atmender Orb</option>
             <option value="ribbon" data-i18n="ovl.ribbon">Ribbon – fließende Bänder</option>
             <option value="spectrum" data-i18n="ovl.spectrum">Spectrum – Glas-Card mit FFT-Bars</option>
+          </select>
+        </div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="overlay.pos">Position</div>
+            <div class="field-desc" data-i18n="overlay.pos.desc">Wo die Anzeige auf dem Bildschirm erscheint</div>
+          </div>
+          <select id="overlayPositionSelect">
+            <option value="bottom" data-i18n="overlay.pos.bottom">Unten</option>
+            <option value="top" data-i18n="overlay.pos.top">Oben</option>
+            <option value="center" data-i18n="overlay.pos.center">Mitte</option>
           </select>
         </div>
         <div class="field">
@@ -663,6 +685,12 @@
       'cleanup.mode.desc': 'Entfernt Füllwörter & Versprecher nach dem Diktat',
       'cleanup.off': 'Aus – Rohtext', 'cleanup.fast': 'Schnell – Regelbasiert',
       'cleanup.ai': 'KI – Lokales LLM (Ollama)',
+      'cleanup.model': 'KI-Modell',
+      'cleanup.model.desc': 'Größer = bessere Korrekturen, aber langsamer. Antwortet das Modell nicht in 2,5 s, wird der regelbasierte Text eingefügt.',
+      'llm.qwen3': 'Qwen 2.5 3B – Standard, ~2 GB, schnell',
+      'llm.qwen7': 'Qwen 2.5 7B – ~4,7 GB, genauer (GPU ≥ 8 GB)',
+      'llm.llama3': 'Llama 3.2 3B – ~2 GB, stark auf Englisch',
+      'llm.gemma2': 'Gemma 2 2B – ~1,6 GB, am schnellsten',
       'cleanup.engine': 'KI-Engine (Ollama)', 'cleanup.checking': 'Status wird geprüft...',
       'cleanup.install': 'Installieren', 'cleanup.install.size': 'Installieren (~2,5 GB)',
       'cleanup.activate': 'Aktivieren', 'cleanup.loadmodel': 'KI-Modell laden',
@@ -672,9 +700,10 @@
       'cleanup.notinstalled.desc': 'Einmaliger Download – danach läuft die KI-Bereinigung komplett lokal',
       'overlay.title': 'Overlay', 'overlay.style': 'Overlay-Stil',
       'overlay.style.desc': 'Aussehen der Aufnahme-Anzeige',
-      'ovl.amoled_bottom': 'AMOLED Bar – unten, Schwarz + Live-Text',
-      'ovl.amoled_top': 'AMOLED Bar – oben, Schwarz + Live-Text',
-      'ovl.amoled_center': 'AMOLED Card – Bildschirmmitte',
+      'ovl.amoled': 'AMOLED Bar – Schwarz + Live-Text',
+      'ovl.amoled_card': 'AMOLED Card – große Karte + Live-Text',
+      'overlay.pos': 'Position', 'overlay.pos.desc': 'Wo die Anzeige auf dem Bildschirm erscheint',
+      'overlay.pos.bottom': 'Unten', 'overlay.pos.top': 'Oben', 'overlay.pos.center': 'Mitte',
       'ovl.wave': 'Wave – mehrlagige Sinuswellen', 'ovl.wave_classic': 'Wave Classic – Original-Sinuslinie',
       'ovl.aurora': 'Aurora – rotierender Farb-Vortex', 'ovl.particles': 'Particles – Partikelstrom',
       'ovl.pulse': 'Pulse – atmender Orb', 'ovl.ribbon': 'Ribbon – fließende Bänder',
@@ -725,6 +754,12 @@
       'cleanup.mode.desc': 'Removes filler words & stutters after dictation',
       'cleanup.off': 'Off – raw text', 'cleanup.fast': 'Fast – rule-based',
       'cleanup.ai': 'AI – local LLM (Ollama)',
+      'cleanup.model': 'AI model',
+      'cleanup.model.desc': 'Bigger = better corrections but slower. If the model does not answer within 2.5 s, the rule-cleaned text is inserted.',
+      'llm.qwen3': 'Qwen 2.5 3B – default, ~2 GB, fast',
+      'llm.qwen7': 'Qwen 2.5 7B – ~4.7 GB, more accurate (GPU ≥ 8 GB)',
+      'llm.llama3': 'Llama 3.2 3B – ~2 GB, strong in English',
+      'llm.gemma2': 'Gemma 2 2B – ~1.6 GB, fastest',
       'cleanup.engine': 'AI engine (Ollama)', 'cleanup.checking': 'Checking status...',
       'cleanup.install': 'Install', 'cleanup.install.size': 'Install (~2.5 GB)',
       'cleanup.activate': 'Activate', 'cleanup.loadmodel': 'Download AI model',
@@ -734,9 +769,10 @@
       'cleanup.notinstalled.desc': 'One-time download – afterwards AI cleanup runs fully local',
       'overlay.title': 'Overlay', 'overlay.style': 'Overlay style',
       'overlay.style.desc': 'Look of the recording indicator',
-      'ovl.amoled_bottom': 'AMOLED bar – bottom, black + live text',
-      'ovl.amoled_top': 'AMOLED bar – top, black + live text',
-      'ovl.amoled_center': 'AMOLED card – screen center',
+      'ovl.amoled': 'AMOLED bar – black + live text',
+      'ovl.amoled_card': 'AMOLED card – large card + live text',
+      'overlay.pos': 'Position', 'overlay.pos.desc': 'Where the indicator appears on screen',
+      'overlay.pos.bottom': 'Bottom', 'overlay.pos.top': 'Top', 'overlay.pos.center': 'Center',
       'ovl.wave': 'Wave – layered sine waves', 'ovl.wave_classic': 'Wave Classic – original sine line',
       'ovl.aurora': 'Aurora – rotating color vortex', 'ovl.particles': 'Particles – particle stream',
       'ovl.pulse': 'Pulse – breathing orb', 'ovl.ribbon': 'Ribbon – flowing bands',
@@ -985,6 +1021,14 @@
     }
   }
 
+  // A different LLM → the status badge must reflect THAT model (pulled or
+  // not). Refresh right away instead of after save so the button reads
+  // "KI-Modell laden" when a download is needed.
+  $('llmModelSelect').addEventListener('change', () => {
+    window.notype.saveConfig({ llm_model: $('llmModelSelect').value });
+    setTimeout(() => window.notype.ollamaStatus(), 150);
+  });
+
   $('ollamaBtn').onclick = () => {
     ollamaBusy = true;
     $('ollamaBtn').disabled = true;
@@ -1008,12 +1052,29 @@
     renderModels();
     window.notype.listModels();
     $('darkModeToggle').checked = cfg.overlay_theme === 'dark';
-    $('overlayStyleSelect').value = cfg.overlay_style || 'wave';
+    {
+      // Pre-2.6 configs carried the AMOLED position inside the style id.
+      const legacy = { amoled_top: ['amoled', 'top'], amoled_bottom: ['amoled', 'bottom'], amoled_center: ['amoled_card', 'center'] };
+      const l = legacy[cfg.overlay_style];
+      $('overlayStyleSelect').value = l ? l[0] : (cfg.overlay_style || 'wave');
+      $('overlayPositionSelect').value = cfg.overlay_position || (l ? l[1] : 'bottom');
+    }
     $('gpuSafeModeToggle').checked = !!cfg.gpu_safe_mode;
     vocabTerms = (cfg.initial_prompt || '')
       .split(',').map(s => s.trim()).filter(Boolean);
     renderVocab();
     $('cleanupSelect').value = cfg.cleanup_mode || 'fast';
+    {
+      // Unknown/custom model names from settings.json stay selectable.
+      const sel = $('llmModelSelect');
+      const want = cfg.llm_model || 'qwen2.5:3b-instruct';
+      if (![...sel.options].some(o => o.value === want)) {
+        const opt = document.createElement('option');
+        opt.value = want; opt.textContent = want;
+        sel.appendChild(opt);
+      }
+      sel.value = want;
+    }
     $('livePreviewToggle').checked = cfg.live_preview_enabled !== false;
     $('successToastToggle').checked = cfg.success_toast === true;
     $('insertMethodSelect').value = cfg.insert_method || 'auto';
@@ -1048,9 +1109,11 @@
       model_size: selectedModel,
       overlay_theme: $('darkModeToggle').checked ? 'dark' : 'light',
       overlay_style: $('overlayStyleSelect').value,
+      overlay_position: $('overlayPositionSelect').value,
       gpu_safe_mode: $('gpuSafeModeToggle').checked,
       initial_prompt: vocabJoined(),
       cleanup_mode: $('cleanupSelect').value,
+      llm_model: $('llmModelSelect').value,
       live_preview_enabled: $('livePreviewToggle').checked,
       success_toast: $('successToastToggle').checked,
       insert_method: $('insertMethodSelect').value,

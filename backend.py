@@ -425,8 +425,17 @@ class Backend:
         """Save config and reload if needed."""
         old_model = self.config.get("model_size")
         old_cleanup = self.config.get("cleanup_mode", "fast")
+        old_llm = self._llm_model()
         self.config.update(new_config)
         save_config(self.config)
+
+        # Different cleanup LLM while AI mode is on → preload it (if pulled)
+        # so the next dictation doesn't pay the cold start; the old model's
+        # availability verdict is stale now.
+        if self._llm_model() != old_llm:
+            reset_availability_cache()
+            if self.config.get("cleanup_mode", "fast") == "ai":
+                threading.Thread(target=self._ensure_ai_ready, daemon=True).start()
 
         # Reload model if size changed
         if new_config.get("model_size") and new_config["model_size"] != old_model:

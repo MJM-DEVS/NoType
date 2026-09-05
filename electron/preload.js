@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('notype', {
   onAppLang: (callback) => ipcRenderer.on('app-lang', (_, lang) => callback(lang)),
   onModels: (callback) => ipcRenderer.on('models', (_, data) => callback(data)),
   onBusy: (callback) => ipcRenderer.on('busy', () => callback()),
+  onOverlayLeaving: (callback) => ipcRenderer.on('overlay-leaving', () => callback()),
 
   // Send messages to main process
   saveConfig: (config) => ipcRenderer.send('save-config', config),

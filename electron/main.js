@@ -219,6 +219,9 @@ function loadConfig() {
     first_run_complete: false,
     ...config,
   };
+  // Legacy AMOLED style ids → style + position (persist so the backend and
+  // the settings page read the migrated file from now on).
+  if (normalizeOverlayConfig()) writeConfigToDisk();
   return config;
 }
 
@@ -441,7 +444,7 @@ function handlePythonMessage(line) {
 
 
       case 'transcription_done':
-        finishTranscription(!!(data && data.text && !data.empty));
+        finishTranscription(!!(data && data.text && !data.empty), data && data.text);
         sendToOnboarding('transcription-done', data || {});
         if (data && data.text && !data.empty) {
           addToHistory(data.text);
@@ -502,6 +505,7 @@ function handlePythonMessage(line) {
         {
           const prevHotkey = config.hotkey, prevMode = config.mode;
           config = data;
+          if (normalizeOverlayConfig()) writeConfigToDisk();
           if (data.hotkey !== prevHotkey || data.mode !== prevMode) {
             registerHotkeys();
           }
@@ -513,6 +517,7 @@ function handlePythonMessage(line) {
 
       case 'config_saved':
         config = data;
+        normalizeOverlayConfig();
         registerHotkeys();
         break;
 
@@ -568,23 +573,50 @@ function handlePythonMessage(line) {
 // ── Overlay Window ──
 // Each visual style has its own size and on-screen anchor. Anchors are
 // computed per-display so multi-monitor setups work.
+// Every style can sit at the bottom, top or center of the screen
+// (config.overlay_position). `bottom`/`top` are the per-style margins from
+// that screen edge – orbs float a bit higher than bars so they don't sit on
+// the taskbar.
 const OVERLAY_STYLES = {
-  wave_classic: { w: 600, h: 48,  anchor: 'bottom', offset: 60 },
-  wave:         { w: 600, h: 72,  anchor: 'bottom', offset: 60 },
-  aurora:       { w: 168, h: 168, anchor: 'lower',  offset: 0  },
-  particles:    { w: 640, h: 96,  anchor: 'bottom', offset: 56 },
-  pulse:        { w: 190, h: 190, anchor: 'lower',  offset: 0  },
-  ribbon:       { w: 600, h: 88,  anchor: 'bottom', offset: 60 },
-  spectrum:     { w: 320, h: 104, anchor: 'bottom', offset: 60 },
+  wave_classic: { w: 600, h: 48,  bottom: 60,  top: 44 },
+  wave:         { w: 600, h: 72,  bottom: 60,  top: 44 },
+  aurora:       { w: 168, h: 168, bottom: 190, top: 60 },
+  particles:    { w: 640, h: 96,  bottom: 56,  top: 40 },
+  pulse:        { w: 190, h: 190, bottom: 190, top: 60 },
+  ribbon:       { w: 600, h: 88,  bottom: 60,  top: 44 },
+  spectrum:     { w: 320, h: 104, bottom: 60,  top: 44 },
   // AMOLED family: pure-black pill/card with the live transcript INSIDE –
   // no external caption, so previewCaptionH() is 0 for these.
   // +28 px on each dimension = 14 px in-window padding so the pill's glow
   // fades out inside the window instead of clipping into a hard rectangle.
-  amoled_top:    { w: 708, h: 92,  anchor: 'top',    offset: 2  },
-  amoled_bottom: { w: 708, h: 92,  anchor: 'bottom', offset: 14 },
-  amoled_center: { w: 588, h: 228, anchor: 'center', offset: 0  },
+  amoled:       { w: 708, h: 92,  bottom: 14,  top: 2  },
+  amoled_card:  { w: 588, h: 228, bottom: 40,  top: 40 },
 };
 const DEFAULT_OVERLAY_STYLE = 'wave';
+const OVERLAY_POSITIONS = ['bottom', 'top', 'center'];
+// Pre-2.6 the AMOLED placement was baked into the style id.
+const LEGACY_OVERLAY_STYLES = {
+  amoled_top:    ['amoled', 'top'],
+  amoled_bottom: ['amoled', 'bottom'],
+  amoled_center: ['amoled_card', 'center'],
+};
+
+// Map legacy style ids onto style + position and fill the position default.
+// Returns true when something changed (caller persists).
+function normalizeOverlayConfig() {
+  let changed = false;
+  const legacy = LEGACY_OVERLAY_STYLES[config.overlay_style];
+  if (legacy) {
+    config.overlay_style = legacy[0];
+    if (!OVERLAY_POSITIONS.includes(config.overlay_position)) config.overlay_position = legacy[1];
+    changed = true;
+  }
+  if (!OVERLAY_POSITIONS.includes(config.overlay_position)) {
+    config.overlay_position = 'bottom';
+    changed = true;
+  }
+  return changed;
+}
 // Extra window height above the animation for the live-transcript caption.
 const PREVIEW_CAPTION_H = 30;
 
@@ -615,12 +647,11 @@ function applyOverlayBounds() {
 
   const posX = x + Math.round((width - s.w) / 2);
   let posY;
-  switch (s.anchor) {
-    case 'top':    posY = y + s.offset; break;
+  switch (config.overlay_position) {
+    case 'top':    posY = y + s.top; break;
     case 'center': posY = y + Math.round((height - s.h - cap) / 2); break;
-    case 'lower':  posY = y + Math.round(height * 0.62) - cap; break;
     case 'bottom':
-    default:       posY = y + height - s.h - cap - s.offset; break;
+    default:       posY = y + height - s.h - cap - s.bottom; break;
   }
   overlayWin.setPosition(posX, posY);
 }
@@ -676,8 +707,11 @@ function pushOverlayState() {
   else overlayWin.webContents.once('did-finish-load', send);
 }
 
+let overlayHideTimer = null;
+
 function showOverlay() {
   if (overlayIdleTimer) { clearTimeout(overlayIdleTimer); overlayIdleTimer = null; }
+  if (overlayHideTimer) { clearTimeout(overlayHideTimer); overlayHideTimer = null; }
   if (!overlayWin || overlayWin.isDestroyed()) createOverlay();
   applyOverlayBounds();
   overlayWin.showInactive();
@@ -686,7 +720,16 @@ function showOverlay() {
 
 function hideOverlay() {
   if (overlayWin && !overlayWin.isDestroyed()) {
-    overlayWin.hide();
+    // Short fade-out in the renderer before the window disappears – a hard
+    // hide reads as a glitch next to the animated entry.
+    if (overlayHideTimer) clearTimeout(overlayHideTimer);
+    if (overlayWin.isVisible()) {
+      try { overlayWin.webContents.send('overlay-leaving'); } catch (_) {}
+      overlayHideTimer = setTimeout(() => {
+        overlayHideTimer = null;
+        if (overlayWin && !overlayWin.isDestroyed() && !isRecording) overlayWin.hide();
+      }, 170);
+    }
     // Destroy the transparent always-on-top surface after a long idle period
     // so it isn't kept alive for the whole session. Recreated lazily on next
     // record. (Hidden cost is already ~0 thanks to the document.hidden gate;
@@ -835,16 +878,20 @@ function stopRecording() {
 
 // Single place to reset post-recording state. Called from `transcription_done`,
 // from `error`, and from the timeout watchdog above.
-function finishTranscription(ok = false) {
+function finishTranscription(ok = false, text = '') {
   isRecording = false;
   isTranscribing = false;
   isPaused = false;
+  const showText = ok && !!text && config.live_preview_enabled !== false;
   if (overlayWin && !overlayWin.isDestroyed()) {
-    overlayWin.webContents.send('transcription-done', { ok });
+    overlayWin.webContents.send('transcription-done', { ok, text: showText ? String(text) : '' });
   }
-  // Success: let the mint "done" flash show for a moment before hiding.
+  // Success: the overlay shows the inserted sentence for a moment (mint
+  // "done" state) before fading – long enough to read what landed, short
+  // enough not to be in the way. Without live text: just a brief flash.
   // Guard: the user may already be recording again by then.
-  if (ok) setTimeout(() => { if (!isRecording) hideOverlay(); }, 420);
+  const hold = showText ? 1400 : (ok ? 420 : 0);
+  if (hold) setTimeout(() => { if (!isRecording) hideOverlay(); }, hold);
   else hideOverlay();
   registerHotkeys();
   updateTray('ready');
