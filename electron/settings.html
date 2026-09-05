@@ -684,7 +684,7 @@
       'system.method.auto': 'Automatisch (Strg+V, Fallback Tippen)', 'system.method.type': 'Immer tippen',
       'system.advanced': 'Erweitert', 'system.gpusafe': 'GPU-Sicherheitsmodus',
       'system.gpusafe.desc': 'Bei Grafik-Abstürzen aktivieren. Deaktiviert Hardware-Beschleunigung (Neustart nötig).',
-      'save': 'Speichern',
+      'save': 'Speichern', 'save.done': 'Gespeichert ✓',
     },
     en: {
       'nav.general': 'General', 'nav.speech': 'Language & Model', 'nav.vocab': 'Custom Vocabulary',
@@ -753,7 +753,7 @@
       'system.method.auto': 'Automatic (Ctrl+V, typing fallback)', 'system.method.type': 'Always type',
       'system.advanced': 'Advanced', 'system.gpusafe': 'GPU safe mode',
       'system.gpusafe.desc': 'Enable on graphics crashes. Disables hardware acceleration (restart required).',
-      'save': 'Save',
+      'save': 'Save', 'save.done': 'Saved ✓',
     },
   };
 
@@ -785,6 +785,15 @@
 
   // ── State ──
   let currentConfig = {};
+  // Unsaved-changes guard. Once the user touches any control, a backend
+  // restart (which re-pushes the stored `config`) must NOT reset the form –
+  // that silently threw away e.g. a freshly picked model right before Save.
+  let dirty = false;
+  let configApplied = false;
+  const markDirty = () => { dirty = true; };
+  document.addEventListener('change', markDirty, true);
+  document.addEventListener('input', markDirty, true);
+
   let recordingHotkey = false;
   let hotkeyParts = new Set();
 
@@ -822,6 +831,7 @@
     if (!recordingHotkey) return;
     if (hotkeyParts.size > 0) {
       recordingHotkey = false;
+      markDirty();
       $('hotkeyValue').classList.remove('recording');
       $('hotkeyBtn').textContent = t('general.change');
       $('hotkeyValue').textContent = Array.from(hotkeyParts).join('+');
@@ -888,7 +898,7 @@
       label.textContent = term;
       const del = document.createElement('button');
       del.textContent = '✕';
-      del.onclick = () => { vocabTerms.splice(i, 1); renderVocab(); };
+      del.onclick = () => { vocabTerms.splice(i, 1); renderVocab(); markDirty(); };
       chip.appendChild(label);
       chip.appendChild(del);
       list.appendChild(chip);
@@ -914,6 +924,7 @@
     vocabTerms.push(term);
     $('vocabInput').value = '';
     renderVocab();
+    markDirty();
   }
 
   $('vocabAddBtn').onclick = addVocabTerm;
@@ -954,6 +965,9 @@
 
   // ── Populate from config ──
   function applyConfig(cfg) {
+    // A later `config` push (backend restart, second reply) must not wipe
+    // edits the user hasn't saved yet.
+    if (configApplied && dirty) return;
     currentConfig = cfg;
     applyI18n(cfg.app_language || 'de');
     $('appLangSelect').value = I18N[cfg.app_language] ? cfg.app_language : 'de';
@@ -983,6 +997,8 @@
     window.notype.listDevices();
     // Refresh Ollama status
     window.notype.ollamaStatus();
+    configApplied = true;
+    dirty = false;
   }
 
   // Live language switch (before saving)
@@ -1013,7 +1029,14 @@
       first_run_complete: true,
     };
     window.notype.saveConfig(newConfig);
-    window.notype.closeSettings();
+    dirty = false;
+    // Honest confirmation: the main process writes settings.json synchronously
+    // on 'save-config', so by the time this renders the save is on disk –
+    // even if the backend is down and can't be told yet.
+    const btn = $('saveBtn');
+    btn.textContent = t('save.done');
+    btn.disabled = true;
+    setTimeout(() => window.notype.closeSettings(), 550);
   };
 
   // VAD slider live value

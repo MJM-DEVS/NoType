@@ -149,6 +149,7 @@ let isPaused = false;
 let isTranscribing = false;
 let modelLoaded = false;
 let modelInfo = null;
+let pendingModelSwitch = null;   // model id the user just switched to → "ready" toast
 let config = {};
 let clipboardHistory = [];  // Last 10 transcriptions
 const MAX_HISTORY = 10;
@@ -214,6 +215,31 @@ function loadConfig() {
     ...config,
   };
   return config;
+}
+
+// Atomic write of the in-memory config to settings.json (tmp + rename, with
+// the same 3-generation .bak rotation config.py uses). Electron is the source
+// of truth for SAVING: a dead or restarting backend can never make a save
+// vanish. The backend re-reads this file on start and additionally gets
+// `save_config` forwarded while it is alive.
+function writeConfigToDisk() {
+  if (!CONFIG_FILE) return false;
+  try {
+    fs.mkdirSync(path.dirname(CONFIG_FILE), { recursive: true });
+    const tmp = CONFIG_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(config, null, 2), 'utf-8');
+    try {
+      const b1 = CONFIG_FILE + '.bak1', b2 = CONFIG_FILE + '.bak2', b3 = CONFIG_FILE + '.bak3';
+      if (fs.existsSync(b2)) fs.copyFileSync(b2, b3);
+      if (fs.existsSync(b1)) fs.copyFileSync(b1, b2);
+      if (fs.existsSync(CONFIG_FILE)) fs.copyFileSync(CONFIG_FILE, b1);
+    } catch (_) { /* backups are best-effort */ }
+    fs.renameSync(tmp, CONFIG_FILE);
+    return true;
+  } catch (e) {
+    console.error('Config write failed:', e.message);
+    return false;
+  }
 }
 
 // ── Python Backend ──
@@ -439,6 +465,10 @@ function handlePythonMessage(line) {
         modelInfo = data;
         console.log(`✓ Model: ${data.model} on ${data.device}`);
         updateTray('ready');
+        if (pendingModelSwitch) {
+          showToast(trayT().modelReady.replace('{model}', modelLabel(data.model)), 'success');
+          pendingModelSwitch = null;
+        }
         if (settingsWin && !settingsWin.isDestroyed()) {
           settingsWin.webContents.send('model-ready', data);
         }
@@ -875,6 +905,7 @@ function trayT() {
     tooShort: 'Aufnahme zu kurz – verworfen',
     backendCrashed: 'Backend abgestürzt – starte neu',
     backendDead: 'Backend startet nicht – bitte NoType neu starten',
+    modelLoading: 'Lade Modell {model} …', modelReady: '{model} ist bereit',
     locale: 'de-DE',
   };
   const en = {
@@ -886,10 +917,19 @@ function trayT() {
     tooShort: 'Recording too short – discarded',
     backendCrashed: 'Backend crashed – restarting',
     backendDead: 'Backend won\'t start – please restart NoType',
+    modelLoading: 'Loading model {model} …', modelReady: '{model} is ready',
     locale: 'en-US',
   };
   return config.app_language === 'en' ? en : de;
 }
+
+const MODEL_LABELS = {
+  'tiny': 'Whisper Tiny', 'base': 'Whisper Base', 'small': 'Whisper Small',
+  'medium': 'Whisper Medium', 'large-v2': 'Whisper Large v2', 'large-v3': 'Whisper Large v3',
+  'large-v3-turbo': 'Whisper Large v3 Turbo', 'distil-large-v3': 'Distil Large v3',
+  'distil-large-v3.5': 'Distil Large v3.5', 'german-turbo': 'Large v3 Turbo German',
+};
+function modelLabel(id) { return MODEL_LABELS[id] || id; }
 
 function buildTrayMenu(status = 'ready') {
   const T = trayT();
@@ -992,7 +1032,7 @@ function openSettings() {
     settingsWin.webContents.send('set-theme', currentTheme());
     settingsWin.show();
     applyMica(settingsWin);
-    sendToPython('get_config');
+    pushConfigToSettings();
     // Sync model status
     if (modelLoaded && modelInfo) {
       settingsWin.webContents.send('model-ready', modelInfo);
@@ -1003,8 +1043,46 @@ function openSettings() {
 }
 
 // ── IPC from renderers ──
-ipcMain.on('save-config', (_, newConfig) => sendToPython('save_config', newConfig));
-ipcMain.on('get-config', () => sendToPython('get_config'));
+// Settings need a config even when the backend is down – answer from our own
+// copy then, instead of letting the form open blank.
+function pushConfigToSettings() {
+  if (pythonProcess && pythonProcess.stdin.writable) sendToPython('get_config');
+  else if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('config', config);
+}
+
+ipcMain.on('save-config', (_, newConfig) => {
+  // 1) Persist FIRST, here in the main process. This used to only forward to
+  //    the backend – and sendToPython() silently drops the message while the
+  //    backend is dead or in restart back-off. So a user who picked a smaller
+  //    model *because* the big one kept crashing lost exactly that change.
+  const prevModel = config.model_size;
+  const prevHotkey = config.hotkey, prevMode = config.mode;
+  config = { ...config, ...newConfig };
+  writeConfigToDisk();
+  if (config.hotkey !== prevHotkey || config.mode !== prevMode) registerHotkeys();
+
+  const modelChanged = !!newConfig.model_size && newConfig.model_size !== prevModel;
+  if (modelChanged) {
+    pendingModelSwitch = newConfig.model_size;
+    modelLoaded = false;
+    updateTray('loading');
+    showToast(trayT().modelLoading.replace('{model}', modelLabel(newConfig.model_size)), 'warning');
+  }
+
+  // 2) Tell a live backend; revive a dead one. A (re)started backend reads
+  //    settings.json, so the change takes effect either way – and a model
+  //    downgrade is precisely the fix for a backend that crashed on a model
+  //    too big for the machine, so the circuit breaker gets a fresh start.
+  if (pythonProcess && pythonProcess.stdin.writable) {
+    sendToPython('save_config', newConfig);
+  } else if (!quitRequested) {
+    consecutiveFastCrashes = 0;
+    crashToastShown = false;
+    backendGaveUp = false;
+    startPython();
+  }
+});
+ipcMain.on('get-config', () => pushConfigToSettings());
 ipcMain.on('list-devices', () => sendToPython('list_devices'));
 ipcMain.on('ollama-status', () => sendToPython('ollama_status'));
 ipcMain.on('ollama-setup', () => sendToPython('ollama_setup'));
