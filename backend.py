@@ -447,6 +447,90 @@ class Backend:
         """Send current config to Electron."""
         self.send("config", self.config)
 
+    # ── Model catalog for the UI (model cards) ───────────────────────
+    _gpu_info_cache = None
+
+    @classmethod
+    def _gpu_info(cls):
+        """Name + VRAM of the primary NVIDIA GPU via nvidia-smi. Cached: the
+        query costs ~100 ms and the answer never changes while we run."""
+        if cls._gpu_info_cache is not None:
+            return cls._gpu_info_cache or None
+        info = None
+        candidates = ["nvidia-smi"]
+        if sys.platform.startswith("win"):
+            candidates += [
+                os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "System32", "nvidia-smi.exe"),
+                r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe",
+            ]
+        for exe in candidates:
+            try:
+                import subprocess
+                flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                out = subprocess.run(
+                    [exe, "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"],
+                    capture_output=True, text=True, timeout=4, creationflags=flags,
+                ).stdout.strip().splitlines()
+                if out and "," in out[0]:
+                    name, mem = out[0].rsplit(",", 1)
+                    info = {"name": _safe_str(name.strip()), "vram_mb": int(float(mem.strip()))}
+                    break
+            except Exception:
+                continue
+        cls._gpu_info_cache = info or False
+        return info
+
+    def handle_list_models(self):
+        """Catalog + per-model 'already downloaded' state (from the Hugging
+        Face cache) + hardware, so the UI can badge cards as 'offline ready'
+        and recommend a model that fits the GPU."""
+        from transcriber import MODEL_CATALOG
+        try:
+            from faster_whisper.utils import _MODELS as fw_repos
+        except Exception:
+            fw_repos = {}
+        hub = os.environ.get("HF_HUB_CACHE") or os.path.join(
+            os.environ.get("HF_HOME") or os.path.join(os.path.expanduser("~"), ".cache", "huggingface"),
+            "hub",
+        )
+        models = []
+        for mid, entry in MODEL_CATALOG.items():
+            repo = entry["repo"]
+            if "/" not in repo:
+                repo = fw_repos.get(repo, repo)
+            folder = os.path.join(hub, "models--" + repo.replace("/", "--"))
+            downloaded, size_mb = False, None
+            try:
+                snaps = os.path.join(folder, "snapshots")
+                if os.path.isdir(snaps):
+                    downloaded = any(
+                        os.path.isfile(os.path.join(snaps, s, "model.bin"))
+                        for s in os.listdir(snaps)
+                    )
+                if downloaded:
+                    blobs = os.path.join(folder, "blobs")
+                    total = 0
+                    for f in os.listdir(blobs):
+                        p = os.path.join(blobs, f)
+                        if os.path.isfile(p) and not f.endswith(".incomplete"):
+                            total += os.path.getsize(p)
+                    size_mb = int(total / (1024 * 1024))
+            except Exception:
+                pass
+            models.append({"id": mid, "downloaded": downloaded, "size_mb": size_mb})
+
+        device = "cpu"
+        if self.transcriber is not None:
+            device = self.transcriber.device
+        else:
+            try:
+                import ctranslate2
+                if ctranslate2.get_cuda_device_count() > 0:
+                    device = "cuda"
+            except Exception:
+                pass
+        self.send("models", {"device": device, "gpu": self._gpu_info(), "models": models})
+
     def run(self):
         """Main loop: read JSON commands from stdin."""
         logger.info("Backend starting...")
@@ -522,6 +606,8 @@ class Backend:
                     self.handle_ollama_status()
                 elif cmd == "ollama_setup":
                     self.handle_ollama_setup()
+                elif cmd == "list_models":
+                    self.handle_list_models()
                 elif cmd == "watch_hotkey_release":
                     self.handle_watch_hotkey_release((msg.get("data") or {}).get("hotkey", ""))
                 elif cmd == "ping":

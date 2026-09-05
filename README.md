@@ -104,9 +104,11 @@ The AI mode uses a small language model running in [Ollama](https://ollama.com/)
 **Requirements:** Windows 11 (x64). An NVIDIA GPU is recommended for instant transcription; without one, NoType falls back to CPU (choose a smaller model there).
 
 1. Download and run `NoType-Setup-<version>.exe`. No admin rights required.
-2. Launch NoType — it lives in your system tray. The first run downloads your speech model.
+2. Launch NoType — it lives in your system tray. On the first launch a short setup guide walks you through microphone, hotkey and model (with a recommendation for your GPU) and ends with a live test dictation. The first run downloads your speech model.
 3. Place your cursor in any text field, hold **Ctrl + Shift + Space**, and speak.
 4. Optional: open Settings (tray icon) and click **Install** next to "KI-Engine (Ollama)" to enable AI cleanup.
+
+The setup guide can be re-run any time from the tray menu or from Settings → General.
 
 ---
 
@@ -116,7 +118,7 @@ The AI mode uses a small language model running in [Ollama](https://ollama.com/)
 |---|---|
 | Hotkey & mode | Any key combination; hold-to-speak or press-to-toggle |
 | Language | One of 99 languages, or automatic detection per recording |
-| Model | Ten open-weight models — see [Supported models](#supported-models) |
+| Model | Ten open-weight models as cards: download size, VRAM need, speed/accuracy, "offline ready" and a recommendation for your GPU — see [Supported models](#supported-models) |
 | Custom vocabulary | Names and terms NoType should spell correctly (up to 850 characters) |
 | Text cleanup | Off / Fast / AI — see [The AI cleanup](#the-ai-cleanup-explained) |
 | Live transcript | Show recognized text in the overlay while recording |

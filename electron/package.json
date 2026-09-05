@@ -1,6 +1,6 @@
 {
   "name": "notype",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "NoType – Local Voice Dictation (Privacy-First)",
   "main": "main.js",
   "scripts": {
@@ -24,6 +24,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "model-catalog.js",
       "*.html",
       "assets/**",
       "!node_modules/electron-builder/**",

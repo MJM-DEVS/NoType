@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NoType – Einrichtung</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --fg-muted: #333;
+    --fg-dim: #999;
+    --accent: #00b894;
+    --card-bg: #fafafa;
+    --card-border: #f0f0f0;
+    --input-bg: #ffffff;
+    --input-border: #e0e0e0;
+    --input-border-hover: #bbbbbb;
+    --input-focus: #1a1a1a;
+    --hover-bg: #f0f0f0;
+    --toggle-off: #dddddd;
+    --save-bg: #00b894;
+    --save-bg-hover: #00a37f;
+    --save-fg: #ffffff;
+    --bar-track: #eeeeee;
+    --shadow: rgba(0,0,0,0.15);
+  }
+  [data-theme="dark"] {
+    --bg: rgba(28, 28, 30, 0.0);
+    --fg: #f5f5f5;
+    --fg-muted: #d4d4d4;
+    --fg-dim: #999999;
+    --accent: #00d4aa;
+    --card-bg: rgba(255, 255, 255, 0.04);
+    --card-border: rgba(255, 255, 255, 0.08);
+    --input-bg: rgba(255, 255, 255, 0.06);
+    --input-border: rgba(255, 255, 255, 0.12);
+    --input-border-hover: rgba(255, 255, 255, 0.30);
+    --input-focus: #ffffff;
+    --hover-bg: rgba(255, 255, 255, 0.08);
+    --toggle-off: rgba(255, 255, 255, 0.15);
+    --save-bg: #00d4aa;
+    --save-bg-hover: #1fdcb4;
+    --save-fg: #062018;
+    --bar-track: rgba(255, 255, 255, 0.10);
+    --shadow: rgba(0,0,0,0.4);
+  }
+
+  body {
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg); color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--toggle-off); border-radius: 3px; }
+
+  /* ── Chrome ── */
+  .titlebar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px; -webkit-app-region: drag; flex: 0 0 auto;
+  }
+  .titlebar h1 { font-size: 14px; font-weight: 700; letter-spacing: 0.5px; }
+  .titlebar .skip {
+    -webkit-app-region: no-drag; border: none; background: none; cursor: pointer;
+    color: var(--fg-dim); font: inherit; font-size: 12px; padding: 6px 10px; border-radius: 6px;
+    transition: all 0.15s;
+  }
+  .titlebar .skip:hover { background: var(--hover-bg); color: var(--fg); }
+  .progress { height: 2px; background: var(--bar-track); flex: 0 0 auto; }
+  .progress > div { height: 100%; background: var(--accent); transition: width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1); }
+  .steps-nav { display: flex; gap: 6px; justify-content: center; padding: 14px 0 0; flex: 0 0 auto; }
+  .steps-nav i { width: 6px; height: 6px; border-radius: 3px; background: var(--toggle-off); transition: all 0.25s; }
+  .steps-nav i.done { background: var(--accent); opacity: 0.45; }
+  .steps-nav i.on { background: var(--accent); width: 18px; }
+
+  .content { flex: 1 1 auto; overflow-y: auto; padding: 20px 40px 12px; display: flex; flex-direction: column; }
+  .step { display: none; flex-direction: column; gap: 16px; animation: stepIn 0.3s ease; }
+  .step.active { display: flex; }
+  @keyframes stepIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.2px; }
+  .lead { font-size: 13.5px; line-height: 1.55; color: var(--fg-muted); max-width: 580px; }
+
+  .footer {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 40px 18px; border-top: 1px solid var(--card-border); flex: 0 0 auto;
+  }
+  .btn {
+    padding: 10px 22px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--input-border); background: var(--input-bg); color: var(--fg-muted);
+    font: inherit; font-size: 13px; font-weight: 600; transition: all 0.15s;
+  }
+  .btn:hover { background: var(--hover-bg); }
+  .btn.primary { background: var(--save-bg); color: var(--save-fg); border-color: transparent; letter-spacing: 0.3px; }
+  .btn.primary:hover { background: var(--save-bg-hover); }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.5; cursor: default; transform: none; }
+
+  /* ── Shared bits (same look as settings.html) ── */
+  .card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 14px 18px; }
+  .field {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 0; border-bottom: 1px solid var(--card-border);
+  }
+  .field:last-child { border-bottom: none; }
+  .field > div:first-child { flex: 1 1 auto; min-width: 0; }
+  .field-label { font-size: 13px; font-weight: 500; color: var(--fg-muted); }
+  .field-desc { font-size: 11px; color: var(--fg-dim); margin-top: 2px; overflow-wrap: anywhere; }
+  select {
+    appearance: none; background-color: var(--input-bg);
+    border: 1px solid var(--input-border); border-radius: 8px;
+    padding: 8px 32px 8px 12px; font-size: 13px; font-family: inherit;
+    color: var(--fg); cursor: pointer; outline: none; width: 300px; max-width: 100%;
+    text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23999' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center;
+  }
+  select:hover { border-color: var(--input-border-hover); }
+  [data-theme="dark"] select option { background: #1f1f1f; color: #f5f5f5; }
+  .btn-sm {
+    padding: 8px 14px; border: 1px solid var(--input-border); background: var(--input-bg);
+    border-radius: 8px; font-size: 12px; font-family: inherit; cursor: pointer;
+    color: var(--fg-muted); transition: all 0.15s; flex-shrink: 0;
+  }
+  .btn-sm:hover { border-color: var(--input-focus); background: var(--hover-bg); }
+
+  /* ── Welcome ── */
+  .hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; padding-top: 14px; }
+  .hero img { width: 96px; height: 96px; border-radius: 24px; box-shadow: 0 12px 32px rgba(0, 184, 148, 0.28); }
+  .seg { display: inline-flex; background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 10px; padding: 3px; gap: 3px; }
+  .seg button {
+    border: none; background: none; color: var(--fg-muted); font: inherit; font-size: 12.5px; font-weight: 600;
+    padding: 7px 16px; border-radius: 8px; cursor: pointer; transition: all 0.15s;
+  }
+  .seg button.on { background: var(--accent); color: #fff; }
+  [data-theme="dark"] .seg button.on { color: #062018; }
+  .privacy { display: flex; gap: 10px; align-items: flex-start; font-size: 12px; color: var(--fg-dim); max-width: 520px; text-align: left; line-height: 1.5; }
+  .privacy svg { width: 16px; height: 16px; flex: 0 0 auto; fill: none; stroke: var(--accent); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; margin-top: 1px; }
+
+  /* ── Mic ── */
+  .meter { background: var(--bar-track); border-radius: 6px; height: 10px; overflow: hidden; }
+  .meter > div { height: 100%; width: 0%; background: linear-gradient(90deg, #22c55e, #4ade80); border-radius: 6px; transition: width 0.08s ease-out; }
+  .meter.err > div { background: #ef4444; }
+
+  /* ── Hotkey ── */
+  .hotkey-display { display: flex; align-items: center; gap: 8px; flex-shrink: 1; min-width: 0; }
+  .hotkey-value {
+    font-family: 'Consolas', 'SF Mono', monospace; font-size: 12px;
+    background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 8px;
+    padding: 8px 14px; min-width: 120px; max-width: 220px; text-align: center; color: var(--fg);
+    letter-spacing: 0.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .hotkey-value.recording { border-color: #ef4444; color: #ef4444; animation: hotkey-pulse 1s infinite; }
+  @keyframes hotkey-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.2); }
+    50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1); }
+  }
+  .mode-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .mode-card {
+    border: 1px solid var(--input-border); background: var(--input-bg); border-radius: 12px;
+    padding: 14px; cursor: pointer; display: flex; flex-direction: column; gap: 6px; outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s; position: relative;
+  }
+  .mode-card:hover { border-color: var(--input-border-hover); }
+  .mode-card:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+  .mode-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .mode-card.selected::after {
+    content: ''; position: absolute; top: 12px; right: 12px; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 0 3px rgba(0, 184, 148, 0.18);
+  }
+  .mode-card b { font-size: 13px; font-weight: 600; padding-right: 16px; }
+  .mode-card span { font-size: 11.5px; color: var(--fg-dim); line-height: 1.45; }
+
+  /* ── Test ── */
+  .status-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600;
+    padding: 6px 12px; border-radius: 99px; background: var(--hover-bg); color: var(--fg-muted);
+  }
+  .status-pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--fg-dim); flex: 0 0 auto; }
+  .status-pill.loading i { background: #d97706; animation: blink 1s infinite; }
+  .status-pill.ready i { background: #22c55e; }
+  .status-pill.recording i { background: #ef4444; animation: blink 0.8s infinite; }
+  .status-pill.processing i { background: #3b82f6; animation: blink 0.6s infinite; }
+  .status-pill.done i { background: #22c55e; }
+  @keyframes blink { 50% { opacity: 0.3; } }
+  textarea {
+    width: 100%; min-height: 128px; resize: none; font: inherit; font-size: 14px; line-height: 1.5;
+    padding: 12px 14px; border-radius: 10px; border: 1px solid var(--input-border);
+    background: var(--input-bg); color: var(--fg); outline: none; user-select: text;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  kbd {
+    font-family: 'Consolas', 'SF Mono', monospace; font-size: 12px; color: var(--fg);
+    background: var(--hover-bg); border: 1px solid var(--input-border); border-radius: 6px; padding: 2px 7px;
+  }
+  .success-box { display: none; gap: 10px; align-items: center; font-size: 13px; color: #059669; font-weight: 500; }
+  [data-theme="dark"] .success-box { color: #34d399; }
+  .success-box.show { display: flex; animation: stepIn 0.3s ease; }
+  .success-box svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ── Done ── */
+  .summary div { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; padding: 9px 0; border-bottom: 1px solid var(--card-border); }
+  .summary div:last-child { border-bottom: none; }
+  .summary span:first-child { color: var(--fg-dim); }
+  .summary span:last-child { font-weight: 500; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tips { font-size: 12.5px; color: var(--fg-muted); line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <h1>NoType</h1>
+  <button class="skip" id="skipBtn" data-i18n="skip">Überspringen</button>
+</div>
+<div class="progress"><div id="progressBar" style="width: 16%"></div></div>
+<div class="steps-nav" id="stepsNav"></div>
+
+<div class="content">
+
+  <!-- 0 · Welcome -->
+  <section class="step active" data-step="0">
+    <div class="hero">
+      <img src="assets/icon.png" alt="">
+      <h2 data-i18n="w.title">Willkommen bei NoType</h2>
+      <p class="lead" data-i18n="w.lead">Diktieren statt tippen – in jeder App. Die Spracherkennung läuft komplett auf deinem PC.</p>
+      <div class="seg" id="langSeg">
+        <button data-lang="de" class="on">Deutsch</button>
+        <button data-lang="en">English</button>
+      </div>
+      <div class="privacy">
+        <svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        <span data-i18n="w.privacy">Kein Cloud-Dienst, kein Konto. Audio und Text verlassen deinen Rechner nie.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 1 · Microphone -->
+  <section class="step" data-step="1">
+    <h2 data-i18n="m.title">Mikrofon</h2>
+    <p class="lead" data-i18n="m.lead">Wähle das Mikrofon, mit dem du diktieren willst, und sprich kurz – der Balken sollte ausschlagen.</p>
+    <div class="card">
+      <div class="field">
+        <div>
+          <div class="field-label" data-i18n="m.device">Eingabegerät</div>
+          <div class="field-desc" data-i18n="m.device.desc">Headset-Mikrofone liefern die beste Erkennung</div>
+        </div>
+        <select id="micSelect"><option value="" data-i18n="m.default">Standard (System)</option></select>
+      </div>
+      <div class="field" style="flex-direction: column; align-items: stretch; gap: 10px;">
+        <div class="field-label" data-i18n="m.level">Pegel</div>
+        <div class="meter" id="micMeterWrap"><div id="micMeter"></div></div>
+        <div class="field-desc" id="micHint" data-i18n="m.hint">Sag ein paar Worte …</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 · Hotkey & mode -->
+  <section class="step" data-step="2">
+    <h2 data-i18n="h.title">Hotkey &amp; Modus</h2>
+    <p class="lead" data-i18n="h.lead">Mit dieser Tastenkombination startest du ein Diktat – egal in welcher App du gerade bist.</p>
+    <div class="card">
+      <div class="field">
+        <div>
+          <div class="field-label" data-i18n="h.combo">Tastenkombination</div>
+          <div class="field-desc" data-i18n="h.combo.desc">„Ändern" drücken, dann die gewünschte Kombination.</div>
+        </div>
+        <div class="hotkey-display">
+          <div class="hotkey-value" id="hotkeyValue">Ctrl+Shift+Space</div>
+          <button class="btn-sm" id="hotkeyBtn" data-i18n="h.change">Ändern</button>
+        </div>
+      </div>
+    </div>
+    <div class="mode-cards">
+      <div class="mode-card selected" data-mode="hold_to_speak" tabindex="0">
+        <b data-i18n="h.hold">Halten zum Sprechen</b>
+        <span data-i18n="h.hold.desc">Taste gedrückt halten, sprechen, loslassen – der Text erscheint. Empfohlen.</span>
+      </div>
+      <div class="mode-card" data-mode="press_to_speak" tabindex="0">
+        <b data-i18n="h.press">Drücken für Start/Stopp</b>
+        <span data-i18n="h.press.desc">Einmal drücken: Aufnahme läuft. Nochmal drücken: fertig. Für längere Texte.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · Model -->
+  <section class="step" data-step="3">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 14px;">
+      <div>
+        <h2 data-i18n="mo.title">Modell</h2>
+        <p class="lead" style="margin-top: 6px;" data-i18n="mo.lead">Das Erkennungsmodell bestimmt Tempo und Genauigkeit. Für deine Hardware ist eines vorausgewählt.</p>
+      </div>
+      <span class="hw-badge" id="hwBadge" style="margin-top: 6px;"></span>
+    </div>
+    <div id="modelCards"></div>
+    <p class="field-desc" data-i18n="mo.note">Das Modell wird beim ersten Laden einmalig heruntergeladen – danach läuft alles offline.</p>
+  </section>
+
+  <!-- 4 · Test -->
+  <section class="step" data-step="4">
+    <h2 data-i18n="t.title">Probediktat</h2>
+    <p class="lead" id="testLead"></p>
+    <div class="card" style="display: flex; flex-direction: column; gap: 12px;">
+      <div class="status-row">
+        <span class="status-pill loading" id="statusPill"><i></i><span id="statusText">…</span></span>
+        <span class="field-desc" id="statusDetail"></span>
+      </div>
+      <textarea id="testArea" data-i18n-placeholder="t.placeholder" placeholder="Klick hier rein und sprich …"></textarea>
+      <div class="success-box" id="successBox">
+        <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+        <span data-i18n="t.success">Perfekt! Genau so funktioniert NoType überall, wo du tippen kannst.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 · Done -->
+  <section class="step" data-step="5">
+    <h2 data-i18n="d.title">Fertig!</h2>
+    <p class="lead" data-i18n="d.lead">NoType läuft ab jetzt im Hintergrund – du findest es unten rechts im Tray.</p>
+    <div class="card summary">
+      <div><span data-i18n="d.mic">Mikrofon</span><span id="sumMic"></span></div>
+      <div><span data-i18n="d.hotkey">Hotkey</span><span id="sumHotkey"></span></div>
+      <div><span data-i18n="d.mode">Modus</span><span id="sumMode"></span></div>
+      <div><span data-i18n="d.model">Modell</span><span id="sumModel"></span></div>
+    </div>
+    <p class="tips" data-i18n="d.tips">Tipp: Im Overlay-Tab der Einstellungen wählst du das Aussehen der Aufnahme-Anzeige, unter „Eigene Begriffe" hinterlegst du Namen und Fachwörter, damit sie richtig geschrieben werden.</p>
+  </section>
+
+</div>
+
+<div class="footer">
+  <button class="btn" id="backBtn" data-i18n="back">Zurück</button>
+  <div style="display: flex; gap: 10px;">
+    <button class="btn" id="settingsBtn" style="display: none;" data-i18n="d.settings">Einstellungen öffnen</button>
+    <button class="btn primary" id="nextBtn" data-i18n="start">Los geht's</button>
+  </div>
+</div>
+
+<script src="model-catalog.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  // ── i18n ──
+  const I18N = {
+    de: {
+      'skip': 'Überspringen', 'back': 'Zurück', 'next': 'Weiter', 'start': 'Los geht\'s', 'finish': 'Fertig',
+      'w.title': 'Willkommen bei NoType',
+      'w.lead': 'Diktieren statt tippen – in jeder App. Die Spracherkennung läuft komplett auf deinem PC.',
+      'w.privacy': 'Kein Cloud-Dienst, kein Konto. Audio und Text verlassen deinen Rechner nie.',
+      'm.title': 'Mikrofon',
+      'm.lead': 'Wähle das Mikrofon, mit dem du diktieren willst, und sprich kurz – der Balken sollte ausschlagen.',
+      'm.device': 'Eingabegerät', 'm.device.desc': 'Headset-Mikrofone liefern die beste Erkennung',
+      'm.default': 'Standard (System)', 'm.defaulttag': ' (Standard)', 'm.level': 'Pegel',
+      'm.hint': 'Sag ein paar Worte …', 'm.ok': 'Klingt gut – dein Mikrofon funktioniert.',
+      'm.error': 'Kein Zugriff auf das Mikrofon. Prüfe die Windows-Datenschutzeinstellungen für Mikrofone.',
+      'h.title': 'Hotkey & Modus',
+      'h.lead': 'Mit dieser Tastenkombination startest du ein Diktat – egal in welcher App du gerade bist.',
+      'h.combo': 'Tastenkombination', 'h.combo.desc': '„Ändern" drücken, dann die gewünschte Kombination.',
+      'h.change': 'Ändern', 'h.waiting': 'Warte auf Eingabe …',
+      'h.hold': 'Halten zum Sprechen',
+      'h.hold.desc': 'Taste gedrückt halten, sprechen, loslassen – der Text erscheint. Empfohlen.',
+      'h.press': 'Drücken für Start/Stopp',
+      'h.press.desc': 'Einmal drücken: Aufnahme läuft. Nochmal drücken: fertig. Für längere Texte.',
+      'mo.title': 'Modell',
+      'mo.lead': 'Das Erkennungsmodell bestimmt Tempo und Genauigkeit. Für deine Hardware ist eines vorausgewählt.',
+      'mo.note': 'Das Modell wird beim ersten Laden einmalig heruntergeladen – danach läuft alles offline.',
+      't.title': 'Probediktat',
+      't.lead.hold': 'Klick in das Feld, halte {hotkey} gedrückt und sprich einen Satz. Beim Loslassen erscheint der Text.',
+      't.lead.press': 'Klick in das Feld, drücke {hotkey}, sprich einen Satz und drücke die Kombination erneut.',
+      't.placeholder': 'Klick hier rein und sprich …',
+      't.success': 'Perfekt! Genau so funktioniert NoType überall, wo du tippen kannst.',
+      's.loading': 'Modell wird geladen', 's.ready': 'Bereit', 's.recording': 'Aufnahme läuft',
+      's.processing': 'Wird verarbeitet', 's.done': 'Text eingefügt',
+      's.loading.detail': 'Beim ersten Mal kann das ein paar Minuten dauern (Download).',
+      's.ready.detail': 'Halte {hotkey} und sprich.', 's.ready.detail.press': 'Drücke {hotkey} und sprich.',
+      's.short': 'Zu kurz – halte die Taste, während du sprichst.',
+      'd.title': 'Fertig!',
+      'd.lead': 'NoType läuft ab jetzt im Hintergrund – du findest es unten rechts im Tray.',
+      'd.mic': 'Mikrofon', 'd.hotkey': 'Hotkey', 'd.mode': 'Modus', 'd.model': 'Modell',
+      'd.settings': 'Einstellungen öffnen',
+      'd.tips': 'Tipp: Im Overlay-Tab der Einstellungen wählst du das Aussehen der Aufnahme-Anzeige, unter „Eigene Begriffe" hinterlegst du Namen und Fachwörter, damit sie richtig geschrieben werden.',
+    },
+    en: {
+      'skip': 'Skip', 'back': 'Back', 'next': 'Next', 'start': 'Let\'s go', 'finish': 'Done',
+      'w.title': 'Welcome to NoType',
+      'w.lead': 'Dictate instead of typing – in any app. Speech recognition runs entirely on your PC.',
+      'w.privacy': 'No cloud service, no account. Audio and text never leave your machine.',
+      'm.title': 'Microphone',
+      'm.lead': 'Pick the microphone you want to dictate with and say a few words – the bar should move.',
+      'm.device': 'Input device', 'm.device.desc': 'Headset microphones give the best recognition',
+      'm.default': 'Default (system)', 'm.defaulttag': ' (default)', 'm.level': 'Level',
+      'm.hint': 'Say a few words …', 'm.ok': 'Sounds good – your microphone works.',
+      'm.error': 'No access to the microphone. Check the Windows privacy settings for microphones.',
+      'h.title': 'Hotkey & mode',
+      'h.lead': 'This key combination starts a dictation – no matter which app you are in.',
+      'h.combo': 'Key combination', 'h.combo.desc': 'Press "Change", then your combination.',
+      'h.change': 'Change', 'h.waiting': 'Waiting for input …',
+      'h.hold': 'Hold to speak',
+      'h.hold.desc': 'Hold the key, speak, release – the text appears. Recommended.',
+      'h.press': 'Press to start/stop',
+      'h.press.desc': 'Press once: recording. Press again: done. For longer texts.',
+      'mo.title': 'Model',
+      'mo.lead': 'The recognition model sets speed and accuracy. One is preselected for your hardware.',
+      'mo.note': 'The model is downloaded once on first load – after that everything runs offline.',
+      't.title': 'Test dictation',
+      't.lead.hold': 'Click into the field, hold {hotkey} and say a sentence. The text appears when you release.',
+      't.lead.press': 'Click into the field, press {hotkey}, say a sentence and press the combination again.',
+      't.placeholder': 'Click here and speak …',
+      't.success': 'Perfect! This is how NoType works anywhere you can type.',
+      's.loading': 'Loading model', 's.ready': 'Ready', 's.recording': 'Recording',
+      's.processing': 'Processing', 's.done': 'Text inserted',
+      's.loading.detail': 'The first time can take a few minutes (download).',
+      's.ready.detail': 'Hold {hotkey} and speak.', 's.ready.detail.press': 'Press {hotkey} and speak.',
+      's.short': 'Too short – keep holding the key while you speak.',
+      'd.title': 'All set!',
+      'd.lead': 'NoType now runs in the background – find it in the tray at the bottom right.',
+      'd.mic': 'Microphone', 'd.hotkey': 'Hotkey', 'd.mode': 'Mode', 'd.model': 'Model',
+      'd.settings': 'Open settings',
+      'd.tips': 'Tip: the Overlay tab in settings picks the look of the recording indicator, and "Custom Vocabulary" teaches NoType names and jargon so they are spelled right.',
+    },
+  };
+  let uiLang = 'de';
+  const t = (key) => (I18N[uiLang] && I18N[uiLang][key]) || I18N.de[key] || key;
+  function applyI18n() {
+    document.documentElement.lang = uiLang;
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+    renderTestLead();
+    renderModels();
+    renderDevices();
+    updateNavButtons();
+    refreshStatus();
+  }
+
+  // ── State ──
+  const STEPS = 6;
+  let step = 0;
+  let cfg = {};
+  let configApplied = false;
+  const state = { app_language: 'de', mic_device_index: null, hotkey: 'ctrl+shift+space', mode: 'hold_to_speak', model_size: 'small' };
+  let devices = [];
+  let modelsInfo = null;
+  let activeModel = null;
+  let modelReady = false;
+  let userPickedModel = false;
+  let lastStatusMsg = '';
+  let testState = 'loading';   // loading | ready | recording | processing | done
+  let testDetail = '';
+
+  function prettyHotkey(hk) {
+    return String(hk || '').split('+').map(p => {
+      const k = p.trim().toLowerCase();
+      if (k === 'cmdorctrl' || k === 'commandorcontrol' || k === 'control') return 'Ctrl';
+      if (k === 'meta' || k === 'super') return 'Win';
+      return k.charAt(0).toUpperCase() + k.slice(1);
+    }).join('+');
+  }
+
+  function save(partial) {
+    Object.assign(cfg, partial);
+    window.notype.saveConfig(partial);
+  }
+
+  // ── Steps ──
+  {
+    const nav = $('stepsNav');
+    for (let i = 0; i < STEPS; i++) nav.appendChild(document.createElement('i'));
+  }
+
+  function updateNavButtons() {
+    $('backBtn').style.visibility = step === 0 ? 'hidden' : 'visible';
+    $('nextBtn').textContent = step === 0 ? t('start') : step === STEPS - 1 ? t('finish') : t('next');
+    $('settingsBtn').style.display = step === STEPS - 1 ? '' : 'none';
+    $('skipBtn').style.visibility = step === STEPS - 1 ? 'hidden' : 'visible';
+  }
+
+  function showStep(n) {
+    if (step === 1 && n !== 1) stopMeter();
+    step = Math.max(0, Math.min(STEPS - 1, n));
+    document.querySelectorAll('.step').forEach(s => s.classList.toggle('active', Number(s.dataset.step) === step));
+    $('progressBar').style.width = ((step + 1) / STEPS * 100) + '%';
+    $('stepsNav').querySelectorAll('i').forEach((dot, i) => {
+      dot.classList.toggle('on', i === step);
+      dot.classList.toggle('done', i < step);
+    });
+    updateNavButtons();
+    document.querySelector('.content').scrollTop = 0;
+    if (step === 1) startMeter();
+    if (step === 3) { window.notype.listModels(); revealSelectedModel(); }
+    if (step === 4) { refreshStatus(); setTimeout(() => $('testArea').focus(), 60); }
+    if (step === 5) fillSummary();
+  }
+
+  // Persist each step as it is left, so the test step dictates with the
+  // real, freshly chosen setup (partial configs merge in main.js).
+  function commitStep(n) {
+    switch (n) {
+      case 0: save({ app_language: state.app_language }); break;
+      case 1: save({ mic_device_index: state.mic_device_index }); break;
+      case 2: save({ hotkey: state.hotkey, mode: state.mode }); break;
+      case 3:
+        if (state.model_size !== cfg.model_size) { modelReady = false; testState = 'loading'; }
+        save({ model_size: state.model_size });
+        break;
+    }
+  }
+
+  function finish() {
+    stopMeter();
+    save({ first_run_complete: true });
+    window.notype.closeOnboarding();
+  }
+
+  $('nextBtn').onclick = () => {
+    commitStep(step);
+    if (step === STEPS - 1) finish();
+    else showStep(step + 1);
+  };
+  $('backBtn').onclick = () => showStep(step - 1);
+  $('skipBtn').onclick = finish;
+  $('settingsBtn').onclick = () => { window.notype.openSettings(); finish(); };
+
+  // ── 0 · Language ──
+  $('langSeg').querySelectorAll('button').forEach(btn => {
+    btn.onclick = () => {
+      state.app_language = btn.dataset.lang;
+      uiLang = I18N[state.app_language] ? state.app_language : 'de';
+      $('langSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
+      applyI18n();
+    };
+  });
+
+  // ── 1 · Microphone ──
+  function renderDevices() {
+    const sel = $('micSelect');
+    while (sel.options.length > 1) sel.remove(1);
+    sel.options[0].textContent = t('m.default');
+    for (const d of devices) {
+      const opt = document.createElement('option');
+      opt.value = d.index;
+      opt.textContent = d.name + (d.default ? t('m.defaulttag') : '');
+      sel.appendChild(opt);
+    }
+    sel.value = state.mic_device_index == null ? '' : String(state.mic_device_index);
+    if (sel.value === '' && state.mic_device_index != null) state.mic_device_index = null;
+  }
+  $('micSelect').onchange = () => {
+    const v = $('micSelect').value;
+    state.mic_device_index = v === '' ? null : parseInt(v, 10);
+    if (step === 1) startMeter();
+  };
+
+  let meterStream = null, meterCtx = null, meterAnim = null, meterPeak = 0;
+  async function startMeter() {
+    stopMeter();
+    $('micHint').textContent = t('m.hint');
+    $('micMeterWrap').classList.remove('err');
+    try {
+      let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // The backend lists sounddevice devices; the browser has its own ids.
+      // Match the chosen device by name so the meter shows THAT mic.
+      const wanted = devices.find(d => state.mic_device_index != null && d.index === state.mic_device_index);
+      if (wanted) {
+        try {
+          const list = await navigator.mediaDevices.enumerateDevices();
+          const prefix = wanted.name.slice(0, 20).toLowerCase();
+          const match = list.find(d => d.kind === 'audioinput' && d.label && d.label.toLowerCase().startsWith(prefix));
+          if (match) {
+            stream.getTracks().forEach(tr => tr.stop());
+            stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: match.deviceId } } });
+          }
+        } catch (_) { /* keep the default stream */ }
+      }
+      meterStream = stream;
+      meterCtx = new AudioContext();
+      const src = meterCtx.createMediaStreamSource(stream);
+      const analyser = meterCtx.createAnalyser();
+      analyser.fftSize = 256;
+      src.connect(analyser);
+      const buf = new Float32Array(analyser.fftSize);
+      meterPeak = 0;
+      const tick = () => {
+        analyser.getFloatTimeDomainData(buf);
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+        const level = Math.min(100, Math.sqrt(sum / buf.length) * 400);
+        $('micMeter').style.width = level + '%';
+        if (level > 18 && meterPeak <= 18) $('micHint').textContent = t('m.ok');
+        meterPeak = Math.max(meterPeak, level);
+        meterAnim = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch (e) {
+      $('micMeterWrap').classList.add('err');
+      $('micMeter').style.width = '100%';
+      $('micHint').textContent = t('m.error');
+    }
+  }
+  function stopMeter() {
+    if (meterAnim) cancelAnimationFrame(meterAnim);
+    if (meterStream) meterStream.getTracks().forEach(tr => tr.stop());
+    if (meterCtx) { try { meterCtx.close(); } catch (_) {} }
+    meterAnim = null; meterStream = null; meterCtx = null;
+    $('micMeter').style.width = '0%';
+  }
+  window.addEventListener('beforeunload', stopMeter);
+
+  // ── 2 · Hotkey & mode ──
+  let recordingHotkey = false;
+  const hotkeyParts = new Set();
+  $('hotkeyBtn').onclick = () => {
+    if (recordingHotkey) return;
+    recordingHotkey = true;
+    hotkeyParts.clear();
+    if (window.notype.setHotkeyCapture) window.notype.setHotkeyCapture(true);
+    $('hotkeyValue').textContent = t('h.waiting');
+    $('hotkeyValue').classList.add('recording');
+    $('hotkeyBtn').textContent = '...';
+  };
+  document.addEventListener('keydown', (e) => {
+    if (!recordingHotkey) return;
+    e.preventDefault();
+    const key = e.key.toLowerCase();
+    const map = {
+      'control': 'ctrl', 'shift': 'shift', 'alt': 'alt', 'meta': 'win', ' ': 'space',
+      'enter': 'enter', 'tab': 'tab', 'backspace': 'backspace', 'delete': 'delete',
+      'escape': 'escape', '<': 'less', '>': 'greater',
+    };
+    const mapped = map[key] || (e.code.startsWith('Key') ? e.code.slice(3).toLowerCase() : key);
+    hotkeyParts.add(mapped);
+    $('hotkeyValue').textContent = prettyHotkey(Array.from(hotkeyParts).join('+'));
+  });
+  document.addEventListener('keyup', () => {
+    if (!recordingHotkey || hotkeyParts.size === 0) return;
+    recordingHotkey = false;
+    if (window.notype.setHotkeyCapture) window.notype.setHotkeyCapture(false);
+    state.hotkey = Array.from(hotkeyParts).join('+');
+    $('hotkeyValue').classList.remove('recording');
+    $('hotkeyValue').textContent = prettyHotkey(state.hotkey);
+    $('hotkeyBtn').textContent = t('h.change');
+    renderTestLead();
+  });
+  document.querySelectorAll('.mode-card').forEach(card => {
+    const pick = () => {
+      state.mode = card.dataset.mode;
+      document.querySelectorAll('.mode-card').forEach(c => c.classList.toggle('selected', c === card));
+      renderTestLead();
+    };
+    card.onclick = pick;
+    card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } };
+  });
+
+  // ── 3 · Model ──
+  // The preselected (recommended) card may sit below the fold – bring it in.
+  function revealSelectedModel() {
+    setTimeout(() => {
+      const el = document.querySelector('.mcard.selected');
+      if (el && step === 3) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 120);
+  }
+  function renderModels() {
+    if (!window.NoTypeModels) return;
+    window.NoTypeModels.render($('modelCards'), {
+      lang: uiLang, selected: state.model_size, active: activeModel, info: modelsInfo,
+      onSelect: (id) => { state.model_size = id; userPickedModel = true; renderModels(); },
+    });
+    window.NoTypeModels.renderHardwareBadge($('hwBadge'), modelsInfo, uiLang);
+  }
+
+  // ── 4 · Test ──
+  function renderTestLead() {
+    const el = $('testLead');
+    el.innerHTML = '';
+    const tpl = t(state.mode === 'press_to_speak' ? 't.lead.press' : 't.lead.hold');
+    const [before, after] = tpl.split('{hotkey}');
+    el.appendChild(document.createTextNode(before));
+    const kbd = document.createElement('kbd');
+    kbd.textContent = prettyHotkey(state.hotkey);
+    el.appendChild(kbd);
+    el.appendChild(document.createTextNode(after || ''));
+  }
+  function refreshStatus() {
+    const pill = $('statusPill');
+    pill.className = 'status-pill ' + testState;
+    $('statusText').textContent = t('s.' + testState);
+    let detail = testDetail;
+    if (testState === 'loading') detail = lastStatusMsg || t('s.loading.detail');
+    else if (testState === 'ready' && !detail) {
+      detail = t(state.mode === 'press_to_speak' ? 's.ready.detail.press' : 's.ready.detail')
+        .replace('{hotkey}', prettyHotkey(state.hotkey));
+    }
+    $('statusDetail').textContent = detail || '';
+  }
+  function setTest(s, detail) { testState = s; testDetail = detail || ''; refreshStatus(); }
+
+  // ── 5 · Summary ──
+  function fillSummary() {
+    const dev = devices.find(d => d.index === state.mic_device_index);
+    $('sumMic').textContent = dev ? dev.name : t('m.default');
+    $('sumHotkey').textContent = prettyHotkey(state.hotkey);
+    $('sumMode').textContent = t(state.mode === 'press_to_speak' ? 'h.press' : 'h.hold');
+    $('sumModel').textContent = window.NoTypeModels ? window.NoTypeModels.nameOf(state.model_size) : state.model_size;
+  }
+
+  // ── IPC ──
+  if (window.notype) {
+    window.notype.onSetTheme((theme) => {
+      document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : '';
+    });
+    window.notype.onConfig((c) => {
+      if (configApplied) return;   // later pushes must not reset the wizard
+      configApplied = true;
+      cfg = c || {};
+      state.app_language = I18N[cfg.app_language] ? cfg.app_language : 'de';
+      state.mic_device_index = cfg.mic_device_index == null ? null : cfg.mic_device_index;
+      state.hotkey = cfg.hotkey || 'ctrl+shift+space';
+      state.mode = cfg.mode === 'press_to_speak' ? 'press_to_speak' : 'hold_to_speak';
+      state.model_size = cfg.model_size || 'small';
+      uiLang = state.app_language;
+      $('langSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.lang === uiLang));
+      $('hotkeyValue').textContent = prettyHotkey(state.hotkey);
+      document.querySelectorAll('.mode-card').forEach(c => c.classList.toggle('selected', c.dataset.mode === state.mode));
+      applyI18n();
+      window.notype.listDevices();
+      window.notype.listModels();
+    });
+    window.notype.onDevices((list) => { devices = Array.isArray(list) ? list : []; renderDevices(); });
+    if (window.notype.onModels) {
+      window.notype.onModels((info) => {
+        modelsInfo = info;
+        // First run: preselect what fits this machine (until the user picks).
+        if (!userPickedModel && !cfg.first_run_complete && window.NoTypeModels) {
+          const rec = window.NoTypeModels.recommend(info);
+          if (rec) state.model_size = rec;
+        }
+        renderModels();
+        if (step === 3) revealSelectedModel();
+      });
+    }
+    window.notype.onModelReady((data) => {
+      modelReady = true;
+      activeModel = data && data.model;
+      renderModels();
+      if (testState === 'loading') setTest('ready');
+    });
+    window.notype.onStatus((msg) => {
+      lastStatusMsg = typeof msg === 'string' ? msg : '';
+      if (testState === 'loading') refreshStatus();
+    });
+    window.notype.onRecordingStarted(() => { if (step === 4) setTest('recording'); });
+    window.notype.onRecordingStopped(() => { if (step === 4) setTest('processing'); });
+    window.notype.onTranscriptionDone((data) => {
+      if (step !== 4) return;
+      if (data && data.text && !data.empty) {
+        setTest('done');
+        $('successBox').classList.add('show');
+      } else if (data && data.reason === 'too_short') {
+        setTest('ready', t('s.short'));
+      } else {
+        setTest('ready');
+      }
+    });
+    window.notype.getConfig();
+  }
+
+  applyI18n();
+  showStep(0);
+</script>
+</body>
+</html>

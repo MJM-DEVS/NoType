@@ -21,11 +21,19 @@ contextBridge.exposeInMainWorld('notype', {
   onPreviewText: (callback) => ipcRenderer.on('preview-text', (_, text) => callback(text)),
   onPreviewEnabled: (callback) => ipcRenderer.on('preview-enabled', (_, enabled) => callback(enabled)),
   onAppLang: (callback) => ipcRenderer.on('app-lang', (_, lang) => callback(lang)),
+  onModels: (callback) => ipcRenderer.on('models', (_, data) => callback(data)),
+  onBusy: (callback) => ipcRenderer.on('busy', () => callback()),
 
   // Send messages to main process
   saveConfig: (config) => ipcRenderer.send('save-config', config),
   getConfig: () => ipcRenderer.send('get-config'),
   listDevices: () => ipcRenderer.send('list-devices'),
+  listModels: () => ipcRenderer.send('list-models'),
+  // While a page captures a new hotkey, the global shortcut must not fire.
+  setHotkeyCapture: (active) => ipcRenderer.send('hotkey-capture', !!active),
+  openOnboarding: () => ipcRenderer.send('open-onboarding'),
+  closeOnboarding: () => ipcRenderer.send('close-onboarding'),
+  openSettings: () => ipcRenderer.send('open-settings'),
   closeSettings: () => ipcRenderer.send('close-settings'),
   closeToast: () => ipcRenderer.send('close-toast'),
   registerHotkey: (key) => ipcRenderer.send('register-hotkey', key),

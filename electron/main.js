@@ -153,6 +153,8 @@ let pendingModelSwitch = null;   // model id the user just switched to → "read
 let bootReadyToastShown = false; // one "NoType ready" toast per launch
 let recordStopTs = 0;            // when the user released – for the insert-latency stat
 let holdReleaseViaBackend = true;// backend reports real key-up (optimistic; see 'hotkey_watch')
+let onboardingWin = null;        // first-run wizard (also reachable from settings/tray)
+let lastBusyTs = 0;              // throttle for the "still processing" nudge
 let config = {};
 let clipboardHistory = [];  // Last 10 transcriptions
 const MAX_HISTORY = 10;
@@ -171,7 +173,7 @@ function currentTheme() {
 
 function broadcastTheme() {
   const theme = currentTheme();
-  for (const w of [settingsWin, overlayWin, toastWin]) {
+  for (const w of [settingsWin, overlayWin, toastWin, onboardingWin]) {
     if (w && !w.isDestroyed()) {
       try { w.webContents.send('set-theme', theme); } catch (_) {}
     }
@@ -439,7 +441,8 @@ function handlePythonMessage(line) {
 
 
       case 'transcription_done':
-        finishTranscription();
+        finishTranscription(!!(data && data.text && !data.empty));
+        sendToOnboarding('transcription-done', data || {});
         if (data && data.text && !data.empty) {
           addToHistory(data.text);
           trackStats(data.text);
@@ -491,6 +494,7 @@ function handlePythonMessage(line) {
         if (settingsWin && !settingsWin.isDestroyed()) {
           settingsWin.webContents.send('model-ready', data);
         }
+        sendToOnboarding('model-ready', data);
         break;
 
       case 'config':
@@ -514,12 +518,22 @@ function handlePythonMessage(line) {
 
       case 'status':
         console.log('Status:', data.message);
+        sendToOnboarding('status', data && data.message);
         break;
 
       case 'devices':
         if (settingsWin && !settingsWin.isDestroyed()) {
           settingsWin.webContents.send('devices', data.devices);
         }
+        sendToOnboarding('devices', data.devices);
+        break;
+
+      case 'models':
+        // Catalog + downloaded state + hardware for the model cards.
+        if (settingsWin && !settingsWin.isDestroyed()) {
+          settingsWin.webContents.send('models', data);
+        }
+        sendToOnboarding('models', data);
         break;
 
       case 'ollama_status':
@@ -766,13 +780,24 @@ function registerHotkeys() {
 }
 
 function startRecording() {
-  if (isTranscribing) return;  // Don't start while transcribing
+  if (isTranscribing) {
+    // Previous dictation is still being transcribed. The press is ignored,
+    // but not silently: a low blip + nudge on the (still visible) overlay.
+    // Throttled – in hold mode the OS key-repeat calls this ~30×/s.
+    const now = Date.now();
+    if (now - lastBusyTs > 700 && overlayWin && !overlayWin.isDestroyed()) {
+      lastBusyTs = now;
+      overlayWin.webContents.send('busy');
+    }
+    return;
+  }
   if (isRecording) return;     // Already recording – ignore re-trigger
   if (!modelLoaded) {
     showToast(trayT().modelNotReady, 'warning');
     return;
   }
   isRecording = true;
+  sendToOnboarding('recording-started');
   isPaused = false;
   showOverlay();
   sendToPython('start_recording');
@@ -784,12 +809,13 @@ function stopRecording() {
   isRecording = false;
   isPaused = false;
   isTranscribing = true;  // Prevent re-trigger during transcription
-  // Live-preview happens DURING speech. After release we hide the overlay –
-  // the final transcript surfaces through the toast notification.
+  // The overlay stays up in a "processing" state until the final pass is
+  // done (finishTranscription hides it) – the flow reads record → process →
+  // inserted instead of the indicator vanishing on key-release.
   if (overlayWin && !overlayWin.isDestroyed()) {
     overlayWin.webContents.send('recording-stopped');
-    setTimeout(() => hideOverlay(), 250);
   }
+  sendToOnboarding('recording-stopped');
   // Unregister hotkeys during paste to prevent Ctrl+V from triggering
   globalShortcut.unregisterAll();
   recordStopTs = Date.now();
@@ -809,11 +835,17 @@ function stopRecording() {
 
 // Single place to reset post-recording state. Called from `transcription_done`,
 // from `error`, and from the timeout watchdog above.
-function finishTranscription() {
+function finishTranscription(ok = false) {
   isRecording = false;
   isTranscribing = false;
   isPaused = false;
-  hideOverlay();
+  if (overlayWin && !overlayWin.isDestroyed()) {
+    overlayWin.webContents.send('transcription-done', { ok });
+  }
+  // Success: let the mint "done" flash show for a moment before hiding.
+  // Guard: the user may already be recording again by then.
+  if (ok) setTimeout(() => { if (!isRecording) hideOverlay(); }, 420);
+  else hideOverlay();
   registerHotkeys();
   updateTray('ready');
 }
@@ -929,7 +961,7 @@ function trayT() {
     loading: '⏳ Modell lädt...', paused: '⏸ Pausiert',
     today: 'Heute', words: 'Wörter', transcriptions: 'Transkriptionen',
     last7: 'Letzte 7 Tage', last30: 'Letzte 30 Tage',
-    history: 'Letzte Transkriptionen', settings: '⚙  Einstellungen', quit: '✕  Beenden',
+    history: 'Letzte Transkriptionen', settings: '⚙  Einstellungen', setup: '✦  Einrichtung', quit: '✕  Beenden',
     tooShort: 'Aufnahme zu kurz – verworfen',
     backendCrashed: 'Backend abgestürzt – starte neu',
     backendDead: 'Backend startet nicht – bitte NoType neu starten',
@@ -944,7 +976,7 @@ function trayT() {
     loading: '⏳ Loading model...', paused: '⏸ Paused',
     today: 'Today', words: 'words', transcriptions: 'transcriptions',
     last7: 'Last 7 days', last30: 'Last 30 days',
-    history: 'Recent transcriptions', settings: '⚙  Settings', quit: '✕  Quit',
+    history: 'Recent transcriptions', settings: '⚙  Settings', setup: '✦  Setup', quit: '✕  Quit',
     tooShort: 'Recording too short – discarded',
     backendCrashed: 'Backend crashed – restarting',
     backendDead: 'Backend won\'t start – please restart NoType',
@@ -1029,6 +1061,7 @@ function buildTrayMenu(status = 'ready') {
 
   items.push(
     { label: T.settings, click: () => openSettings() },
+    { label: T.setup, click: () => openOnboarding() },
     { type: 'separator' },
     { label: T.quit, click: () => quitApp() },
   );
@@ -1073,7 +1106,65 @@ function openSettings() {
     }
   });
 
-  settingsWin.on('closed', () => { settingsWin = null; });
+  settingsWin.on('closed', () => {
+    settingsWin = null;
+    // A hotkey capture may have been active – make sure the shortcut is back.
+    if (!isRecording && !isTranscribing) registerHotkeys();
+  });
+}
+
+// ── First-run wizard ──
+// Mic → hotkey → model → live test → done. Also reachable later from the
+// tray and the settings page. Saves each step immediately (partial config
+// merges), so the test step dictates with the real, freshly chosen setup.
+function openOnboarding() {
+  if (onboardingWin && !onboardingWin.isDestroyed()) {
+    onboardingWin.focus();
+    return;
+  }
+  onboardingWin = new BrowserWindow({
+    width: 800,
+    height: 640,
+    minWidth: 720,
+    minHeight: 580,
+    show: false,
+    resizable: true,
+    frame: false,
+    backgroundColor: '#00000000',
+    backgroundMaterial: 'mica',
+    webPreferences: {
+      preload: PRELOAD,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  onboardingWin.loadFile(path.join(__dirname, 'onboarding.html'));
+  onboardingWin.once('ready-to-show', () => {
+    if (!onboardingWin || onboardingWin.isDestroyed()) return;
+    onboardingWin.webContents.send('set-theme', currentTheme());
+    onboardingWin.show();
+    applyMica(onboardingWin);
+    onboardingWin.webContents.send('config', config);
+    if (modelLoaded && modelInfo) onboardingWin.webContents.send('model-ready', modelInfo);
+  });
+  onboardingWin.on('closed', () => {
+    onboardingWin = null;
+    markOnboardingDone();   // Alt+F4 counts as "skip" – don't nag next launch
+    if (!isRecording && !isTranscribing) registerHotkeys();
+  });
+}
+
+function markOnboardingDone() {
+  if (config.first_run_complete) return;
+  config.first_run_complete = true;
+  writeConfigToDisk();
+  if (pythonProcess && pythonProcess.stdin.writable) sendToPython('save_config', { first_run_complete: true });
+}
+
+function sendToOnboarding(channel, data) {
+  if (onboardingWin && !onboardingWin.isDestroyed()) {
+    try { onboardingWin.webContents.send(channel, data); } catch (_) { /* window closing */ }
+  }
 }
 
 // ── IPC from renderers ──
@@ -1118,6 +1209,20 @@ ipcMain.on('save-config', (_, newConfig) => {
 });
 ipcMain.on('get-config', () => pushConfigToSettings());
 ipcMain.on('list-devices', () => sendToPython('list_devices'));
+ipcMain.on('list-models', () => sendToPython('list_models'));
+ipcMain.on('hotkey-capture', (_, active) => {
+  // A page is recording a new key combo – the global shortcut must not fire
+  // (and start a dictation) while the user presses keys to define it.
+  if (active) globalShortcut.unregisterAll();
+  else if (!isRecording && !isTranscribing) registerHotkeys();
+});
+ipcMain.on('open-onboarding', () => openOnboarding());
+ipcMain.on('open-settings', () => openSettings());
+ipcMain.on('close-onboarding', () => {
+  // Finished or dismissed – either way, don't show the wizard again.
+  markOnboardingDone();
+  if (onboardingWin && !onboardingWin.isDestroyed()) onboardingWin.close();
+});
 ipcMain.on('ollama-status', () => sendToPython('ollama_status'));
 ipcMain.on('ollama-setup', () => sendToPython('ollama_setup'));
 ipcMain.on('close-settings', () => {
@@ -1230,6 +1335,10 @@ app.whenReady().then(() => {
   // Register hotkeys immediately – globalShortcut doesn't depend on the Python backend.
   // The backend may later push an updated config that re-registers via `config_saved`.
   registerHotkeys();
+
+  // First launch: guided setup (mic → hotkey → model → test). Tray and
+  // backend are already starting, so the wizard's test step works for real.
+  if (!config.first_run_complete) setTimeout(openOnboarding, 600);
 
   // React to system theme changes (Win11 light/dark switch)
   nativeTheme.on('updated', broadcastTheme);

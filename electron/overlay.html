@@ -89,6 +89,35 @@
   /* Live preview off → pill/card shows only the synth */
   body:not(.with-preview) .amtext { display: none; }
 
+  /* ── Processing → done: the overlay stays up while the final pass runs
+     (instead of vanishing on key-release), shows a sweep on the pill and
+     flashes mint once the text is inserted. ── */
+  .ampill, .amcard { position: relative; }
+  .ampill::after, .amcard::after {
+    content: ''; position: absolute; left: 18%; right: 18%; bottom: 0; height: 2px;
+    border-radius: 2px; opacity: 0; pointer-events: none;
+    background: linear-gradient(90deg, rgba(0,212,170,0) 0%, #00d4aa 50%, rgba(0,212,170,0) 100%);
+    transform: translateX(-70%);
+  }
+  body.processing .ampill::after, body.processing .amcard::after {
+    opacity: 1; animation: amSweep 0.9s linear infinite;
+  }
+  @keyframes amSweep { from { transform: translateX(-70%); } to { transform: translateX(70%); } }
+  body.processing .amtext > span { color: rgba(234, 255, 249, 0.55); }
+  body.processing #livePreview { opacity: 0.55; }
+  body.done .ampill, body.done .amcard {
+    border-color: rgba(0, 212, 170, 0.95);
+    box-shadow: 0 0 20px rgba(0, 212, 170, 0.5), inset 0 0 20px rgba(0, 212, 170, 0.08);
+    transition: border-color 0.12s, box-shadow 0.12s;
+  }
+  body.done .amtext > span { color: #eafff9; }
+  body.done #livePreview { box-shadow: 0 0 0 1px rgba(0, 212, 170, 0.85), 0 0 14px rgba(0, 212, 170, 0.35); opacity: 1; }
+  /* Hotkey pressed while still processing: short nudge, plus a low blip. */
+  body.busy .ampill, body.busy .amcard, body.busy #livePreview { animation: amBusy 0.28s ease; }
+  @keyframes amBusy { 0%, 100% { transform: translateX(0); } 30% { transform: translateX(-4px); } 60% { transform: translateX(4px); } }
+  body.busy #livePreview { animation-name: amBusyCaption; }
+  @keyframes amBusyCaption { 0%, 100% { transform: translateX(-50%); } 30% { transform: translateX(calc(-50% - 4px)); } 60% { transform: translateX(calc(-50% + 4px)); } }
+
   .amcard {
     width: 100%; height: 100%;
     background: #000;
@@ -457,6 +486,7 @@
   let frame = 0;
   let currentStyle = 'wave';
   let listenText = 'Ich höre zu…';   // swapped by app-lang IPC
+  let processingText = 'Verarbeite…';
 
   // ── Build spectrum bars ──
   const SPEC_BAR_COUNT = 36;
@@ -559,6 +589,23 @@
       osc.start(now + i * 0.12);
       osc.stop(now + i * 0.12 + 0.35);
     });
+  }
+
+  // Hotkey pressed while the previous dictation is still being transcribed:
+  // a short, low blip so the press doesn't feel dead (the normal start chime
+  // only plays when a recording actually starts).
+  function playBusy() {
+    const ctx = getAudioCtx();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle'; osc.frequency.value = 330;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.09, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.15);
   }
 
   // ── Per-style renderers ──────────────────────────────────────────
@@ -833,6 +880,7 @@
     window.notype.onAmplitude((val) => { targetAmp = Math.max(val, 0.08); });
     window.notype.onRecordingStarted(() => {
       targetAmp = 0.15;
+      document.body.classList.remove('processing', 'done', 'busy');
       // Particle stream reset
       for (let i = 0; i < particles.length; i++) {
         Object.assign(particles[i], makeParticle());
@@ -848,7 +896,32 @@
       }
       playChime('start');
     });
-    window.notype.onRecordingStopped(() => playChime('stop'));
+    window.notype.onRecordingStopped(() => {
+      playChime('stop');
+      // Stay visible while the final pass runs; the animation settles and the
+      // pill shows a sweep. main.js hides us after 'transcription-done'.
+      targetAmp = 0.08;
+      document.body.classList.add('processing');
+      for (const id of ['amBarText', 'amCenterText']) {
+        const el = document.getElementById(id);
+        if (el.classList.contains('dim')) el.textContent = processingText;
+      }
+    });
+    if (window.notype.onTranscriptionDone) {
+      window.notype.onTranscriptionDone((data) => {
+        document.body.classList.remove('processing');
+        if (data && data.ok) document.body.classList.add('done');
+      });
+    }
+    if (window.notype.onBusy) {
+      window.notype.onBusy(() => {
+        playBusy();
+        document.body.classList.remove('busy');
+        void document.body.offsetWidth;  // restart the CSS animation
+        document.body.classList.add('busy');
+        setTimeout(() => document.body.classList.remove('busy'), 320);
+      });
+    }
     window.notype.onSetTheme((theme) => {
       document.body.classList.toggle('dark', theme === 'dark');
     });
@@ -873,6 +946,7 @@
     if (window.notype.onAppLang) {
       window.notype.onAppLang((lang) => {
         listenText = lang === 'en' ? 'Listening…' : 'Ich höre zu…';
+        processingText = lang === 'en' ? 'Processing…' : 'Verarbeite…';
         for (const id of ['amBarText', 'amCenterText']) {
           const el = document.getElementById(id);
           if (el.classList.contains('dim')) el.textContent = listenText;

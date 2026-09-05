@@ -355,6 +355,13 @@
             <span class="slider"></span>
           </label>
         </div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="general.setup">Einrichtungsassistent</div>
+            <div class="field-desc" data-i18n="general.setup.desc">Schritt für Schritt: Mikrofon, Hotkey, Modell, Probediktat</div>
+          </div>
+          <button class="btn-sm" id="setupBtn" data-i18n="general.setup.btn">Starten</button>
+        </div>
       </div>
 
       <div class="card">
@@ -407,30 +414,17 @@
 
       <div class="card">
         <div class="card-title" data-i18n="speech.model.title">Modell</div>
-        <div class="field">
-          <div>
-            <div class="field-label" data-i18n="speech.model">Spracherkennungs-Modell</div>
-            <div class="field-desc" data-i18n="speech.model.desc">Größer = genauer. Einsprachige Modelle fixieren ihre Sprache.</div>
-            <div class="field-desc" id="modelDescDyn" style="color: var(--accent); margin-top: 4px;"></div>
+        <!-- Model cards (shared renderer in model-catalog.js): name, use case,
+             download size / VRAM, speed & accuracy, offline/active/recommended. -->
+        <div class="field" style="flex-direction: column; align-items: stretch; gap: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+            <div>
+              <div class="field-label" data-i18n="speech.model">Spracherkennungs-Modell</div>
+              <div class="field-desc" data-i18n="speech.model.desc">Größer = genauer. Einsprachige Modelle fixieren ihre Sprache.</div>
+            </div>
+            <span class="hw-badge" id="hwBadge"></span>
           </div>
-          <select id="modelSelect">
-            <optgroup label="OpenAI Whisper – 99 Sprachen" data-i18n-label="model.grp.whisper">
-              <option value="tiny" data-i18n="model.tiny">Tiny (~1 GB, sehr schnell, Basis-Qualität)</option>
-              <option value="base" data-i18n="model.base">Base (~1,5 GB)</option>
-              <option value="small" data-i18n="model.small">Small (~2 GB, gut für CPU)</option>
-              <option value="medium" data-i18n="model.medium">Medium (~5 GB)</option>
-              <option value="large-v2" data-i18n="model.largev2">Large v2 (~10 GB, weniger Halluzinationen)</option>
-              <option value="large-v3" data-i18n="model.largev3">Large v3 (~10 GB, max. Genauigkeit)</option>
-              <option value="large-v3-turbo" data-i18n="model.turbo">Large v3 Turbo (~6 GB, Empfehlung GPU)</option>
-            </optgroup>
-            <optgroup label="Distil-Whisper – nur Englisch, schneller" data-i18n-label="model.grp.distil">
-              <option value="distil-large-v3" data-i18n="model.distil3">Distil Large v3 (~3 GB)</option>
-              <option value="distil-large-v3.5" data-i18n="model.distil35">Distil Large v3.5 (~3 GB, beste EN-Wahl)</option>
-            </optgroup>
-            <optgroup label="Spezialisiert" data-i18n-label="model.grp.special">
-              <option value="german-turbo" data-i18n="model.german">Large v3 Turbo German (~6 GB, rein deutsche Diktate)</option>
-            </optgroup>
-          </select>
+          <div id="modelCards"></div>
         </div>
         <div class="field">
           <div>
@@ -630,6 +624,7 @@
   <button class="btn-save" id="saveBtn" data-i18n="save">Speichern</button>
 </div>
 
+<script src="model-catalog.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
 
@@ -651,26 +646,9 @@
       'speech.autodetect.desc': 'Erkennt die gesprochene Sprache automatisch',
       'speech.model.title': 'Modell', 'speech.model': 'Spracherkennungs-Modell',
       'speech.model.desc': 'Größer = genauer. Einsprachige Modelle fixieren ihre Sprache.',
-      'model.grp.whisper': 'OpenAI Whisper – 99 Sprachen',
-      'model.grp.distil': 'Distil-Whisper – nur Englisch, schneller',
-      'model.grp.special': 'Spezialisiert',
-      'model.tiny': 'Whisper Tiny', 'model.base': 'Whisper Base',
-      'model.small': 'Whisper Small', 'model.medium': 'Whisper Medium',
-      'model.largev2': 'Whisper Large v2',
-      'model.largev3': 'Whisper Large v3',
-      'model.turbo': 'Whisper Large v3 Turbo',
-      'model.distil3': 'Distil Large v3', 'model.distil35': 'Distil Large v3.5',
-      'model.german': 'Large v3 Turbo German',
-      'model.desc.tiny': '~1 GB · sehr schnell, Basis-Qualität – alte Rechner, kurze Notizen',
-      'model.desc.base': '~1,5 GB · schnell – für CPU-Laptops',
-      'model.desc.small': '~2 GB · solide auf CPU und älteren GPUs',
-      'model.desc.medium': '~5 GB · für Mittelklasse-GPUs',
-      'model.desc.large-v2': '~10 GB · weniger Halluzinationen in manchen Sprachen',
-      'model.desc.large-v3': '~10 GB · maximale Genauigkeit, High-End-GPU',
-      'model.desc.large-v3-turbo': '~6 GB · Empfehlung für jede moderne NVIDIA-GPU',
-      'model.desc.distil-large-v3': '~3 GB · nur Englisch, schnell',
-      'model.desc.distil-large-v3.5': '~3 GB · nur Englisch, beste schnelle Wahl',
-      'model.desc.german-turbo': '~6 GB · rein deutsche Diktate (kein Mixed-English)',
+      'general.setup': 'Einrichtungsassistent',
+      'general.setup.desc': 'Schritt für Schritt: Mikrofon, Hotkey, Modell, Probediktat',
+      'general.setup.btn': 'Starten',
       'speech.status': 'Modell-Status', 'speech.status.loading': 'Laden...',
       'speech.perf': 'Performance', 'speech.beam.desc': 'Auto = dynamisch je nach Länge',
       'speech.beam.auto': 'Auto (Empfohlen)', 'speech.beam.1': '1 – Schnellste',
@@ -730,26 +708,9 @@
       'speech.autodetect.desc': 'Detects the spoken language automatically',
       'speech.model.title': 'Model', 'speech.model': 'Speech recognition model',
       'speech.model.desc': 'Bigger = more accurate. Single-language models pin their language.',
-      'model.grp.whisper': 'OpenAI Whisper – 99 languages',
-      'model.grp.distil': 'Distil-Whisper – English only, faster',
-      'model.grp.special': 'Specialized',
-      'model.tiny': 'Whisper Tiny', 'model.base': 'Whisper Base',
-      'model.small': 'Whisper Small', 'model.medium': 'Whisper Medium',
-      'model.largev2': 'Whisper Large v2',
-      'model.largev3': 'Whisper Large v3',
-      'model.turbo': 'Whisper Large v3 Turbo',
-      'model.distil3': 'Distil Large v3', 'model.distil35': 'Distil Large v3.5',
-      'model.german': 'Large v3 Turbo German',
-      'model.desc.tiny': '~1 GB · very fast, basic quality – old machines, quick notes',
-      'model.desc.base': '~1.5 GB · fast – for CPU-only laptops',
-      'model.desc.small': '~2 GB · solid on CPU and older GPUs',
-      'model.desc.medium': '~5 GB · for mid-range GPUs',
-      'model.desc.large-v2': '~10 GB · fewer hallucinations in some languages',
-      'model.desc.large-v3': '~10 GB · maximum accuracy, high-end GPU',
-      'model.desc.large-v3-turbo': '~6 GB · recommended for any modern NVIDIA GPU',
-      'model.desc.distil-large-v3': '~3 GB · English only, fast',
-      'model.desc.distil-large-v3.5': '~3 GB · English only, best fast pick',
-      'model.desc.german-turbo': '~6 GB · pure-German dictation (no mixed English)',
+      'general.setup': 'Setup assistant',
+      'general.setup.desc': 'Step by step: microphone, hotkey, model, test dictation',
+      'general.setup.btn': 'Start',
       'speech.status': 'Model status', 'speech.status.loading': 'Loading...',
       'speech.perf': 'Performance', 'speech.beam.desc': 'Auto = scales with clip length',
       'speech.beam.auto': 'Auto (recommended)', 'speech.beam.1': '1 – fastest',
@@ -845,19 +806,32 @@
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); $('saveBtn').click(); }
   });
 
-  // The selected model's size/hint, shown in accent under the label – keeps
-  // the dropdown itself short so names never get ellipsized.
-  function updateModelDesc() {
-    const key = 'model.desc.' + $('modelSelect').value;
-    const txt = t(key);
-    $('modelDescDyn').textContent = txt === key ? '' : txt;
+  // ── Model cards ──
+  let selectedModel = 'small';
+  let activeModel = null;   // what the backend has loaded right now
+  let modelsInfo = null;    // backend `models` payload (downloaded state, GPU)
+  function renderModels() {
+    if (!window.NoTypeModels) return;
+    window.NoTypeModels.render($('modelCards'), {
+      lang: uiLang, selected: selectedModel, active: activeModel, info: modelsInfo,
+      onSelect: (id) => {
+        if (id === selectedModel) return;
+        selectedModel = id;
+        markDirty();
+        renderModels();
+      },
+    });
+    window.NoTypeModels.renderHardwareBadge($('hwBadge'), modelsInfo, uiLang);
   }
-  $('modelSelect').addEventListener('change', updateModelDesc);
+
+  $('setupBtn').onclick = () => window.notype.openOnboarding();
 
   // ── Hotkey Recording ──
   $('hotkeyBtn').onclick = () => {
     if (recordingHotkey) return;
     recordingHotkey = true;
+    // Park the global shortcut so pressing the new combo can't start a dictation.
+    if (window.notype.setHotkeyCapture) window.notype.setHotkeyCapture(true);
     hotkeyParts.clear();
     $('hotkeyValue').textContent = t('general.waiting');
     $('hotkeyValue').classList.add('recording');
@@ -885,6 +859,7 @@
     if (!recordingHotkey) return;
     if (hotkeyParts.size > 0) {
       recordingHotkey = false;
+      if (window.notype.setHotkeyCapture) window.notype.setHotkeyCapture(false);
       markDirty();
       $('hotkeyValue').classList.remove('recording');
       $('hotkeyBtn').textContent = t('general.change');
@@ -1029,8 +1004,9 @@
     $('modeSelect').value = cfg.mode || 'hold_to_speak';
     $('langSelect').value = cfg.language || 'de';
     $('autoLangToggle').checked = cfg.auto_language_detect !== false;
-    $('modelSelect').value = cfg.model_size || 'small';
-    updateModelDesc();
+    selectedModel = cfg.model_size || 'small';
+    renderModels();
+    window.notype.listModels();
     $('darkModeToggle').checked = cfg.overlay_theme === 'dark';
     $('overlayStyleSelect').value = cfg.overlay_style || 'wave';
     $('gpuSafeModeToggle').checked = !!cfg.gpu_safe_mode;
@@ -1058,7 +1034,7 @@
   }
 
   // Live language switch (before saving)
-  $('appLangSelect').onchange = () => { applyI18n($('appLangSelect').value); updateModelDesc(); };
+  $('appLangSelect').onchange = () => { applyI18n($('appLangSelect').value); renderModels(); };
 
   // ── Save ──
   $('saveBtn').onclick = () => {
@@ -1069,7 +1045,7 @@
       mode: $('modeSelect').value,
       language: $('langSelect').value,
       auto_language_detect: $('autoLangToggle').checked,
-      model_size: $('modelSelect').value,
+      model_size: selectedModel,
       overlay_theme: $('darkModeToggle').checked ? 'dark' : 'light',
       overlay_style: $('overlayStyleSelect').value,
       gpu_safe_mode: $('gpuSafeModeToggle').checked,
@@ -1112,9 +1088,14 @@
   if (window.notype) {
     window.notype.onConfig(applyConfig);
     window.notype.onModelReady((data) => {
-      $('modelStatus').textContent = `${data.model} · ${data.device}`;
+      $('modelStatus').textContent = `${window.NoTypeModels ? window.NoTypeModels.nameOf(data.model) : data.model} · ${data.device}`;
       $('modelStatus').className = 'status-badge ok';
+      activeModel = data.model;
+      renderModels();
     });
+    if (window.notype.onModels) {
+      window.notype.onModels((info) => { modelsInfo = info; renderModels(); });
+    }
     window.notype.onDevices((devices) => {
       const sel = $('micSelect');
       // Keep "Standard" option, remove rest
