@@ -21,12 +21,12 @@
     --input-focus: #1a1a1a;
     --hover-bg: #f0f0f0;
     --toggle-off: #dddddd;
-    --toggle-on: #1a1a1a;
+    --toggle-on: #00b894;
     --toggle-knob: #ffffff;
     --scroll-thumb: #cccccc;
     --scroll-thumb-hover: #999999;
-    --save-bg: #1a1a1a;
-    --save-bg-hover: #333333;
+    --save-bg: #00b894;
+    --save-bg-hover: #00a37f;
     --save-fg: #ffffff;
     --bar-track: #eeeeee;
     --shadow: rgba(0,0,0,0.15);
@@ -46,13 +46,13 @@
     --input-focus: #ffffff;
     --hover-bg: rgba(255, 255, 255, 0.08);
     --toggle-off: rgba(255, 255, 255, 0.15);
-    --toggle-on: #ffffff;
-    --toggle-knob: #1a1a1a;
+    --toggle-on: #00d4aa;
+    --toggle-knob: #ffffff;
     --scroll-thumb: rgba(255, 255, 255, 0.15);
     --scroll-thumb-hover: rgba(255, 255, 255, 0.30);
-    --save-bg: #ffffff;
-    --save-bg-hover: #e5e5e5;
-    --save-fg: #1a1a1a;
+    --save-bg: #00d4aa;
+    --save-bg-hover: #1fdcb4;
+    --save-fg: #062018;
     --bar-track: rgba(255, 255, 255, 0.10);
     --shadow: rgba(0,0,0,0.4);
   }
@@ -125,7 +125,15 @@
     width: 3px; border-radius: 2px;
     background: var(--accent);
   }
-  .nav-item .nav-ico { width: 18px; text-align: center; opacity: 0.75; flex: 0 0 auto; }
+  .nav-item .nav-ico {
+    width: 18px; height: 18px; flex: 0 0 auto; opacity: 0.75;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .nav-item .nav-ico svg {
+    width: 16px; height: 16px; fill: none; stroke: currentColor;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .nav-item.active .nav-ico { opacity: 1; color: var(--accent); }
 
   .panes { flex: 1 1 auto; overflow-y: auto; padding: 20px; }
   .pane { display: none; flex-direction: column; gap: 20px; }
@@ -281,6 +289,14 @@
   }
   .btn-save:hover { background: var(--save-bg-hover); }
   .btn-save:active { transform: scale(0.98); }
+  .btn-save:disabled { opacity: 0.85; cursor: default; transform: none; }
+  /* Unsaved-changes hint: a soft pulsing dot on the Save button. */
+  .btn-save.dirty::after {
+    content: ''; display: inline-block; width: 6px; height: 6px; margin-left: 9px;
+    border-radius: 50%; background: currentColor; vertical-align: middle;
+    animation: dirty-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes dirty-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
   /* ── Status badge ── */
   .status-badge {
@@ -304,12 +320,13 @@
 <div class="layout">
   <!-- Sidebar navigation -->
   <nav class="sidebar">
-    <button class="nav-item active" data-pane="general"><span class="nav-ico">⚙</span><span data-i18n="nav.general">Allgemein</span></button>
-    <button class="nav-item" data-pane="speech"><span class="nav-ico">🎙</span><span data-i18n="nav.speech">Sprache &amp; Modell</span></button>
-    <button class="nav-item" data-pane="vocab"><span class="nav-ico">📖</span><span data-i18n="nav.vocab">Eigene Begriffe</span></button>
-    <button class="nav-item" data-pane="cleanup"><span class="nav-ico">✨</span><span data-i18n="nav.cleanup">Text-Bereinigung</span></button>
-    <button class="nav-item" data-pane="overlay"><span class="nav-ico">〰</span><span data-i18n="nav.overlay">Overlay</span></button>
-    <button class="nav-item" data-pane="system"><span class="nav-ico">🖥</span><span data-i18n="nav.system">System</span></button>
+    <!-- Inline stroke icons (render identically everywhere, unlike emoji). -->
+    <button class="nav-item active" data-pane="general"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/></svg></span><span data-i18n="nav.general">Allgemein</span></button>
+    <button class="nav-item" data-pane="speech"><span class="nav-ico"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg></span><span data-i18n="nav.speech">Sprache &amp; Modell</span></button>
+    <button class="nav-item" data-pane="vocab"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19a2 2 0 0 1 2-2h13M9 7h6"/></svg></span><span data-i18n="nav.vocab">Eigene Begriffe</span></button>
+    <button class="nav-item" data-pane="cleanup"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M11 3l1.9 4.9L17.8 9.8l-4.9 1.9L11 16.6l-1.9-4.9L4.2 9.8l4.9-1.9z"/><path d="M18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg></span><span data-i18n="nav.cleanup">Text-Bereinigung</span></button>
+    <button class="nav-item" data-pane="overlay"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M3 12h2l2-5 3 10 3-8 2 5 2-2h4"/></svg></span><span data-i18n="nav.overlay">Overlay</span></button>
+    <button class="nav-item" data-pane="system"><span class="nav-ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></span><span data-i18n="nav.system">System</span></button>
   </nav>
 
   <div class="panes">
@@ -394,6 +411,7 @@
           <div>
             <div class="field-label" data-i18n="speech.model">Spracherkennungs-Modell</div>
             <div class="field-desc" data-i18n="speech.model.desc">Größer = genauer. Einsprachige Modelle fixieren ihre Sprache.</div>
+            <div class="field-desc" id="modelDescDyn" style="color: var(--accent); margin-top: 4px;"></div>
           </div>
           <select id="modelSelect">
             <optgroup label="OpenAI Whisper – 99 Sprachen" data-i18n-label="model.grp.whisper">
@@ -453,7 +471,7 @@
               <div class="field-label" data-i18n="speech.vad">VAD-Empfindlichkeit</div>
               <div class="field-desc" data-i18n="speech.vad.desc">Niedrig = aggressiver Stille-Filter</div>
             </div>
-            <span id="vadValue" style="font-size: 12px; color: #666; font-weight: 500;">300ms</span>
+            <span id="vadValue" style="font-size: 12px; color: var(--fg-dim); font-weight: 500;">300ms</span>
           </div>
           <input type="range" id="vadSlider" min="100" max="500" step="50" value="300" style="width: 100%; accent-color: var(--accent);">
         </div>
@@ -636,13 +654,23 @@
       'model.grp.whisper': 'OpenAI Whisper – 99 Sprachen',
       'model.grp.distil': 'Distil-Whisper – nur Englisch, schneller',
       'model.grp.special': 'Spezialisiert',
-      'model.tiny': 'Tiny (~1 GB, sehr schnell, Basis-Qualität)', 'model.base': 'Base (~1,5 GB)',
-      'model.small': 'Small (~2 GB, gut für CPU)', 'model.medium': 'Medium (~5 GB)',
-      'model.largev2': 'Large v2 (~10 GB, weniger Halluzinationen)',
-      'model.largev3': 'Large v3 (~10 GB, max. Genauigkeit)',
-      'model.turbo': 'Large v3 Turbo (~6 GB, Empfehlung GPU)',
-      'model.distil3': 'Distil Large v3 (~3 GB)', 'model.distil35': 'Distil Large v3.5 (~3 GB, beste EN-Wahl)',
-      'model.german': 'Large v3 Turbo German (~6 GB, rein deutsche Diktate)',
+      'model.tiny': 'Whisper Tiny', 'model.base': 'Whisper Base',
+      'model.small': 'Whisper Small', 'model.medium': 'Whisper Medium',
+      'model.largev2': 'Whisper Large v2',
+      'model.largev3': 'Whisper Large v3',
+      'model.turbo': 'Whisper Large v3 Turbo',
+      'model.distil3': 'Distil Large v3', 'model.distil35': 'Distil Large v3.5',
+      'model.german': 'Large v3 Turbo German',
+      'model.desc.tiny': '~1 GB · sehr schnell, Basis-Qualität – alte Rechner, kurze Notizen',
+      'model.desc.base': '~1,5 GB · schnell – für CPU-Laptops',
+      'model.desc.small': '~2 GB · solide auf CPU und älteren GPUs',
+      'model.desc.medium': '~5 GB · für Mittelklasse-GPUs',
+      'model.desc.large-v2': '~10 GB · weniger Halluzinationen in manchen Sprachen',
+      'model.desc.large-v3': '~10 GB · maximale Genauigkeit, High-End-GPU',
+      'model.desc.large-v3-turbo': '~6 GB · Empfehlung für jede moderne NVIDIA-GPU',
+      'model.desc.distil-large-v3': '~3 GB · nur Englisch, schnell',
+      'model.desc.distil-large-v3.5': '~3 GB · nur Englisch, beste schnelle Wahl',
+      'model.desc.german-turbo': '~6 GB · rein deutsche Diktate (kein Mixed-English)',
       'speech.status': 'Modell-Status', 'speech.status.loading': 'Laden...',
       'speech.perf': 'Performance', 'speech.beam.desc': 'Auto = dynamisch je nach Länge',
       'speech.beam.auto': 'Auto (Empfohlen)', 'speech.beam.1': '1 – Schnellste',
@@ -705,13 +733,23 @@
       'model.grp.whisper': 'OpenAI Whisper – 99 languages',
       'model.grp.distil': 'Distil-Whisper – English only, faster',
       'model.grp.special': 'Specialized',
-      'model.tiny': 'Tiny (~1 GB, very fast, basic quality)', 'model.base': 'Base (~1.5 GB)',
-      'model.small': 'Small (~2 GB, good for CPU)', 'model.medium': 'Medium (~5 GB)',
-      'model.largev2': 'Large v2 (~10 GB, fewer hallucinations)',
-      'model.largev3': 'Large v3 (~10 GB, max accuracy)',
-      'model.turbo': 'Large v3 Turbo (~6 GB, recommended on GPU)',
-      'model.distil3': 'Distil Large v3 (~3 GB)', 'model.distil35': 'Distil Large v3.5 (~3 GB, best EN pick)',
-      'model.german': 'Large v3 Turbo German (~6 GB, pure-German dictation)',
+      'model.tiny': 'Whisper Tiny', 'model.base': 'Whisper Base',
+      'model.small': 'Whisper Small', 'model.medium': 'Whisper Medium',
+      'model.largev2': 'Whisper Large v2',
+      'model.largev3': 'Whisper Large v3',
+      'model.turbo': 'Whisper Large v3 Turbo',
+      'model.distil3': 'Distil Large v3', 'model.distil35': 'Distil Large v3.5',
+      'model.german': 'Large v3 Turbo German',
+      'model.desc.tiny': '~1 GB · very fast, basic quality – old machines, quick notes',
+      'model.desc.base': '~1.5 GB · fast – for CPU-only laptops',
+      'model.desc.small': '~2 GB · solid on CPU and older GPUs',
+      'model.desc.medium': '~5 GB · for mid-range GPUs',
+      'model.desc.large-v2': '~10 GB · fewer hallucinations in some languages',
+      'model.desc.large-v3': '~10 GB · maximum accuracy, high-end GPU',
+      'model.desc.large-v3-turbo': '~6 GB · recommended for any modern NVIDIA GPU',
+      'model.desc.distil-large-v3': '~3 GB · English only, fast',
+      'model.desc.distil-large-v3.5': '~3 GB · English only, best fast pick',
+      'model.desc.german-turbo': '~6 GB · pure-German dictation (no mixed English)',
       'speech.status': 'Model status', 'speech.status.loading': 'Loading...',
       'speech.perf': 'Performance', 'speech.beam.desc': 'Auto = scales with clip length',
       'speech.beam.auto': 'Auto (recommended)', 'speech.beam.1': '1 – fastest',
@@ -790,7 +828,7 @@
   // that silently threw away e.g. a freshly picked model right before Save.
   let dirty = false;
   let configApplied = false;
-  const markDirty = () => { dirty = true; };
+  const markDirty = () => { dirty = true; $('saveBtn').classList.add('dirty'); };
   document.addEventListener('change', markDirty, true);
   document.addEventListener('input', markDirty, true);
 
@@ -799,6 +837,22 @@
 
   // ── Close ──
   $('closeBtn').onclick = () => window.notype.closeSettings();
+
+  // Keyboard: Esc closes, Ctrl+S saves (not while capturing a hotkey).
+  document.addEventListener('keydown', (e) => {
+    if (recordingHotkey) return;
+    if (e.key === 'Escape') { e.preventDefault(); window.notype.closeSettings(); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); $('saveBtn').click(); }
+  });
+
+  // The selected model's size/hint, shown in accent under the label – keeps
+  // the dropdown itself short so names never get ellipsized.
+  function updateModelDesc() {
+    const key = 'model.desc.' + $('modelSelect').value;
+    const txt = t(key);
+    $('modelDescDyn').textContent = txt === key ? '' : txt;
+  }
+  $('modelSelect').addEventListener('change', updateModelDesc);
 
   // ── Hotkey Recording ──
   $('hotkeyBtn').onclick = () => {
@@ -976,6 +1030,7 @@
     $('langSelect').value = cfg.language || 'de';
     $('autoLangToggle').checked = cfg.auto_language_detect !== false;
     $('modelSelect').value = cfg.model_size || 'small';
+    updateModelDesc();
     $('darkModeToggle').checked = cfg.overlay_theme === 'dark';
     $('overlayStyleSelect').value = cfg.overlay_style || 'wave';
     $('gpuSafeModeToggle').checked = !!cfg.gpu_safe_mode;
@@ -999,10 +1054,11 @@
     window.notype.ollamaStatus();
     configApplied = true;
     dirty = false;
+    $('saveBtn').classList.remove('dirty');
   }
 
   // Live language switch (before saving)
-  $('appLangSelect').onchange = () => applyI18n($('appLangSelect').value);
+  $('appLangSelect').onchange = () => { applyI18n($('appLangSelect').value); updateModelDesc(); };
 
   // ── Save ──
   $('saveBtn').onclick = () => {
@@ -1030,6 +1086,7 @@
     };
     window.notype.saveConfig(newConfig);
     dirty = false;
+    $('saveBtn').classList.remove('dirty');
     // Honest confirmation: the main process writes settings.json synchronously
     // on 'save-config', so by the time this renders the save is on disk –
     // even if the backend is down and can't be told yet.

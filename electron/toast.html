@@ -132,28 +132,36 @@
   if (window.notype) {
     window.notype.onToastData((data) => {
       const type = data.type || 'success';
+      const lang = data.lang === 'en' ? 'en' : 'de';
+      const L = lang === 'en'
+        ? { error: 'Error', words: (n) => `${n} ${n === 1 ? 'word' : 'words'}`, ai: 'AI cleanup', dec: '.' }
+        : { error: 'Fehler', words: (n) => `${n} ${n === 1 ? 'Wort' : 'Wörter'}`, ai: 'KI-Bereinigung', dec: ',' };
       const iconEl = document.getElementById('icon');
       const svgEl = document.getElementById('icon-svg');
       const titleEl = document.getElementById('title');
       const subEl = document.getElementById('subtitle');
 
-      // Set icon style
       iconEl.className = 'icon ' + type;
       svgEl.innerHTML = icons[type] || icons.success;
 
       if (type === 'success') {
-        const wordCount = data.text.trim().split(/\s+/).length;
-        const preview = data.text.length > 50 ? data.text.slice(0, 50) + '…' : data.text;
-        titleEl.textContent = preview;
-        // Build subtitle with word count + optional perf stats
-        let sub = `${wordCount} Wörter eingefügt`;
+        const text = String(data.text || '');
+        titleEl.textContent = text.length > 50 ? text.slice(0, 50) + '…' : text;
         if (data.stats) {
+          // Dictation result: word count · time from key-release to inserted
+          // text · AI cleanup if it ran. (beam/compute internals live in the log.)
+          const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+          const parts = [L.words(wordCount)];
           const s = data.stats;
-          sub += `  ·  beam ${s.beam}  ·  ${s.compute_type}  ·  ${s.duration}s`;
+          if (typeof s.latency_s === 'number') parts.push(s.latency_s.toFixed(1).replace('.', L.dec) + ' s');
+          if (s.engine === 'llm') parts.push(L.ai);
+          subEl.textContent = parts.join('  ·  ');
+        } else {
+          // Informational success ("model ready") – no stats line.
+          subEl.textContent = '';
         }
-        subEl.textContent = sub;
       } else if (type === 'error') {
-        titleEl.textContent = 'Fehler';
+        titleEl.textContent = L.error;
         subEl.textContent = data.text;
       } else if (type === 'warning') {
         titleEl.textContent = data.text;

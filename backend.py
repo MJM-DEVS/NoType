@@ -40,6 +40,7 @@ import logging
 import logging.handlers
 import threading
 import time
+import ctypes
 import numpy as np
 
 # Ensure our directory is in the path
@@ -187,17 +188,24 @@ class Backend:
         inserted. Uses the shared inference lock, so a preview pass in flight
         can delay the final pass by at most one window (~0.3 s)."""
         language = self.config.get("language", "de")
+        # Same language policy as the final pass – otherwise the caption is
+        # forced into the configured language while the inserted text is
+        # auto-detected, and the two visibly disagree for mixed speech.
+        auto_detect = self.config.get("auto_language_detect", True)
         while self._running and recorder.is_recording:
-            time.sleep(1.2)
+            time.sleep(1.0)
             # Recorder may have been stopped/replaced while we slept.
             if not recorder.is_recording or recorder is not self.recorder:
                 break
-            audio = recorder.get_recent_audio(8.0)
+            # 5 s window: cheaper per pass than 8 s (the caption only shows the
+            # tail anyway) and a shorter worst-case wait for the final pass,
+            # which shares the inference lock with an in-flight preview.
+            audio = recorder.get_recent_audio(5.0)
             if len(audio) < 16000:  # need at least 1s to say anything useful
                 continue
             try:
                 result = self.transcriber.transcribe(
-                    audio, language=language, auto_detect=False,
+                    audio, language=language, auto_detect=auto_detect,
                     beam_size="1",
                 )
             except Exception as e:
@@ -208,6 +216,96 @@ class Backend:
             tail = result["text"][-120:]
             if tail:
                 self.send("preview", {"text": _safe_str(tail)})
+
+    # ── Hold-to-speak: precise key-up detection ──────────────────────
+    # Electron's globalShortcut has no key-up event, so the UI used to stop a
+    # hold-to-speak recording 350 ms after the LAST OS key-repeat. That added
+    # 350 ms to every dictation – and if the key was held shorter than the OS
+    # repeat delay (~500 ms) the timer fired before the first repeat and cut
+    # the recording off mid-word. Here we poll the physical key state instead
+    # (GetAsyncKeyState, every 15 ms) and report the real release.
+    _VK = {
+        "ctrl": 0x11, "control": 0x11, "cmdorctrl": 0x11, "commandorcontrol": 0x11,
+        "shift": 0x10, "alt": 0x12, "altgr": 0x12, "menu": 0x12,
+        "win": (0x5B, 0x5C), "meta": (0x5B, 0x5C), "super": (0x5B, 0x5C),
+        "space": 0x20, "enter": 0x0D, "return": 0x0D, "tab": 0x09,
+        "escape": 0x1B, "esc": 0x1B, "backspace": 0x08, "delete": 0x2E,
+        "insert": 0x2D, "home": 0x24, "end": 0x23, "pageup": 0x21, "pagedown": 0x22,
+        "up": 0x26, "arrowup": 0x26, "down": 0x28, "arrowdown": 0x28,
+        "left": 0x25, "arrowleft": 0x25, "right": 0x27, "arrowright": 0x27,
+        "capslock": 0x14, "numlock": 0x90, "scrolllock": 0x91, "pause": 0x13,
+        "printscreen": 0x2C, "contextmenu": 0x5D,
+        # Named punctuation from the settings recorder → real characters,
+        # resolved against the active keyboard layout below.
+        "less": "<", "greater": ">", "plus": "+", "minus": "-",
+        "comma": ",", "period": ".",
+    }
+
+    @staticmethod
+    def _vk_for_char(ch: str):
+        """Layout-aware VK for one printable character (ä, <, #, …)."""
+        if not sys.platform.startswith("win"):
+            return None
+        r = ctypes.windll.user32.VkKeyScanW(ord(ch))
+        if r == -1 or (r & 0xFFFF) == 0xFFFF:
+            return None
+        return r & 0xFF
+
+    @classmethod
+    def _hotkey_vks(cls, hotkey: str):
+        """Map 'ctrl+shift+space' → virtual-key codes. [] if any token is
+        unknown (then the UI keeps its timer fallback)."""
+        vks = []
+        for tok in (hotkey or "").lower().split("+"):
+            tok = tok.strip()
+            if not tok:
+                continue
+            if tok in cls._VK:
+                v = cls._VK[tok]
+                if isinstance(v, str):
+                    v = cls._vk_for_char(v)
+                    if v is None:
+                        return []
+                vks.append(v)
+            elif len(tok) == 1 and tok.isascii() and tok.isalnum():
+                vks.append(ord(tok.upper()))
+            elif len(tok) == 1:
+                v = cls._vk_for_char(tok)
+                if v is None:
+                    return []
+                vks.append(v)
+            elif tok[:1] == "f" and tok[1:].isdigit() and 1 <= int(tok[1:]) <= 24:
+                vks.append(0x70 + int(tok[1:]) - 1)
+            else:
+                return []
+        return vks
+
+    def handle_watch_hotkey_release(self, hotkey: str):
+        vks = self._hotkey_vks(hotkey)
+        if not vks or not sys.platform.startswith("win"):
+            self.send("hotkey_watch", {"ok": False})
+            return
+        self.send("hotkey_watch", {"ok": True})
+        rec = self.recorder
+        user32 = ctypes.windll.user32
+
+        def down(v):
+            if isinstance(v, tuple):
+                return any(user32.GetAsyncKeyState(x) & 0x8000 for x in v)
+            return bool(user32.GetAsyncKeyState(v) & 0x8000)
+
+        def loop():
+            deadline = time.monotonic() + 600  # never outlive a sane dictation
+            while self._running and time.monotonic() < deadline:
+                # Recording ended some other way (toggle, error, new session)?
+                if rec is None or rec is not self.recorder or not rec.is_recording:
+                    return
+                if not any(down(v) for v in vks):
+                    self.send("hotkey_released")
+                    return
+                time.sleep(0.015)
+
+        threading.Thread(target=loop, daemon=True).start()
 
     def handle_stop_recording(self):
         """Stop recording and transcribe."""
@@ -424,6 +522,8 @@ class Backend:
                     self.handle_ollama_status()
                 elif cmd == "ollama_setup":
                     self.handle_ollama_setup()
+                elif cmd == "watch_hotkey_release":
+                    self.handle_watch_hotkey_release((msg.get("data") or {}).get("hotkey", ""))
                 elif cmd == "ping":
                     self.send("pong")
                 elif cmd == "quit":

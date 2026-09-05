@@ -150,6 +150,9 @@ let isTranscribing = false;
 let modelLoaded = false;
 let modelInfo = null;
 let pendingModelSwitch = null;   // model id the user just switched to → "ready" toast
+let bootReadyToastShown = false; // one "NoType ready" toast per launch
+let recordStopTs = 0;            // when the user released – for the insert-latency stat
+let holdReleaseViaBackend = true;// backend reports real key-up (optimistic; see 'hotkey_watch')
 let config = {};
 let clipboardHistory = [];  // Last 10 transcriptions
 const MAX_HISTORY = 10;
@@ -400,6 +403,16 @@ function handlePythonMessage(line) {
         // Heartbeat reply – nothing else to do, lastPongTs already updated above.
         break;
 
+      case 'hotkey_watch':
+        // Backend couldn't map the hotkey → keep the short timer fallback.
+        holdReleaseViaBackend = !!(data && data.ok);
+        break;
+
+      case 'hotkey_released':
+        if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+        if (isRecording && (config.mode || 'press_to_speak') === 'hold_to_speak') stopRecording();
+        break;
+
       case 'amplitude':
         if (overlayWin && !overlayWin.isDestroyed()) {
           overlayWin.webContents.send('amplitude', data.value);
@@ -433,10 +446,11 @@ function handlePythonMessage(line) {
           // Success popup is opt-in – the inserted text IS the feedback.
           // Warnings and errors always show.
           if (config.success_toast === true) {
+            // Human stats: how long from key-release to inserted text, and
+            // whether the AI cleanup ran. (beam/compute live in the log.)
             showToast(data.text, 'success', {
-              beam: data.beam,
-              compute_type: data.compute_type,
-              duration: data.duration,
+              latency_s: recordStopTs ? Math.max(0, (Date.now() - recordStopTs) / 1000) : null,
+              engine: data.cleanup || null,
             });
           }
         } else if (data && data.reason === 'too_short') {
@@ -468,7 +482,12 @@ function handlePythonMessage(line) {
         if (pendingModelSwitch) {
           showToast(trayT().modelReady.replace('{model}', modelLabel(data.model)), 'success');
           pendingModelSwitch = null;
+        } else if (!bootReadyToastShown) {
+          // Once per launch – answers "is it ready yet?" on slower machines.
+          const dev = String(data.device || '').split(' (')[0];
+          showToast(trayT().bootReady.replace('{model}', modelLabel(data.model)).replace('{device}', dev), 'success');
         }
+        bootReadyToastShown = true;
         if (settingsWin && !settingsWin.isDestroyed()) {
           settingsWin.webContents.send('model-ready', data);
         }
@@ -706,13 +725,21 @@ function registerHotkeys() {
         // Start recording on first fire, reset release-detection timer each fire.
         if (!isRecording && !isTranscribing) {
           startRecording();
+          // Precise release: the backend polls the hotkey's virtual keys
+          // (GetAsyncKeyState, ~15 ms) and sends 'hotkey_released'.
+          // globalShortcut has no key-up event – the old 350 ms-after-last-
+          // repeat timer added 350 ms to every dictation and, when the key
+          // was held shorter than the OS repeat delay (~500 ms), fired before
+          // the first repeat and cut the recording off mid-word.
+          if (isRecording) sendToPython('watch_hotkey_release', { hotkey: config.hotkey });
         }
-        // Reset the "release" timer – if no callback in 350ms, keys were released
+        // Timer is now only a fallback (hotkey not mappable by the backend):
+        // long enough that it can't fire before OS key-repeat kicks in.
         if (holdTimer) clearTimeout(holdTimer);
         holdTimer = setTimeout(() => {
           holdTimer = null;
           if (isRecording) stopRecording();
-        }, 350);
+        }, holdReleaseViaBackend ? 1200 : 350);
       } else {
         // Press-to-speak: toggle
         if (!isRecording) {
@@ -742,7 +769,7 @@ function startRecording() {
   if (isTranscribing) return;  // Don't start while transcribing
   if (isRecording) return;     // Already recording – ignore re-trigger
   if (!modelLoaded) {
-    showToast('Modell lädt noch – bitte kurz warten', 'warning');
+    showToast(trayT().modelNotReady, 'warning');
     return;
   }
   isRecording = true;
@@ -765,6 +792,7 @@ function stopRecording() {
   }
   // Unregister hotkeys during paste to prevent Ctrl+V from triggering
   globalShortcut.unregisterAll();
+  recordStopTs = Date.now();
   sendToPython('stop_recording');
   updateTray('processing');
 
@@ -774,7 +802,7 @@ function stopRecording() {
     if (isTranscribing) {
       console.error('Transcription timeout – forcing state reset');
       finishTranscription();
-      showToast('Transkription hängt – Status zurückgesetzt', 'error');
+      showToast(trayT().transcribeStuck, 'error');
     }
   }, 30_000);
 }
@@ -906,6 +934,9 @@ function trayT() {
     backendCrashed: 'Backend abgestürzt – starte neu',
     backendDead: 'Backend startet nicht – bitte NoType neu starten',
     modelLoading: 'Lade Modell {model} …', modelReady: '{model} ist bereit',
+    modelNotReady: 'Modell lädt noch – bitte kurz warten',
+    transcribeStuck: 'Transkription hängt – Status zurückgesetzt',
+    bootReady: 'NoType bereit · {model} · {device}',
     locale: 'de-DE',
   };
   const en = {
@@ -918,6 +949,9 @@ function trayT() {
     backendCrashed: 'Backend crashed – restarting',
     backendDead: 'Backend won\'t start – please restart NoType',
     modelLoading: 'Loading model {model} …', modelReady: '{model} is ready',
+    modelNotReady: 'Model still loading – one moment',
+    transcribeStuck: 'Transcription stalled – state reset',
+    bootReady: 'NoType ready · {model} · {device}',
     locale: 'en-US',
   };
   return config.app_language === 'en' ? en : de;
@@ -1157,7 +1191,7 @@ function showToast(text, type = 'success', stats = null) {
     );
     win.webContents.send('set-theme', currentTheme());
     win.showInactive();
-    win.webContents.send('toast-data', { text, type, stats });
+    win.webContents.send('toast-data', { text, type, stats, lang: config.app_language === 'en' ? 'en' : 'de' });
   });
 
   // Auto-close after 3 seconds
