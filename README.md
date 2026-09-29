@@ -82,9 +82,9 @@ Prefer not to hold a key? Switch to **press once to start, press again to stop**
 
 ### Pick your overlay
 
-<img src="docs/assets/overlay-styles.png" alt="The five overlay styles: AMOLED Bar, Dot Matrix, Island, Halo and Orb" width="100%" />
+<img src="docs/assets/overlay-styles.png" alt="The five overlay styles: AMOLED Bar, Dot Matrix, Island, Halo and Buddy" width="100%" />
 
-Five designs react to the actual sound of your voice: **AMOLED Bar**, **Dot Matrix**, **Island**, **Halo** and **Orb**. Each comes in seven accent colors, light and dark, with optional start and stop sounds. Place the overlay at the bottom, top or center of your screen. The settings show a live preview, so you can see it before you choose it.
+Five designs react to the actual sound of your voice: **AMOLED Bar**, **Dot Matrix**, **Island**, **Halo** and **Buddy**, a little LED face that talks along while you speak, thinks while NoType works and grins when your text is in. Each comes in seven accent colors, light and dark, with optional start and stop sounds. Place the overlay at the bottom, top or center of your screen. The settings show a live preview, so you can see it before you choose it.
 
 ### It learns your words
 

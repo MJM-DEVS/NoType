@@ -921,7 +921,7 @@
       'ovl.matrix': 'Dot Matrix', 'ovl.matrix.desc': 'LED-Punkte mit Pixel-Timer – im Nothing-Stil',
       'ovl.island': 'Island', 'ovl.island.desc': 'Kompakte Kapsel, die mit dem Text mitwächst',
       'ovl.halo': 'Halo', 'ovl.halo.desc': 'Leuchtender Farbrand, der auf deine Stimme reagiert',
-      'ovl.orb': 'Orb', 'ovl.orb.desc': 'Flüssiges Licht in einer Glaskugel',
+      'ovl.buddy': 'Buddy', 'ovl.buddy.desc': 'Pixel-Gesicht, das mitredet, mitdenkt und grinst',
       'acc.mint': 'Mint', 'acc.mono': 'Mono', 'acc.aurora': 'Aurora', 'acc.blue': 'Blau',
       'acc.violet': 'Violett', 'acc.red': 'Rot', 'acc.amber': 'Bernstein',
       'system.audio': 'Audio', 'system.mic': 'Mikrofon', 'system.mic.desc': 'Audioeingangsgerät auswählen',
@@ -1012,7 +1012,7 @@
       'ovl.matrix': 'Dot Matrix', 'ovl.matrix.desc': 'LED dots with a pixel timer – Nothing style',
       'ovl.island': 'Island', 'ovl.island.desc': 'Compact capsule that grows with your text',
       'ovl.halo': 'Halo', 'ovl.halo.desc': 'Glowing color rim that reacts to your voice',
-      'ovl.orb': 'Orb', 'ovl.orb.desc': 'Liquid light inside a glass sphere',
+      'ovl.buddy': 'Buddy', 'ovl.buddy.desc': 'Pixel face that talks along, thinks and grins',
       'acc.mint': 'Mint', 'acc.mono': 'Mono', 'acc.aurora': 'Aurora', 'acc.blue': 'Blue',
       'acc.violet': 'Violet', 'acc.red': 'Red', 'acc.amber': 'Amber',
       'system.audio': 'Audio', 'system.mic': 'Microphone', 'system.mic.desc': 'Select the audio input device',
@@ -1566,12 +1566,12 @@
   };
 
   // ── Overlay: style cards, accent swatches, live preview ──
-  const OVL_STYLES = ['amoled', 'matrix', 'island', 'halo', 'orb'];
+  const OVL_STYLES = ['amoled', 'matrix', 'island', 'halo', 'buddy'];
   // Retired style ids → successor (mirrors main.js LEGACY_OVERLAY_STYLES).
   const OVL_LEGACY = {
     amoled_top: 'amoled', amoled_bottom: 'amoled', amoled_center: 'amoled', amoled_card: 'amoled',
     wave: 'amoled', wave_classic: 'amoled', ribbon: 'amoled', particles: 'amoled', spectrum: 'amoled',
-    aurora: 'orb', pulse: 'orb',
+    aurora: 'halo', pulse: 'halo', orb: 'halo',
   };
   const OVL_LEGACY_POS = { amoled_top: 'top', amoled_bottom: 'bottom', amoled_center: 'center' };
   const OVL_ACCENTS = {
@@ -1625,13 +1625,19 @@
         <rect x="10" y="16" width="100" height="20" rx="10" fill="none" stroke="url(#tgHa)" stroke-width="3.5" opacity=".35"/>
         <rect x="10" y="16" width="100" height="20" rx="10" fill="#000" stroke="url(#tgHa)" stroke-width="1.3"/>
         <path d="M40 26h40" stroke="rgba(255,255,255,.75)" stroke-width="2.2" stroke-linecap="round"/></svg>`,
-    orb: `<svg viewBox="0 0 120 52"><defs>
-        <radialGradient id="tgOrb" cx=".4" cy=".35" r=".75"><stop offset="0" style="stop-color:var(--g2)"/>
-        <stop offset=".55" style="stop-color:var(--g3)"/><stop offset="1" stop-color="#000"/></radialGradient></defs>
-        <circle cx="60" cy="20" r="14" style="fill:var(--g2)" opacity=".16"/>
-        <circle cx="60" cy="20" r="10" fill="url(#tgOrb)" ${RIM}/>
-        <rect x="38" y="33" width="44" height="11" rx="5.5" fill="#000" ${RIM}/>
-        <path d="M45 38.5h30" stroke="rgba(255,255,255,.75)" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+    buddy: (() => {
+      // 7 × 7 mini face (1 = lit, 2 = accent): eyes and a smile
+      const face = ['0000000', '0010100', '0010100', '0000000', '0200020', '0022200', '0000000'];
+      let d = '';
+      face.forEach((row, r) => [...row].forEach((v, c) => {
+        const fill = v === '2' ? 'var(--g1)' : v === '1' ? '#fff' : 'rgba(255,255,255,.12)';
+        d += `<circle cx="${11.4 + c * 3.2}" cy="${16.4 + r * 3.2}" r="${v !== '0' ? 1 : 0.65}" style="fill:${fill}"/>`;
+      }));
+      return `<svg viewBox="0 0 120 52"><rect x="6" y="11" width="30" height="30" rx="9" fill="#000" ${RIM}/>${d}
+        <path d="M54 16h49a10 10 0 0 1 0 20h-49a10 10 0 0 1-10-7.2l-3.2-2.8 3.2-2.8a10 10 0 0 1 10-7.2z" fill="#000" ${RIM}/>
+        <path d="M55 26h33" stroke="rgba(255,255,255,.75)" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M95 26h8" stroke="rgba(255,255,255,.35)" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+    })(),
   };
   let ovlStyle = 'amoled', ovlAccent = 'mint';
 

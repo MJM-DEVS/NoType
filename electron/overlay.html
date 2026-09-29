@@ -11,7 +11,7 @@
        matrix  Dot Matrix   LED dot grid: dot-font timer + spectrum
        island  Island       spring-morphing capsule that grows with the text
        halo    Halo         capsule with a luminous, voice-driven color rim
-       orb     Orb          compact liquid-light orb + caption
+       buddy   Buddy        LED pixel face that talks along + speech bubble
      Everything that moves is drawn on small canvases or changes opacity/
      transform only: no CSS blur filters, no backdrop-filter, no per-frame
      box-shadow (transparent always-on-top windows make those expensive and
@@ -42,7 +42,7 @@
   body[data-style="matrix"] .s-matrix,
   body[data-style="island"] .s-island,
   body[data-style="halo"]   .s-halo,
-  body[data-style="orb"]    .s-orb { display: flex; }
+  body[data-style="buddy"]  .s-buddy { display: flex; }
 
   /* Every shape enters with a short spring and leaves with a quick fade;
      main.js sends 'overlay-leaving' ~220 ms before it hides the window. */
@@ -182,19 +182,31 @@
   .ha-body .txt { width: 100%; text-align: center; font-size: 15px; }
   .ha-body .txt.clip { text-align: left; }
 
-  /* ═══ 5. ORB  (window 540×172) ══════════════════════════════════ */
-  .s-orb { flex-direction: column; justify-content: center; padding: 6px 0; }
-  body[data-pos="top"]    .s-orb { justify-content: flex-start; }
-  body[data-pos="bottom"] .s-orb { flex-direction: column-reverse; justify-content: flex-start; }
-  .orb-cv { width: 124px; height: 124px; flex: 0 0 auto; animation: popIn 0.5s cubic-bezier(0.2, 1.2, 0.35, 1) both; }
-  .orb-cap {
-    height: 34px; max-width: 500px; margin: -16px 0 0; border-radius: 17px;
-    background: #000; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
-    display: flex; align-items: center; padding: 0 16px;
-    animation: fadeUp 0.36s 0.06s cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* ═══ 5. BUDDY  (window 652×108) ═════════════════════════════════
+     Same LED dots as the Dot Matrix, arranged as a little face; the live
+     text sits in a speech bubble whose tail points at it. */
+  .s-buddy { gap: 14px; }
+  .bd-face {
+    width: 90px; height: 80px; border-radius: 26px; flex: 0 0 auto;
+    background: #000; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.085);
+    display: flex; align-items: center; justify-content: center;
+    animation: popIn 0.46s cubic-bezier(0.2, 1.25, 0.35, 1) both;
   }
-  body[data-pos="bottom"] .orb-cap { margin: 0 0 -16px; }
-  .orb-cap .txt { max-width: 468px; font-size: 13.5px; }
+  .bd-cv { width: 72px; height: 61px; }
+  .bd-bubble {
+    position: relative; width: 500px; height: 50px; border-radius: 25px;
+    background: #000; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.085);
+    display: flex; align-items: center; gap: 14px; padding: 0 20px 0 22px;
+    animation: fadeUp 0.36s 0.08s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  /* tail: a rotated square whose two outer edges carry the hairline */
+  .bd-bubble::before {
+    content: ''; position: absolute; left: -6px; top: 50%; width: 13px; height: 13px;
+    background: #000; transform: translateY(-50%) rotate(45deg);
+    box-shadow: inset 1px -1px 0 rgba(255, 255, 255, 0.085);
+  }
+  .bd-bubble .txt { flex: 1 1 auto; font-size: 14.5px; }
+  .bd-bubble .time { flex: 0 0 auto; }
 </style>
 </head>
 <body data-style="amoled" data-accent="mint" data-pos="bottom" data-state="idle">
@@ -239,10 +251,13 @@
     </div>
   </section>
 
-  <!-- 5. ORB -->
-  <section class="style s-orb">
-    <canvas class="orb-cv shape" id="orbCv"></canvas>
-    <div class="orb-cap shape"><div class="txt" data-line="1"><span class="shimmer">Ich höre zu…</span></div></div>
+  <!-- 5. BUDDY -->
+  <section class="style s-buddy">
+    <div class="bd-face shape"><canvas class="bd-cv" id="bdFace"></canvas></div>
+    <div class="bd-bubble shape">
+      <div class="txt" data-line="1"><span class="shimmer">Ich höre zu…</span></div>
+      <div class="time" data-timer="mss">0:00</div>
+    </div>
   </section>
 
 <script>
@@ -253,11 +268,11 @@
 // overlay runs a self-contained loop with synthetic speech.
 const DEMO = !window.notype || new URLSearchParams(location.search).has('demo');
 const NB = 20;   // spectrum bands (matches audio_recorder.N_BANDS)
-const STYLES = ['amoled', 'matrix', 'island', 'halo', 'orb'];
+const STYLES = ['amoled', 'matrix', 'island', 'halo', 'buddy'];
 // Ids of styles that no longer exist → their closest successor.
 const LEGACY_STYLES = {
   wave: 'amoled', wave_classic: 'amoled', ribbon: 'amoled', particles: 'amoled', spectrum: 'amoled',
-  aurora: 'orb', pulse: 'orb',
+  aurora: 'halo', pulse: 'halo', orb: 'halo',
   amoled_card: 'amoled', amoled_top: 'amoled', amoled_bottom: 'amoled', amoled_center: 'amoled',
 };
 const ACCENTS = {
@@ -604,61 +619,101 @@ function renderHalo(dt, t) {
   ctx.globalAlpha = 1;
 }
 
-// ═══ 5. ORB ═════════════════════════════════════════════════════
-// Black glass sphere; three coloured light blobs orbit inside and mix
-// additively – louder voice = bigger, faster, brighter.
-const ORB = { a: [0, 2.1, 4.2], spd: [0.9, -1.25, 1.6] };
-function renderOrb(dt, t) {
-  const [ctx, W, H] = prep($('orbCv'));
-  const acc = ACC(), pal = acc.ring, e = energy(), ps = mix.processing, ds = mix.done;
-  const cx = W / 2, cy = H / 2, R = 30 + e * 3.5;
-  const flash = S.state === 'done' ? Math.max(0, 1 - sinceState() * 1.4) : 0;
-  const I = (0.45 + 0.8 * e) * (1 - 0.5 * ps) + flash * 0.7;
-  // outer glow
-  const og = ctx.createRadialGradient(cx, cy, R * 0.7, cx, cy, Math.min(W / 2, R + 28));
-  og.addColorStop(0, `rgba(${acc.glow},${(0.34 * Math.min(1.3, I)).toFixed(3)})`);
-  og.addColorStop(1, `rgba(${acc.glow},0)`);
-  ctx.fillStyle = og; ctx.fillRect(0, 0, W, H);
-  // glass body
-  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
-  ctx.fillStyle = '#000'; ctx.fill();
-  ctx.save(); ctx.clip();
-  // faint base tint so the glass between the lights isn't dead black
-  const base = ctx.createRadialGradient(cx, cy + R * 0.35, 0, cx, cy, R);
-  base.addColorStop(0, pal[2] + '40'); base.addColorStop(1, pal[2] + '00');
-  ctx.fillStyle = base; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
-  ctx.globalCompositeOperation = 'lighter';
-  for (let k = 0; k < 3; k++) {
-    ORB.a[k] += dt * ORB.spd[k] * (0.55 + e * 2.0) * (1 - ps * 0.6);
-    const orbit = R * (0.34 + 0.16 * e + 0.08 * Math.sin(t * 1.3 + k * 2)) * (1 - ds * 0.7);
-    const bx = cx + Math.cos(ORB.a[k]) * orbit, by = cy + Math.sin(ORB.a[k]) * orbit * 0.85;
-    const br = R * (0.5 + 0.4 * Math.pow(band(0.1 + k * 0.3), 0.8) + 0.05 * Math.sin(t * 2.1 + k));
-    const bg = ctx.createRadialGradient(bx, by, 0, bx, by, br);
-    const col = pal[k % pal.length];
-    bg.addColorStop(0, col); bg.addColorStop(0.35, col + '99'); bg.addColorStop(1, col + '00');
-    ctx.globalAlpha = Math.min(1, 0.45 + 0.5 * I) * (1 - ps * 0.45);
-    ctx.fillStyle = bg; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
-  }
-  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
-  // depth: dark rim vignette + specular highlight
-  const vg = ctx.createRadialGradient(cx, cy, R * 0.45, cx, cy, R);
-  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.62)');
-  ctx.fillStyle = vg; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
-  const sg = ctx.createRadialGradient(cx - R * 0.34, cy - R * 0.46, 0, cx - R * 0.34, cy - R * 0.46, R * 0.5);
-  sg.addColorStop(0, 'rgba(255,255,255,0.32)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = sg; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
-  ctx.restore();
-  ctx.beginPath(); ctx.arc(cx, cy, R - 0.5, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(255,255,255,0.14)'; ctx.lineWidth = 1; ctx.stroke();
-  if (ps > 0.01) {                                            // processing: orbiting arc
-    ctx.beginPath(); ctx.arc(cx, cy, R + 4, t * 5, t * 5 + 1.1);
-    ctx.strokeStyle = acc.hi; ctx.globalAlpha = ps * 0.9; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
-    ctx.globalAlpha = 1;
-  }
-  if (ds > 0.01) drawCheck(ctx, cx, cy, 10, doneProgress(), '#ffffff', 2.8);
+// ═══ 5. BUDDY ════════════════════════════════════════════════════
+// 13 × 11 LED face at the Dot Matrix pitch. The mouth opens with your
+// voice, the eyes blink and now and then glance at the bubble; while
+// processing it looks up and "thinks" (bouncing dots), when done it grins.
+const BD = { C: 13, R: 11, P: 5.5, env: 0, peak: 0, mouth: 0, mouthAt: 0, talkUntil: 0, blinkAt: 0, glanceAt: 0, glanceEnd: 0 };
+// Mouth frames for rows 6-9, columns 3-9: 1 = lip (white), 2 = inside (accent).
+const BD_MOUTH = [
+  ['1000001', '0111110', '0000000', '0000000'],   // resting smile
+  ['0000000', '0111110', '0000000', '0000000'],   // closed, mid-sentence
+  ['0011100', '0122210', '0011100', '0000000'],   // small "o"
+  ['0111110', '1222221', '0122210', '0011100'],   // open
+  ['0111110', '1222221', '1222221', '0111110'],   // wide open
+];
+const BD_GRIN = ['1111111', '1222221', '0122210', '0011100'];
+const BD_HAPPY_EYE = ['010', '101'];
+const bdLit = new Float32Array(BD.C * BD.R);
+const bdAcc = new Uint8Array(BD.C * BD.R);
+
+function bdDot(c, r, v, acc) {
+  if (c < 0 || r < 0 || c >= BD.C || r >= BD.R) return;
+  const i = r * BD.C + c;
+  if (v >= bdLit[i]) { bdLit[i] = v; bdAcc[i] = acc ? 1 : 0; }
+}
+function bdGlyph(rows, c0, r0, v) {
+  rows.forEach((row, r) => {
+    for (let k = 0; k < row.length; k++) {
+      if (row[k] !== '0') bdDot(c0 + k, r0 + r, row[k] === '2' ? v * 0.55 : v, row[k] === '2');
+    }
+  });
 }
 
-const RENDER = { amoled: renderAmoled, matrix: renderMatrix, island: renderIsland, halo: renderHalo, orb: renderOrb };
+function renderBuddy(dt, t) {
+  const [ctx, W, H] = prep($('bdFace'));
+  const { C, R, P } = BD, ms = now();
+  bdLit.fill(0); bdAcc.fill(0);
+  if (!BD.blinkAt || ms > BD.blinkAt + 130) BD.blinkAt = ms + 2200 + Math.random() * 3400;
+  if (ms > BD.glanceEnd) { BD.glanceAt = ms + 3000 + Math.random() * 4000; BD.glanceEnd = BD.glanceAt + 900; }
+  const blink = ms >= BD.blinkAt;
+
+  if (S.state === 'done') {
+    const p = doneProgress();
+    for (const c0 of [2, 8]) bdGlyph(BD_HAPPY_EYE, c0, 2, p);
+    bdGlyph(BD_GRIN, 3, 6, p);
+    for (const c of [1, 11]) bdDot(c, 5, 0.7 * p, true);          // blush
+  } else if (S.state === 'processing') {
+    // looking up and to the side, thinking – three dots hop in turn
+    for (const c0 of [4, 9]) for (let r = 1; r <= 3; r++) {
+      if (!blink || r === 2) { bdDot(c0, r, 0.92); bdDot(c0 + 1, r, 0.92); }
+    }
+    for (let k = 0; k < 3; k++) {
+      const hop = Math.max(0, Math.sin(t * 7 - k * 0.9));
+      bdDot(4 + k * 2, hop > 0.55 ? 6 : 7, 0.5 + 0.5 * hop, true);
+    }
+  } else {
+    const glance = ms >= BD.glanceAt && ms < BD.glanceEnd ? 1 : 0;
+    for (const c0 of [3, 8]) for (let r = 2; r <= 4; r++) {
+      if (!blink || r === 3) { bdDot(c0 + glance, r, 0.92); bdDot(c0 + 1 + glance, r, 0.92); }
+    }
+    if (S.command) for (const c0 of [3, 8]) { bdDot(c0 + glance, 0, 0.92); bdDot(c0 + 1 + glance, 0, 0.92); }
+    // Lip sync: a fast envelope of the raw input with auto-gain, so the
+    // mouth opens and closes per syllable at any mic level.
+    let raw = levelIn;
+    if (haveBands) { raw = 0; for (let i = 2; i < 14; i++) raw += bandsIn[i]; raw /= 12; }
+    if (S.state !== 'listening') raw = 0;
+    BD.env += (raw - BD.env) * (1 - Math.exp(-dt / (raw > BD.env ? 0.03 : 0.09)));
+    BD.peak = Math.max(BD.env, BD.peak * Math.exp(-dt / 1.5), 0.08);
+    const o = BD.env / BD.peak;
+    if (o > 0.3) BD.talkUntil = ms + 450;
+    const m = o > 0.82 ? 4 : o > 0.58 ? 3 : o > 0.32 ? 2 : ms < BD.talkUntil ? 1 : 0;
+    if (m !== BD.mouth && ms - BD.mouthAt > 70) { BD.mouth = m; BD.mouthAt = ms; }
+    bdGlyph(BD_MOUTH[BD.mouth], 3, 6, 0.92);
+  }
+
+  // boot-up: the face switches on column by column, like the Dot Matrix
+  const boot = S.state === 'listening' ? clamp01((ms - S.recAt) / 360) : 1;
+  const acc = ACC().bar[0];
+  for (let r = 0; r < R; r++) {
+    for (let c = 0; c < C; c++) {
+      if (c / C > boot) continue;
+      const idx = r * C + c, v = bdLit[idx];
+      ctx.beginPath();
+      ctx.arc((c + 0.5) * P, (r + 0.5) * (H / R), v > 0.05 ? 1.45 : 1.2, 0, Math.PI * 2);
+      if (v > 0.05) {
+        ctx.fillStyle = bdAcc[idx] ? acc : '#ffffff';
+        ctx.globalAlpha = 0.25 + 0.75 * v;
+      } else {
+        ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.1;
+      }
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+const RENDER = { amoled: renderAmoled, matrix: renderMatrix, island: renderIsland, halo: renderHalo, buddy: renderBuddy };
 
 // ── Text + timer ──────────────────────────────────────────────────
 // kind: 'live' (transcript), 'final' (inserted text), 'status' (placeholder)

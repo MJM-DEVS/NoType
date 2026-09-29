@@ -59,7 +59,7 @@ DEFAULT_CONFIG = {
     "autostart": False,
     "auto_language_detect": True,
     "overlay_enabled": True,
-    "overlay_style": "amoled",       # amoled | matrix | island | halo | orb (retired ids are migrated by the Electron app)
+    "overlay_style": "amoled",       # amoled | matrix | island | halo | buddy (retired ids are migrated by the Electron app)
     "overlay_position": "bottom",    # bottom | top | center – applies to every style
     "overlay_accent": "mint",        # mint | mono | aurora | blue | violet | red | amber
     "overlay_sounds": True,          # start/stop chimes

@@ -595,22 +595,22 @@ function handlePythonMessage(line) {
 // computed per-display so multi-monitor setups work.
 // Every style can sit at the bottom, top or center of the screen
 // (config.overlay_position). `bottom`/`top` are the per-style margins from
-// that screen edge – orbs float a bit higher than bars so they don't sit on
-// the taskbar. All styles render the live transcript themselves; each window
-// carries transparent padding so glows fade out inside it instead of being
-// clipped into a hard rectangle (sizes match the fixed layouts in overlay.html).
+// that screen edge. All styles render the live transcript themselves; each
+// window carries transparent padding so glows fade out inside it instead of
+// being clipped into a hard rectangle (sizes match the fixed layouts in
+// overlay.html).
 const OVERLAY_STYLES = {
   amoled: { w: 708, h: 92,  bottom: 14, top: 2 },   // pill 680×64
   matrix: { w: 708, h: 104, bottom: 14, top: 2 },   // card 680×76
   island: { w: 648, h: 116, bottom: 6,  top: 0 },   // morphing shape, ≤600×72
   halo:   { w: 616, h: 118, bottom: 0,  top: 0 },   // capsule 560×58 + rim glow
-  orb:    { w: 540, h: 172, bottom: 16, top: 0 },   // orb 110 + caption
+  buddy:  { w: 652, h: 108, bottom: 10, top: 0 },   // face 90×80 + bubble 500×50
 };
 const DEFAULT_OVERLAY_STYLE = 'amoled';
 const OVERLAY_POSITIONS = ['bottom', 'top', 'center'];
 const OVERLAY_ACCENTS = ['mint', 'mono', 'aurora', 'blue', 'violet', 'red', 'amber'];
 // Retired style ids → [successor, position]. Pre-2.6 the AMOLED placement was
-// baked into the id; 2.7 replaced the classic visualizers.
+// baked into the id; 2.7 replaced the classic visualizers (and dropped the Orb).
 const LEGACY_OVERLAY_STYLES = {
   amoled_top:    ['amoled', 'top'],
   amoled_bottom: ['amoled', 'bottom'],
@@ -621,8 +621,9 @@ const LEGACY_OVERLAY_STYLES = {
   ribbon:        ['amoled', null],
   particles:     ['amoled', null],
   spectrum:      ['amoled', null],
-  aurora:        ['orb', null],
-  pulse:         ['orb', null],
+  aurora:        ['halo', null],
+  pulse:         ['halo', null],
+  orb:           ['halo', null],
 };
 
 // Map legacy style ids onto style + position and fill defaults.
