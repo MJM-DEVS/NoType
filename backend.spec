@@ -39,6 +39,14 @@ if not cuda_binaries:
         "(the GPU path needs them bundled, see comment in backend.spec)"
     )
 
+# UI Automation (correction learning): comtypes generates its COM wrappers
+# on first use – generate them now so they're bundled instead of written at
+# runtime into a frozen app.
+import comtypes.client
+from PyInstaller.utils.hooks import collect_submodules
+comtypes.client.GetModule('UIAutomationCore.dll')
+comtypes_hidden = collect_submodules('comtypes.gen')
+
 block_cipher = None
 
 a = Analysis(
@@ -50,7 +58,7 @@ a = Analysis(
         'sounddevice',
         'soundfile',
         'numpy',
-    ] + fw_hidden + ct_hidden,
+    ] + fw_hidden + ct_hidden + comtypes_hidden,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

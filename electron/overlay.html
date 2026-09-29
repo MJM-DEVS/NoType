@@ -1,1000 +1,892 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NoType Overlay</title>
 <style>
+  /* ═══════════════════════════════════════════════════════════════
+     NoType overlay – five OLED styles on pure black.
+       amoled  AMOLED Bar   pill: mirrored spectrum + live text + timer
+       matrix  Dot Matrix   LED dot grid: dot-font timer + spectrum
+       island  Island       spring-morphing capsule that grows with the text
+       halo    Halo         capsule with a luminous, voice-driven color rim
+       orb     Orb          compact liquid-light orb + caption
+     Everything that moves is drawn on small canvases or changes opacity/
+     transform only: no CSS blur filters, no backdrop-filter, no per-frame
+     box-shadow (transparent always-on-top windows make those expensive and
+     have provoked driver TDRs before). Window sizes live in main.js
+     (OVERLAY_STYLES) and match the fixed sizes below.
+     ═══════════════════════════════════════════════════════════════ */
   * { margin: 0; padding: 0; box-sizing: border-box; }
-
+  html, body { height: 100%; }
   body {
     background: transparent;
     overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    color: #fff;
+    font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     user-select: none;
+    /* accent tokens (mirrored in ACCENTS for the canvases) */
+    --a1: #00d4aa; --a2: #2ee9c6; --a3: #4dd0ff; --glow: 0, 212, 170; --rec: #00d4aa;
   }
+  body[data-accent="mono"]   { --a1: #ffffff; --a2: #f2f2f2; --a3: #d4d4d4; --glow: 255, 255, 255; --rec: #ff3b30; }
+  body[data-accent="aurora"] { --a1: #ff7a45; --a2: #ff4fb4; --a3: #8f7bff; --glow: 170, 120, 255; --rec: #ff4fb4; }
+  body[data-accent="blue"]   { --a1: #0a84ff; --a2: #409cff; --a3: #64d2ff; --glow: 10, 132, 255; --rec: #0a84ff; }
+  body[data-accent="violet"] { --a1: #bf5af2; --a2: #a472ff; --a3: #7d7aff; --glow: 191, 90, 242; --rec: #bf5af2; }
+  body[data-accent="red"]    { --a1: #ff453a; --a2: #ff5e6c; --a3: #ff8a80; --glow: 255, 69, 58; --rec: #ff453a; }
+  body[data-accent="amber"]  { --a1: #ffb340; --a2: #ffa21a; --a3: #ffd60a; --glow: 255, 170, 40; --rec: #ff9f0a; }
 
-  /* ── Live transcript caption (sits above the animation) ── */
-  body.with-preview { padding-top: 30px; }
-  #livePreview {
-    position: fixed; top: 3px; left: 50%; transform: translateX(-50%);
-    max-width: 94%; padding: 4px 14px; border-radius: 12px;
-    background: rgba(20, 22, 28, 0.72); color: rgba(255, 255, 255, 0.96);
-    font-size: 12.5px; line-height: 1.3;
-    white-space: nowrap; overflow: hidden;
-    /* rtl container + ltr content: overflow clips the OLD text on the left,
-       the newest words on the right always stay visible */
-    direction: rtl;
-    opacity: 0; transition: opacity 0.25s ease;
-    pointer-events: none;
-    backdrop-filter: blur(6px);
-  }
-  #livePreview > span { direction: ltr; unicode-bidi: embed; }
-  #livePreview.visible { opacity: 1; }
+  .style { display: none; position: fixed; inset: 0; align-items: center; justify-content: center; }
+  body[data-style="amoled"] .s-amoled,
+  body[data-style="matrix"] .s-matrix,
+  body[data-style="island"] .s-island,
+  body[data-style="halo"]   .s-halo,
+  body[data-style="orb"]    .s-orb { display: flex; }
 
-  /* Show only the active style */
-  .style { display: none; }
-  body[data-style="wave_classic"] .style-wave-classic,
-  body[data-style="wave"]         .style-wave,
-  body[data-style="aurora"]       .style-aurora,
-  body[data-style="particles"]    .style-particles,
-  body[data-style="pulse"]        .style-pulse,
-  body[data-style="ribbon"]       .style-ribbon,
-  body[data-style="spectrum"]     .style-spectrum { display: flex; }
-  body[data-style="amoled"]      .style-amoled-bar,
-  body[data-style="amoled_card"] .style-amoled-center { display: flex; }
-
-  /* Exit: main.js sends 'overlay-leaving' ~170 ms before hiding the window. */
-  body.leaving .style, body.leaving #livePreview {
-    opacity: 0 !important;
-    transition: opacity 0.15s ease;
+  /* Every shape enters with a short spring and leaves with a quick fade;
+     main.js sends 'overlay-leaving' ~220 ms before it hides the window. */
+  .shape { will-change: transform, opacity; }
+  body.leaving .shape { animation: leaveOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards !important; }
+  @keyframes leaveOut { to { opacity: 0; transform: scale(0.94); } }
+  /* On the section, not the shape – swapping the shape's animation would
+     replay its entry once the nudge ends. */
+  body.busy .style { animation: nudge 0.3s ease; }
+  @keyframes nudge {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); } 55% { transform: translateX(4px); } 80% { transform: translateX(-2px); }
   }
-
-  /* ═══════════════════════════════════════════════════════════════
-     AMOLED family – pure black, brand-mint synth, transcript inside.
-     The external caption is redundant here.
-     ═══════════════════════════════════════════════════════════════ */
-  body[data-style^="amoled"] #livePreview { display: none !important; }
-  body[data-style^="amoled"] { padding-top: 0 !important; }
-
-  .style-amoled-bar, .style-amoled-center {
-    width: 100%; height: 100%;
-    align-items: center; justify-content: center;
-    animation: fadeUp 0.32s cubic-bezier(0.16, 1, 0.3, 1);
-    /* Breathing room so the outer glow fades out INSIDE the transparent
-       window – a glow that reaches the window edge gets clipped into a
-       visible rectangular gradient. Keep padding > blur radius. */
-    padding: 14px; box-sizing: border-box;
+  @keyframes springIn {
+    0%   { opacity: 0; transform: scale(0.82, 0.62); }
+    55%  { opacity: 1; }
+    100% { opacity: 1; transform: scale(1, 1); }
   }
-  .ampill {
-    width: 100%; height: 100%;
-    background: #000;
-    border: 1px solid rgba(0, 212, 170, 0.32);
-    border-radius: 999px;
-    box-shadow: 0 0 12px rgba(0, 212, 170, 0.16),
-                inset 0 0 20px rgba(0, 212, 170, 0.05);
-    display: flex; align-items: center; gap: 16px;
-    padding: 0 24px 0 16px; box-sizing: border-box;
-    overflow: hidden;
+  @keyframes popIn {
+    0%   { opacity: 0; transform: scale(0.55); }
+    60%  { opacity: 1; transform: scale(1.04); }
+    100% { opacity: 1; transform: scale(1); }
   }
-  .ampill canvas { width: 150px; height: 38px; flex: 0 0 auto; }
-  .amtext {
-    flex: 1; min-width: 0;
-    color: #eafff9; font-size: 13.5px; line-height: 1.3;
-    white-space: nowrap; overflow: hidden;
-    /* rtl container + ltr span: clip OLD words left, newest stay visible */
-    direction: rtl; text-align: left;
-  }
-  .amtext > span { direction: ltr; unicode-bidi: embed; }
-  .amtext > span.dim { color: rgba(0, 212, 170, 0.55); }
-  /* Live preview off → pill/card shows only the synth */
-  body:not(.with-preview) .amtext { display: none; }
-
-  /* ── Processing → done: the overlay stays up while the final pass runs
-     (instead of vanishing on key-release), shows a sweep on the pill and
-     flashes mint once the text is inserted. ── */
-  .ampill, .amcard { position: relative; }
-  .ampill::after, .amcard::after {
-    content: ''; position: absolute; left: 18%; right: 18%; bottom: 0; height: 2px;
-    border-radius: 2px; opacity: 0; pointer-events: none;
-    background: linear-gradient(90deg, rgba(0,212,170,0) 0%, #00d4aa 50%, rgba(0,212,170,0) 100%);
-    transform: translateX(-70%);
-  }
-  body.processing .ampill::after, body.processing .amcard::after {
-    opacity: 1; animation: amSweep 0.9s linear infinite;
-  }
-  @keyframes amSweep { from { transform: translateX(-70%); } to { transform: translateX(70%); } }
-  body.processing .amtext > span { color: rgba(234, 255, 249, 0.55); }
-  body.processing #livePreview { opacity: 0.55; }
-  body.done .ampill, body.done .amcard {
-    border-color: rgba(0, 212, 170, 0.95);
-    box-shadow: 0 0 20px rgba(0, 212, 170, 0.5), inset 0 0 20px rgba(0, 212, 170, 0.08);
-    transition: border-color 0.12s, box-shadow 0.12s;
-  }
-  body.done .amtext > span { color: #eafff9; }
-  body.done #livePreview { box-shadow: 0 0 0 1px rgba(0, 212, 170, 0.85), 0 0 14px rgba(0, 212, 170, 0.35); opacity: 1; }
-  /* Hotkey pressed while still processing: short nudge, plus a low blip. */
-  body.busy .ampill, body.busy .amcard, body.busy #livePreview { animation: amBusy 0.28s ease; }
-  @keyframes amBusy { 0%, 100% { transform: translateX(0); } 30% { transform: translateX(-4px); } 60% { transform: translateX(4px); } }
-  body.busy #livePreview { animation-name: amBusyCaption; }
-  @keyframes amBusyCaption { 0%, 100% { transform: translateX(-50%); } 30% { transform: translateX(calc(-50% - 4px)); } 60% { transform: translateX(calc(-50% + 4px)); } }
-
-  .amcard {
-    width: 100%; height: 100%;
-    background: #000;
-    border: 1px solid rgba(0, 212, 170, 0.32);
-    border-radius: 28px;
-    box-shadow: 0 0 12px rgba(0, 212, 170, 0.2),
-                inset 0 0 28px rgba(0, 212, 170, 0.04);
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 18px;
-    padding: 24px 28px; box-sizing: border-box; overflow: hidden;
-  }
-  .amcard canvas { width: 100%; height: 92px; flex: 0 0 auto; }
-  .amcard .amtext { flex: 0 0 auto; width: 100%; text-align: center; font-size: 14.5px; }
-
-  /* ═══════════════════════════════════════════════════════════════
-     1. WAVE CLASSIC  (600×48 – original ethereal sine)
-     ═══════════════════════════════════════════════════════════════ */
-  .style-wave-classic {
-    width: 100%; height: 100%;
-    align-items: center; justify-content: center;
-    animation: fadeUp 0.4s ease-out;
-  }
-  .style-wave-classic svg { width: 100%; height: 100%; overflow: visible; }
-  .style-wave-classic path {
-    fill: none;
-    stroke: url(#wcGrad);
-    stroke-width: 2;
-    stroke-linecap: round;
-    filter: drop-shadow(0 0 4px rgba(0,212,170,0.55)) drop-shadow(0 0 12px rgba(0,212,170,0.25));
-  }
-
-  /* ═══════════════════════════════════════════════════════════════
-     2. WAVE  (600×72 – multilayer waves, Apple Siri vibe)
-     ═══════════════════════════════════════════════════════════════ */
-  .style-wave {
-    width: 100%; height: 100%;
-    align-items: center; justify-content: center;
-    animation: fadeUp 0.4s ease-out;
-  }
-  .style-wave svg { width: 100%; height: 100%; overflow: visible; }
-  .style-wave .layer1 { fill: none; stroke: url(#wGradA); stroke-width: 3.5; stroke-linecap: round;
-                        filter: drop-shadow(0 0 10px rgba(0,212,170,0.85))
-                                drop-shadow(0 0 20px rgba(0,212,170,0.4)); opacity: 1; }
-  .style-wave .layer2 { fill: none; stroke: url(#wGradB); stroke-width: 2.2; stroke-linecap: round;
-                        filter: drop-shadow(0 0 8px rgba(110,231,196,0.7)); opacity: 0.85; }
-  .style-wave .layer3 { fill: none; stroke: url(#wGradC); stroke-width: 1.5; stroke-linecap: round;
-                        filter: drop-shadow(0 0 6px rgba(61,199,255,0.5)); opacity: 0.65; }
-
-  /* ═══════════════════════════════════════════════════════════════
-     3. AURORA  (168×168 – compact swirling orb, cohesive cool palette)
-        Smaller and calmer than before; a brand-aligned teal→aqua→sky
-        gradient instead of a full rainbow. Clipped to a circle so the
-        blurred blobs never show square corners.
-     ═══════════════════════════════════════════════════════════════ */
-  .style-aurora {
-    position: relative;
-    width: 168px; height: 168px;
-    align-items: center; justify-content: center;
-    animation: fadeScale 0.45s cubic-bezier(0.16, 1, 0.3, 1);
-    clip-path: circle(50% at 50% 50%);
-    -webkit-clip-path: circle(50% at 50% 50%);
-  }
-  .style-aurora .aurora-blob {
-    position: absolute; inset: 13px;
-    border-radius: 50%;
-    background: conic-gradient(from 0deg,
-      #00d4aa 0%, #19c6c8 30%, #38b0e8 52%, #6ee7c4 74%, #00d4aa 100%);
-    filter: blur(13px);
-    will-change: transform;
-  }
-  .style-aurora .aurora-blob2 {
-    position: absolute; inset: 32px;
-    border-radius: 50%;
-    background: conic-gradient(from 180deg,
-      #b7f5e3 0%, #6ee7c4 35%, #38d0e0 70%, #b7f5e3 100%);
-    filter: blur(10px);
-    opacity: 0.55;
-    will-change: transform;
-  }
-  /* Pre-blurred glow behind the core – scaled/faded via transform in JS. */
-  .style-aurora .aurora-glow {
-    position: absolute; inset: 56px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(255,255,255,0.9) 0%, rgba(0,212,170,0.35) 45%, rgba(0,212,170,0) 72%);
-    filter: blur(5px);
-    z-index: 1;
-    will-change: transform, opacity;
-  }
-  .style-aurora .aurora-core {
-    position: relative; z-index: 2;
-    width: 20px; height: 20px;
-    border-radius: 50%;
-    background: radial-gradient(circle, #ffffff 0%, rgba(255,255,255,0.5) 55%, rgba(255,255,255,0) 100%);
-    will-change: transform;
-  }
-
-  /* ═══════════════════════════════════════════════════════════════
-     4. PARTICLES  (640×96 – flowing particle stream)
-     ═══════════════════════════════════════════════════════════════ */
-  .style-particles {
-    position: relative;
-    width: 100%; height: 100%;
-    align-items: center; justify-content: center;
-    animation: fadeUp 0.4s ease-out;
-  }
-  .style-particles canvas {
-    width: 100%; height: 100%;
-  }
-
-  /* ═══════════════════════════════════════════════════════════════
-     5. PULSE  (180×180 – breathing circle with concentric ripples)
-     ═══════════════════════════════════════════════════════════════ */
-  .style-pulse {
-    position: relative;
-    width: 180px; height: 180px;
-    align-items: center; justify-content: center;
-    animation: fadeScale 0.45s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .style-pulse .ripple {
-    position: absolute;
-    border-radius: 50%;
-    border: 2px solid rgba(0, 212, 170, 0.55);
-    will-change: transform, opacity;
-  }
-  /* Slower, calmer pulse – 4.5s cycle, ~2.25s between staggered ripples.
-     cubic-bezier(0.22, 1, 0.36, 1) is "ease-out-quart" → soft swell, no snap. */
-  .style-pulse .ripple.r1 { inset: 50px; animation: rippleSoft 4.5s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
-  .style-pulse .ripple.r2 { inset: 50px; animation: rippleSoft 4.5s cubic-bezier(0.22, 1, 0.36, 1) infinite 1.5s; }
-  .style-pulse .ripple.r3 { inset: 50px; animation: rippleSoft 4.5s cubic-bezier(0.22, 1, 0.36, 1) infinite 3.0s; }
-  @keyframes rippleSoft {
-    0%   { transform: scale(0.55); opacity: 0; border-color: rgba(0, 212, 170, 0); }
-    15%  { opacity: 0.85; border-color: rgba(0, 212, 170, 0.85); }
-    100% { transform: scale(1.85); opacity: 0; border-color: rgba(0, 212, 170, 0); }
-  }
-  /* A glossy 3D sphere: a deep off-center radial body, a bright top-left
-     specular highlight, a dark bottom rim shadow and a thin top rim light.
-     box-shadow stays STATIC (GPU-safe); amplitude reaction = .pulse-glow. */
-  .style-pulse .pulse-core {
-    position: relative; z-index: 2;
-    width: 96px; height: 96px;
-    border-radius: 50%;
-    background:
-      radial-gradient(circle at 36% 28%, #d6fbf0 0%, #7ef0d2 22%, #12cba6 52%, #009e7c 78%, #00674f 100%);
-    box-shadow: 0 0 36px rgba(0,212,170,0.5),
-                inset 0 3px 2px rgba(255,255,255,0.45),
-                inset 0 -10px 16px rgba(0,70,54,0.55),
-                inset 0 0 0 1px rgba(255,255,255,0.10);
-    will-change: transform;
-  }
-  /* Specular highlight – the glossy hotspot that sells the 3D sphere. */
-  .style-pulse .pulse-spec {
-    position: absolute; z-index: 3;
-    width: 34px; height: 24px;
-    left: 50%; top: 50%;
-    transform: translate(-118%, -150%) rotate(-18deg);
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.35) 45%, rgba(255,255,255,0) 75%);
-    filter: blur(2px);
-    pointer-events: none;
-  }
-  .style-pulse .pulse-glow {
-    position: absolute; inset: 18px; z-index: 1;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(0,212,170,0.6) 0%, rgba(0,212,170,0) 70%);
-    filter: blur(14px);
-    will-change: transform, opacity;
-  }
-
-  /* ═══════════════════════════════════════════════════════════════
-     6. RIBBON  (600×88 – flowing 3D band with shaded body + edge light)
-        A filled band (vertical gradient = light hitting the top, shadow
-        underneath) gives real volume instead of flat strokes; a bright
-        top-edge highlight and an offset back-shadow add depth.
-     ═══════════════════════════════════════════════════════════════ */
-  .style-ribbon {
-    width: 100%; height: 100%;
-    align-items: center; justify-content: center;
-    animation: fadeUp 0.4s ease-out;
-  }
-  .style-ribbon svg { width: 100%; height: 100%; overflow: visible; }
-  .style-ribbon .ribbon-shadow {
-    fill: #00352a; opacity: 0.45;
-    filter: blur(5px);
-    transform: translateY(7px);
-  }
-  .style-ribbon .ribbon-body {
-    fill: url(#ribBody);
-    filter: drop-shadow(0 0 10px rgba(0,212,170,0.35));
-  }
-  .style-ribbon .ribbon-top {
-    fill: none; stroke: #d6fbf0; stroke-width: 2; stroke-linecap: round;
-    opacity: 0.9;
-    filter: drop-shadow(0 0 4px rgba(214,251,240,0.6));
-  }
-
-  /* ═══════════════════════════════════════════════════════════════
-     7. SPECTRUM  (320×100 – gradient FFT bars with reflection)
-     ═══════════════════════════════════════════════════════════════ */
-  /* GPU-safe: NO backdrop-filter. On a transparent always-on-top window it
-     forces DWM to re-sample the live desktop behind the card every single
-     frame while 36 bars change height – the costliest per-frame effect.
-     A solid translucent fill gives the same glass look without the cost. */
-  .style-spectrum {
-    position: relative;
-    width: 320px; height: 104px;
-    align-items: end;
-    padding: 16px 16px 14px;
-    gap: 3px;
-    background: linear-gradient(180deg, rgba(20,22,32,0.94) 0%, rgba(9,10,15,0.96) 100%);
-    border: 1px solid rgba(255,255,255,0.10);
-    border-radius: 20px;
-    box-shadow: 0 14px 44px rgba(0,0,0,0.45),
-                inset 0 1px 0 rgba(255,255,255,0.08),
-                inset 0 -1px 0 rgba(0,0,0,0.35);
-    overflow: hidden;
-    animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  /* Soft mint floor-glow for depth under the bars. */
-  .style-spectrum::before {
-    content: '';
-    position: absolute; left: 0; right: 0; bottom: -24px; height: 64px;
-    background: radial-gradient(ellipse at 50% 100%, rgba(0,212,170,0.30), rgba(0,212,170,0) 70%);
-    pointer-events: none;
-  }
-  .style-spectrum .sb {
-    position: relative;
-    flex: 1; min-height: 3px;
-    border-radius: 3px 3px 1px 1px;
-    background: linear-gradient(to top,
-      rgba(0,150,120,0.0) 0%,
-      rgba(0,200,160,0.55) 22%,
-      rgba(54,224,196,0.95) 62%,
-      #c9fbef 100%);
-    box-shadow: 0 0 8px rgba(0,212,170,0.55);
-    transition: height 0.05s ease-out;
-    will-change: height;
-  }
-  /* Bright glowing cap at the tip of each bar. */
-  .style-spectrum .sb::before {
-    content: '';
-    position: absolute; top: 0; left: 0; right: 0; height: 3px;
-    border-radius: 3px;
-    background: #e8fef8;
-    box-shadow: 0 0 6px rgba(201,251,239,0.9);
-  }
-
-  /* ─── Shared keyframes ─────────────────────────────────────── */
   @keyframes fadeUp {
-    from { opacity: 0; transform: translateY(8px); }
-    to   { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; transform: translateY(6px) scale(0.98); }
+    to   { opacity: 1; transform: none; }
   }
-  @keyframes fadeScale {
-    from { opacity: 0; transform: scale(0.85); }
-    to   { opacity: 1; transform: scale(1); }
+
+  /* ── Shared text line: newest words stay visible, older ones slide out
+     to the left behind a soft fade (rtl container + ltr span). ── */
+  .txt {
+    min-width: 0; overflow: hidden; white-space: nowrap;
+    direction: rtl; text-align: left;
+    font-size: 14px; line-height: 1.3; letter-spacing: 0.005em;
   }
+  .txt > span { direction: ltr; unicode-bidi: embed; color: rgba(255, 255, 255, 0.95); }
+  .txt.clip { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 40px); }
+  .txt > span.dim { color: rgba(255, 255, 255, 0.46); }
+  /* Status placeholder ("Ich höre zu…") gets a slow light sweep. */
+  .txt > span.shimmer {
+    color: transparent;
+    background: linear-gradient(90deg, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.34) 35%,
+                rgba(255,255,255,0.92) 50%, rgba(255,255,255,0.34) 65%, rgba(255,255,255,0.34) 100%);
+    background-size: 300% 100%;
+    -webkit-background-clip: text; background-clip: text;
+    animation: shimmer 2.4s linear infinite;
+  }
+  @keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0% 0; } }
+  body.processing-dim .txt > span:not(.dim):not(.shimmer) { color: rgba(255, 255, 255, 0.55); transition: color 0.3s; }
+
+  .time {
+    font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+    color: rgba(255, 255, 255, 0.42);
+  }
+
+  /* ═══ 1. AMOLED BAR  (window 708×92) ═══════════════════════════ */
+  .am-pill {
+    position: relative; width: 680px; height: 64px; border-radius: 32px;
+    background: #000;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.085),
+                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    display: flex; align-items: center; gap: 16px; padding: 0 24px 0 20px;
+    animation: springIn 0.46s cubic-bezier(0.2, 1.3, 0.35, 1) both;
+  }
+  /* Static glow + accent hairline, faded by voice energy (opacity only). */
+  .am-glow {
+    position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0;
+    will-change: opacity;
+    box-shadow: 0 0 13px rgba(var(--glow), 0.38), inset 0 0 0 1px rgba(var(--glow), 0.6);
+  }
+  .am-viz { width: 136px; height: 36px; flex: 0 0 auto; }
+  .am-sep { width: 1px; height: 26px; background: rgba(255, 255, 255, 0.08); flex: 0 0 auto; }
+  .am-pill .txt { flex: 1 1 auto; font-size: 14.5px; }
+  .am-pill .time { flex: 0 0 auto; }
+
+  /* ═══ 2. DOT MATRIX  (window 708×104) ══════════════════════════ */
+  .mx-card {
+    position: relative; width: 680px; height: 76px; border-radius: 24px;
+    background: #000;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.085);
+    display: flex; align-items: center; gap: 20px; padding: 0 26px 0 22px;
+    animation: fadeUp 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .mx-grid { width: 242px; height: 39px; flex: 0 0 auto; }
+  .mx-sep { width: 1px; height: 40px; background: rgba(255, 255, 255, 0.08); flex: 0 0 auto; }
+  .mx-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .mx-head {
+    display: flex; align-items: center; gap: 8px;
+    font: 600 10.5px/1 'Cascadia Mono', 'Cascadia Code', Consolas, monospace;
+    letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255, 255, 255, 0.5);
+  }
+  .mx-rec {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--rec); flex: 0 0 auto;
+    animation: recPulse 1.3s ease-in-out infinite;
+  }
+  @keyframes recPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.28; } }
+  body[data-state="processing"] .mx-rec { background: #fff; animation-duration: 0.5s; }
+  body[data-state="done"] .mx-rec { background: var(--a1); animation: none; }
+  .mx-body .txt { font-size: 14.5px; }
+
+  /* ═══ 3. ISLAND  (window 648×116) ═══════════════════════════════
+     The shape's size is spring-animated from JS; children are pinned to
+     its edges so they ride along like on a real dynamic island. */
+  .s-island { padding: 18px 24px; }
+  body[data-pos="top"]    .s-island { align-items: flex-start; }
+  body[data-pos="bottom"] .s-island { align-items: flex-end; }
+  .is-shape {
+    position: relative; width: 40px; height: 40px; border-radius: 20px;
+    background: #000; overflow: hidden;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.075);
+  }
+  .is-glyph { position: absolute; left: 13px; top: 50%; width: 30px; height: 22px; transform: translateY(-50%); }
+  .is-time {
+    position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+    color: var(--a1); font-size: 13px;
+  }
+  .is-text {
+    position: absolute; left: 56px; right: 68px; top: 50%; transform: translateY(-50%);
+    max-height: 38px; overflow: hidden; opacity: 0;
+    display: flex; flex-direction: column; justify-content: flex-end;
+    font-size: 14.5px; line-height: 19px; color: rgba(255, 255, 255, 0.95);
+  }
+  .is-text.clip { -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 12px); }
+  /* single-line target: don't re-wrap while the shape is still growing */
+  .is-text.one { white-space: nowrap; }
+  .is-text > span.dim { color: rgba(255, 255, 255, 0.46); }
+  body.processing-dim .is-text > span:not(.dim) { color: rgba(255, 255, 255, 0.55); transition: color 0.3s; }
+
+  /* ═══ 4. HALO  (window 616×118) ═════════════════════════════════ */
+  .ha-rim { position: absolute; left: 0; top: 0; width: 616px; height: 118px; }
+  .s-halo .shape { position: relative; width: 616px; height: 118px; animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .ha-body {
+    position: absolute; left: 28px; top: 30px; width: 560px; height: 58px;
+    display: flex; align-items: center; justify-content: center; padding: 0 30px;
+  }
+  .ha-body .txt { width: 100%; text-align: center; font-size: 15px; }
+  .ha-body .txt.clip { text-align: left; }
+
+  /* ═══ 5. ORB  (window 540×172) ══════════════════════════════════ */
+  .s-orb { flex-direction: column; justify-content: center; padding: 6px 0; }
+  body[data-pos="top"]    .s-orb { justify-content: flex-start; }
+  body[data-pos="bottom"] .s-orb { flex-direction: column-reverse; justify-content: flex-start; }
+  .orb-cv { width: 124px; height: 124px; flex: 0 0 auto; animation: popIn 0.5s cubic-bezier(0.2, 1.2, 0.35, 1) both; }
+  .orb-cap {
+    height: 34px; max-width: 500px; margin: -16px 0 0; border-radius: 17px;
+    background: #000; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    display: flex; align-items: center; padding: 0 16px;
+    animation: fadeUp 0.36s 0.06s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  body[data-pos="bottom"] .orb-cap { margin: 0 0 -16px; }
+  .orb-cap .txt { max-width: 468px; font-size: 13.5px; }
 </style>
 </head>
-<body data-style="wave">
+<body data-style="amoled" data-accent="mint" data-pos="bottom" data-state="idle">
 
-  <!-- ── Live transcript caption ── -->
-  <div id="livePreview"><span id="livePreviewText"></span></div>
-
-  <!-- ── 1. WAVE CLASSIC (original) ── -->
-  <div class="style style-wave-classic">
-    <svg viewBox="0 0 600 40" preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="wcGrad" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%"   stop-color="#00d4aa" stop-opacity="0"/>
-          <stop offset="20%"  stop-color="#00d4aa" stop-opacity="1"/>
-          <stop offset="80%"  stop-color="#6ee7c4" stop-opacity="1"/>
-          <stop offset="100%" stop-color="#00d4aa" stop-opacity="0"/>
-        </linearGradient>
-      </defs>
-      <path id="wcPath" d="M 0 20 L 600 20" />
-    </svg>
-  </div>
-
-  <!-- ── 2. WAVE (multilayer) ── -->
-  <div class="style style-wave">
-    <svg viewBox="0 0 600 64" preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="wGradA" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%"   stop-color="#00d4aa" stop-opacity="0"/>
-          <stop offset="15%"  stop-color="#00d4aa" stop-opacity="1"/>
-          <stop offset="50%"  stop-color="#6ee7c4" stop-opacity="1"/>
-          <stop offset="85%"  stop-color="#00d4aa" stop-opacity="1"/>
-          <stop offset="100%" stop-color="#00d4aa" stop-opacity="0"/>
-        </linearGradient>
-        <linearGradient id="wGradB" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%"   stop-color="#6ee7c4" stop-opacity="0"/>
-          <stop offset="50%"  stop-color="#b7f5e3" stop-opacity="0.9"/>
-          <stop offset="100%" stop-color="#6ee7c4" stop-opacity="0"/>
-        </linearGradient>
-        <linearGradient id="wGradC" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%"   stop-color="#3dc7ff" stop-opacity="0"/>
-          <stop offset="50%"  stop-color="#3dc7ff" stop-opacity="0.7"/>
-          <stop offset="100%" stop-color="#3dc7ff" stop-opacity="0"/>
-        </linearGradient>
-      </defs>
-      <path id="wPath1" class="layer1" d="M 0 32 L 600 32" />
-      <path id="wPath2" class="layer2" d="M 0 32 L 600 32" />
-      <path id="wPath3" class="layer3" d="M 0 32 L 600 32" />
-    </svg>
-  </div>
-
-  <!-- ── 3. AURORA ── -->
-  <div class="style style-aurora">
-    <div class="aurora-blob"></div>
-    <div class="aurora-blob2"></div>
-    <div class="aurora-glow" id="auroraGlow"></div>
-    <div class="aurora-core" id="auroraCore"></div>
-  </div>
-
-  <!-- ── 4. PARTICLES (canvas-rendered) ── -->
-  <div class="style style-particles">
-    <canvas id="particlesCanvas"></canvas>
-  </div>
-
-  <!-- ── 5. PULSE ── -->
-  <div class="style style-pulse">
-    <div class="pulse-glow" id="pulseGlow"></div>
-    <div class="ripple r1"></div>
-    <div class="ripple r2"></div>
-    <div class="ripple r3"></div>
-    <div class="pulse-core" id="pulseCore"></div>
-    <div class="pulse-spec"></div>
-  </div>
-
-  <!-- ── 6. RIBBON ── -->
-  <div class="style style-ribbon">
-    <svg viewBox="0 0 600 88" preserveAspectRatio="none">
-      <defs>
-        <linearGradient id="ribBody" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"   stop-color="#9af3da" stop-opacity="0.95"/>
-          <stop offset="45%"  stop-color="#1fd6ab" stop-opacity="0.85"/>
-          <stop offset="100%" stop-color="#006f56" stop-opacity="0.55"/>
-        </linearGradient>
-      </defs>
-      <path id="ribShadow"   class="ribbon-shadow" d="" />
-      <path id="ribBodyPath" class="ribbon-body"   d="" />
-      <path id="ribTop"      class="ribbon-top"    d="" />
-    </svg>
-  </div>
-
-  <!-- ── 7. SPECTRUM ── -->
-  <div class="style style-spectrum" id="spectrum"></div>
-
-  <!-- ── AMOLED bar (top/bottom) & card (center) ── -->
-  <div class="style style-amoled-bar">
-    <div class="ampill">
-      <canvas id="amBarCanvas"></canvas>
-      <div class="amtext"><span id="amBarText" class="dim">Ich höre zu…</span></div>
+  <!-- 1. AMOLED BAR -->
+  <section class="style s-amoled">
+    <div class="am-pill shape">
+      <div class="am-glow" id="amGlow"></div>
+      <canvas class="am-viz" id="amViz"></canvas>
+      <div class="am-sep"></div>
+      <div class="txt" data-line="1"><span class="shimmer">Ich höre zu…</span></div>
+      <div class="time" data-timer="mss">0:00</div>
     </div>
-  </div>
-  <div class="style style-amoled-center">
-    <div class="amcard">
-      <canvas id="amCenterCanvas"></canvas>
-      <div class="amtext"><span id="amCenterText" class="dim">Ich höre zu…</span></div>
+  </section>
+
+  <!-- 2. DOT MATRIX -->
+  <section class="style s-matrix">
+    <div class="mx-card shape">
+      <canvas class="mx-grid" id="mxGrid"></canvas>
+      <div class="mx-sep"></div>
+      <div class="mx-body">
+        <div class="mx-head"><i class="mx-rec"></i><span id="mxLabel">Aufnahme</span></div>
+        <div class="txt" data-line="1"><span class="dim">Ich höre zu…</span></div>
+      </div>
     </div>
-  </div>
+  </section>
+
+  <!-- 3. ISLAND -->
+  <section class="style s-island">
+    <div class="is-shape shape" id="isShape">
+      <canvas class="is-glyph" id="isGlyph"></canvas>
+      <div class="is-text" id="isText"><span class="dim"></span></div>
+      <div class="is-time time" data-timer="mss">0:00</div>
+    </div>
+  </section>
+
+  <!-- 4. HALO -->
+  <section class="style s-halo">
+    <div class="shape">
+      <canvas class="ha-rim" id="haRim"></canvas>
+      <div class="ha-body"><div class="txt" data-line="1"><span class="shimmer">Ich höre zu…</span></div></div>
+    </div>
+  </section>
+
+  <!-- 5. ORB -->
+  <section class="style s-orb">
+    <canvas class="orb-cv shape" id="orbCv"></canvas>
+    <div class="orb-cap shape"><div class="txt" data-line="1"><span class="shimmer">Ich höre zu…</span></div></div>
+  </section>
 
 <script>
-  // ── State ────────────────────────────────────────────────────────
-  let amplitude = 0.15;
-  let targetAmp = 0.15;
-  let frame = 0;
-  let currentStyle = 'wave';
-  let listenText = 'Ich höre zu…';   // swapped by app-lang IPC
-  let processingText = 'Verarbeite…';
+'use strict';
 
-  // ── Build spectrum bars ──
-  const SPEC_BAR_COUNT = 36;
-  const specEl = document.getElementById('spectrum');
-  const specBars = [];
-  for (let i = 0; i < SPEC_BAR_COUNT; i++) {
-    const b = document.createElement('div');
-    b.className = 'sb';
-    specEl.appendChild(b);
-    specBars.push(b);
-  }
+// ── Setup ─────────────────────────────────────────────────────────
+// Without the preload bridge (settings preview iframe) or with ?demo the
+// overlay runs a self-contained loop with synthetic speech.
+const DEMO = !window.notype || new URLSearchParams(location.search).has('demo');
+const NB = 20;   // spectrum bands (matches audio_recorder.N_BANDS)
+const STYLES = ['amoled', 'matrix', 'island', 'halo', 'orb'];
+// Ids of styles that no longer exist → their closest successor.
+const LEGACY_STYLES = {
+  wave: 'amoled', wave_classic: 'amoled', ribbon: 'amoled', particles: 'amoled', spectrum: 'amoled',
+  aurora: 'orb', pulse: 'orb',
+  amoled_card: 'amoled', amoled_top: 'amoled', amoled_bottom: 'amoled', amoled_center: 'amoled',
+};
+const ACCENTS = {
+  mint:   { bar: ['#00d4aa', '#2ee9c6', '#4dd0ff'], ring: ['#00e0b0', '#36c9ff', '#7f7bff', '#2ee9c6'], glow: '0,212,170',   hi: '#b6fff0' },
+  mono:   { bar: ['#ffffff', '#f2f2f2', '#d4d4d4'], ring: ['#ffffff', '#8a8a8a', '#ffffff', '#5a5a5a'], glow: '255,255,255', hi: '#ffffff' },
+  aurora: { bar: ['#ff7a45', '#ff4fb4', '#8f7bff', '#3fd0ff'], ring: ['#ff7a45', '#ff4fb4', '#8f7bff', '#3fd0ff'], glow: '170,120,255', hi: '#ffe1f3' },
+  blue:   { bar: ['#0a84ff', '#409cff', '#64d2ff'], ring: ['#0a84ff', '#5e5ce6', '#64d2ff', '#0a84ff'], glow: '10,132,255',  hi: '#cfe6ff' },
+  violet: { bar: ['#bf5af2', '#a472ff', '#7d7aff'], ring: ['#bf5af2', '#ff4f8b', '#5e5ce6', '#bf5af2'], glow: '191,90,242',  hi: '#f0d9ff' },
+  red:    { bar: ['#ff453a', '#ff5e6c', '#ff8a80'], ring: ['#ff453a', '#ff9f0a', '#ff375f', '#ff453a'], glow: '255,69,58',   hi: '#ffd9d6' },
+  amber:  { bar: ['#ffb340', '#ffa21a', '#ffd60a'], ring: ['#ff9f0a', '#ff6a3d', '#ffd60a', '#ff9f0a'], glow: '255,170,40',  hi: '#fff0cc' },
+};
+const I18N = {
+  de: { listen: 'Ich höre zu…', proc: 'Verarbeite…', done: 'Eingefügt', rec: 'Aufnahme', procL: 'Verarbeite', doneL: 'Eingefügt' },
+  en: { listen: 'Listening…',   proc: 'Processing…', done: 'Inserted',  rec: 'Recording', procL: 'Processing', doneL: 'Inserted' },
+};
+// Command mode (second hotkey): the spoken words are an instruction for the
+// selected text, not dictation.
+const I18N_CMD = {
+  de: { listen: 'Befehl sprechen…', proc: 'KI schreibt um…', done: 'Fertig', rec: 'Befehl', procL: 'KI', doneL: 'Fertig' },
+  en: { listen: 'Speak a command…', proc: 'AI rewriting…',   done: 'Done',   rec: 'Command', procL: 'AI', doneL: 'Done' },
+};
 
-  // ── Particles canvas setup ──
-  const particlesCanvas = document.getElementById('particlesCanvas');
-  const particlesCtx = particlesCanvas.getContext('2d');
-  function resizeParticlesCanvas() {
-    const dpr = window.devicePixelRatio || 1;
-    const rect = particlesCanvas.getBoundingClientRect();
-    particlesCanvas.width = Math.max(1, Math.floor(rect.width * dpr));
-    particlesCanvas.height = Math.max(1, Math.floor(rect.height * dpr));
-    particlesCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-  // Spawn 100 depth-layered particles. `depth` (0 far … 1 near) drives size,
-  // speed and brightness for a parallax sense of depth. The array is kept in
-  // far→near order so painter's-order layering is correct without per-frame
-  // sorting; respawns preserve a particle's depth band.
-  const PARTICLE_COUNT = 100;
-  const particles = [];
-  function makeParticle(seedX, depth) {
-    const d = depth != null ? depth : Math.random();
-    return {
-      x: seedX != null ? seedX : Math.random() * 640,
-      y: 48 + (Math.random() - 0.5) * 38,
-      vx: 0.5 + d * 1.7,                 // near particles move faster
-      vy: (Math.random() - 0.5) * 0.5,
-      r: 0.8 + d * 2.8,                  // near particles are bigger
-      depth: d,
-      life: 0,
-      maxLife: 90 + Math.random() * 90,
-    };
-  }
-  for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(makeParticle(undefined, i / PARTICLE_COUNT));
-  setTimeout(resizeParticlesCanvas, 0);
-  window.addEventListener('resize', resizeParticlesCanvas);
+const S = {
+  style: 'amoled', accent: 'mint', pos: 'bottom', lang: 'de', sounds: true, preview: true,
+  state: 'idle', stateAt: 0, recAt: 0, recEnd: 0,
+  text: '', hasText: false, leaving: false, command: false,
+};
+const $ = (id) => document.getElementById(id);
+const L = () => (S.command ? I18N_CMD : I18N)[S.lang] || (S.command ? I18N_CMD : I18N).de;
+const ACC = () => ACCENTS[S.accent] || ACCENTS.mint;
+const now = () => performance.now();
+const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+const ease = (x) => 1 - Math.pow(1 - clamp01(x), 3);
 
-  // GPU-safe particles: pre-render ONE soft mint halo sprite to an offscreen
-  // canvas ONCE, then drawImage it per particle. This removes ~80
-  // createRadialGradient() allocations + 80 arc-fills PER FRAME (the dominant
-  // cost of this style). drawImage of a cached bitmap is cheap and GPU-friendly.
-  const SPRITE_SIZE = 64;
-  const haloSprite = document.createElement('canvas');
-  haloSprite.width = haloSprite.height = SPRITE_SIZE;
-  {
-    const sctx = haloSprite.getContext('2d');
-    const c = SPRITE_SIZE / 2;
-    const g = sctx.createRadialGradient(c, c, 0, c, c, c);
-    g.addColorStop(0,   'rgba(183,245,227,1)');   // bright mint core
-    g.addColorStop(0.4, 'rgba(0,212,170,0.45)');
-    g.addColorStop(1,   'rgba(0,212,170,0)');
-    sctx.fillStyle = g;
-    sctx.beginPath();
-    sctx.arc(c, c, c, 0, Math.PI * 2);
-    sctx.fill();
-  }
+// ── Audio model ───────────────────────────────────────────────────
+// Backend sends ~31 frames/s: level 0..1 + NB band levels 0..1. The
+// renderer smooths them (fast attack, slower release) at display rate.
+const bandsIn = new Float32Array(NB), bandsSm = new Float32Array(NB);
+let levelIn = 0, levelSm = 0, haveBands = false;
 
-  // ── References ──
-  const wcPath = document.getElementById('wcPath');
-  const wPath1 = document.getElementById('wPath1');
-  const wPath2 = document.getElementById('wPath2');
-  const wPath3 = document.getElementById('wPath3');
-  const ribShadow = document.getElementById('ribShadow');
-  const ribBody = document.getElementById('ribBodyPath');
-  const ribTop = document.getElementById('ribTop');
-  const auroraCore = document.getElementById('auroraCore');
-  const auroraGlow = document.getElementById('auroraGlow');
-  const auroraBlob = document.querySelector('.style-aurora .aurora-blob');
-  const auroraBlob2 = document.querySelector('.style-aurora .aurora-blob2');
-  const pulseCore = document.getElementById('pulseCore');
-  const pulseGlow = document.getElementById('pulseGlow');
-
-  // ── Chime sounds (Web Audio) ─────────────────────────────────────
-  let audioCtx = null;
-  function getAudioCtx() {
-    if (!audioCtx) audioCtx = new AudioContext();
-    return audioCtx;
-  }
-  function playChime(type) {
-    const ctx = getAudioCtx();
-    const now = ctx.currentTime;
-    const freqs = type === 'start' ? [523, 659] : [659, 523];
-    const peak = type === 'start' ? 0.15 : 0.12;
-    freqs.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine'; osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0, now + i * 0.12);
-      gain.gain.linearRampToValueAtTime(peak, now + i * 0.12 + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.3);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(now + i * 0.12);
-      osc.stop(now + i * 0.12 + 0.35);
-    });
-  }
-
-  // Hotkey pressed while the previous dictation is still being transcribed:
-  // a short, low blip so the press doesn't feel dead (the normal start chime
-  // only plays when a recording actually starts).
-  function playBusy() {
-    const ctx = getAudioCtx();
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'triangle'; osc.frequency.value = 330;
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.09, now + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.13);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start(now);
-    osc.stop(now + 0.15);
-  }
-
-  // ── Per-style renderers ──────────────────────────────────────────
-
-  function renderWaveClassic(t, amp) {
-    const W = 600, CY = 20, steps = 60;
-    let d = `M 0 ${CY}`;
-    for (let i = 1; i <= steps; i++) {
-      const x = (i / steps) * W;
-      let y = Math.sin(t * 1.0 + i * 0.32) * 6
-            + Math.sin(t * 1.9 + i * 0.18) * 4
-            + Math.sin(t * 3.1 + i * 0.45) * 2;
-      const n = i / steps;
-      const edge = Math.min(1, Math.min(n, 1 - n) / 0.18);
-      y *= edge * (amp + 0.1);
-      d += ` L ${x.toFixed(1)} ${(CY + y).toFixed(2)}`;
+function onAudio(val, bands) {
+  levelIn = clamp01(+val || 0);
+  if (bands && bands.length) {
+    haveBands = true;
+    const n = bands.length;
+    for (let i = 0; i < NB; i++) {
+      const x = (i / (NB - 1)) * (n - 1), i0 = Math.floor(x), f = x - i0;
+      bandsIn[i] = clamp01((+bands[i0] || 0) * (1 - f) + (+bands[Math.min(n - 1, i0 + 1)] || 0) * f);
     }
-    wcPath.setAttribute('d', d);
   }
+}
 
-  function renderWave(t, amp) {
-    const W = 600, CY = 32, steps = 90;
-    const buildPath = (freq, phase, mag) => {
-      let d = `M 0 ${CY}`;
-      for (let i = 1; i <= steps; i++) {
-        const x = (i / steps) * W;
-        let y = Math.sin(t * freq + i * 0.25 + phase) * mag * 0.55
-              + Math.sin(t * (freq * 1.7) + i * 0.4 + phase) * mag * 0.4
-              + Math.sin(t * (freq * 3.1) + i * 0.15 + phase) * mag * 0.2;
-        const n = i / steps;
-        const edge = Math.min(1, Math.min(n, 1 - n) / 0.18);
-        y *= edge * (amp + 0.12);
-        d += ` L ${x.toFixed(1)} ${(CY + y).toFixed(2)}`;
+function stepAudio(dt, t) {
+  const live = S.state === 'listening';
+  for (let i = 0; i < NB; i++) {
+    // Old backend (level only): shape a plausible voice spectrum from it.
+    const target = !live ? 0 : haveBands ? bandsIn[i]
+      : levelIn * 1.6 * (0.55 + 0.45 * Math.sin(t * 7.3 + i * 0.9)) * Math.exp(-((i - 6) ** 2) / 40);
+    const tau = target > bandsSm[i] ? 0.035 : 0.15;
+    bandsSm[i] += (target - bandsSm[i]) * (1 - Math.exp(-dt / tau));
+  }
+  const lt = live ? levelIn : 0;
+  levelSm += (lt - levelSm) * (1 - Math.exp(-dt / (lt > levelSm ? 0.05 : 0.22)));
+}
+
+// Continuous spectrum lookup over the voice range. x: 0 (≈100 Hz) … 1 (≈5 kHz).
+function band(x) {
+  const p = 1 + clamp01(x) * 15, i0 = Math.floor(p), f = p - i0;
+  return bandsSm[i0] * (1 - f) + bandsSm[Math.min(NB - 1, i0 + 1)] * f;
+}
+// Overall voice energy 0..1 – what the glows and blobs key off.
+function energy() {
+  let s = 0;
+  for (let i = 2; i < 14; i++) s += bandsSm[i];
+  return clamp01(s / 12 * 1.5 + levelSm * 0.6);
+}
+
+// ── State blends ──────────────────────────────────────────────────
+// Each renderer cross-fades between listening/processing/done with these
+// 0..1 values instead of snapping.
+const mix = { processing: 0, done: 0 };
+function stepMix(dt) {
+  const k = 1 - Math.exp(-dt / 0.12);
+  mix.processing += ((S.state === 'processing' ? 1 : 0) - mix.processing) * k;
+  mix.done += ((S.state === 'done' ? 1 : 0) - mix.done) * k;
+}
+const sinceState = () => (now() - S.stateAt) / 1000;
+
+// ── Canvas helpers ────────────────────────────────────────────────
+function prep(cv) {
+  const d = Math.min(2, window.devicePixelRatio || 1);
+  const w = cv.clientWidth, h = cv.clientHeight;          // layout size – ignores entry transforms
+  const bw = Math.round(w * d), bh = Math.round(h * d);
+  if (bw && bh && (cv.width !== bw || cv.height !== bh)) { cv.width = bw; cv.height = bh; }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  return [ctx, w, h];
+}
+function lineGrad(ctx, x0, x1, colors) {
+  const g = ctx.createLinearGradient(x0, 0, x1, 0);
+  colors.forEach((c, i) => g.addColorStop(i / (colors.length - 1), c));
+  return g;
+}
+// Animated checkmark centred at (cx, cy), p = draw progress 0..1.
+function drawCheck(ctx, cx, cy, s, p, color, width) {
+  if (p <= 0) return;
+  const pts = [[-0.62, 0.02], [-0.18, 0.46], [0.66, -0.42]];
+  const l1 = Math.hypot(0.44, 0.44), l2 = Math.hypot(0.84, 0.88), total = l1 + l2;
+  ctx.save();
+  ctx.strokeStyle = color; ctx.lineWidth = width || 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx + pts[0][0] * s, cy + pts[0][1] * s);
+  const d = p * total;
+  if (d <= l1) {
+    const f = d / l1;
+    ctx.lineTo(cx + (pts[0][0] + (pts[1][0] - pts[0][0]) * f) * s, cy + (pts[0][1] + (pts[1][1] - pts[0][1]) * f) * s);
+  } else {
+    const f = (d - l1) / l2;
+    ctx.lineTo(cx + pts[1][0] * s, cy + pts[1][1] * s);
+    ctx.lineTo(cx + (pts[1][0] + (pts[2][0] - pts[1][0]) * f) * s, cy + (pts[1][1] + (pts[2][1] - pts[1][1]) * f) * s);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+const doneProgress = () => (S.state === 'done' ? ease(sinceState() / 0.36) : 0);
+
+// ═══ 1. AMOLED BAR ════════════════════════════════════════════════
+function renderAmoled(dt, t) {
+  const [ctx, W, H] = prep($('amViz'));
+  const pal = ACC().bar, ps = mix.processing, ds = mix.done;
+  const N = 21, gap = W / N, bw = Math.max(2.6, gap * 0.5), mid = H / 2, c = (N - 1) / 2;
+  ctx.fillStyle = lineGrad(ctx, 0, W, pal);
+  for (let j = 0; j < N; j++) {
+    const d = Math.abs(j - c) / c;                              // 0 centre … 1 edge
+    const v = Math.pow(band(d * 0.92), 0.8) * (1 - 0.32 * d * d); // lows centre, highs outward
+    let h = bw + (H - bw) * v;
+    // processing: dots with a pulse running through them
+    const pulse = Math.pow(Math.max(0, Math.sin(t * 5.2 - j * 0.5)), 8);
+    h += (bw + (H * 0.46 - bw) * pulse - h) * ps;
+    h += (bw - h) * ds;
+    // quiet → a slow breathing shimmer so the pill never looks frozen
+    const breathe = 0.62 + 0.38 * Math.sin(t * 2.4 - d * 3.2);
+    const a = (1 - 0.42 * d) * (v < 0.04 ? breathe : 1);
+    ctx.globalAlpha = a * (1 - ds * 0.8);
+    const x = (j + 0.5) * gap;
+    ctx.beginPath(); ctx.roundRect(x - bw / 2, mid - h / 2, bw, h, bw / 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  // done: the dots dim and a check draws itself across the centre
+  if (ds > 0.01) {
+    ctx.fillStyle = '#000'; ctx.globalAlpha = ds * 0.85;
+    ctx.fillRect(W / 2 - 18, 0, 36, H); ctx.globalAlpha = 1;
+    drawCheck(ctx, W / 2, mid, 11, doneProgress(), pal[0], 2.6);
+  }
+  const flash = S.state === 'done' ? Math.max(0.55, 1 - sinceState() * 0.8) : 0;
+  $('amGlow').style.opacity = Math.max((0.12 + energy() * 0.88) * (1 - ps * 0.75) * (1 - ds), flash).toFixed(3);
+}
+
+// ═══ 2. DOT MATRIX ════════════════════════════════════════════════
+// 44 × 7 LED grid at 5.5 px pitch: a 3×5 dot-font timer on the left,
+// a mirrored spectrum on the right, unlit dots faintly visible.
+const MX = { C: 44, R: 7, P: 5.5, specFrom: 16 };
+const MX_FONT = {
+  0: ['111', '101', '101', '101', '111'], 1: ['010', '110', '010', '010', '111'],
+  2: ['111', '001', '111', '100', '111'], 3: ['111', '001', '011', '001', '111'],
+  4: ['101', '101', '111', '001', '001'], 5: ['111', '100', '111', '001', '111'],
+  6: ['111', '100', '111', '101', '111'], 7: ['111', '001', '010', '010', '010'],
+  8: ['111', '101', '111', '101', '111'], 9: ['111', '101', '111', '001', '111'],
+  ':': ['0', '1', '0', '1', '0'],
+};
+const MX_CHECK = ['0000001', '0000010', '1000100', '0101000', '0010000'];
+const mxLit = new Float32Array(MX.C * MX.R);    // 0 unlit … 1 lit (white)
+const mxAcc = new Uint8Array(MX.C * MX.R);      // 1 → accent colour
+
+function mxTimerDots(str) {
+  let col = 0;
+  for (const ch of str) {
+    const g = MX_FONT[ch];
+    if (!g) continue;
+    for (let r = 0; r < 5; r++) for (let k = 0; k < g[r].length; k++) {
+      if (g[r][k] === '1' && col + k < MX.specFrom - 2) mxLit[(r + 1) * MX.C + col + k] = 0.92;
+    }
+    col += g[0].length + 1;
+  }
+}
+
+function renderMatrix(dt, t) {
+  const [ctx, W, H] = prep($('mxGrid'));
+  const { C, R, P, specFrom } = MX, ps = mix.processing;
+  mxLit.fill(0); mxAcc.fill(0);
+  mxTimerDots(timerText('mss'));
+  const SC = C - specFrom, mid = (R - 1) / 2;
+  if (S.state === 'done') {
+    const p = ease(sinceState() / 0.4), c0 = specFrom + Math.floor((SC - 7) / 2);
+    for (let r = 0; r < 5; r++) for (let k = 0; k < 7; k++) {
+      if (MX_CHECK[r][k] === '1' && k / 7 <= p) { mxLit[(r + 1) * C + c0 + k] = 1; mxAcc[(r + 1) * C + c0 + k] = 1; }
+    }
+  } else {
+    for (let k = 0; k < SC; k++) {
+      const d = Math.abs(k - (SC - 1) / 2) / ((SC - 1) / 2);
+      const v = Math.pow(band(d * 0.9), 0.75) * (1 - 0.25 * d * d);
+      const reach = v * (mid + 0.7);                          // rows lit above/below centre
+      for (let r = 0; r < R; r++) {
+        const dist = Math.abs(r - mid);
+        // centre row idles as a dim baseline and brightens with the voice
+        let lit = dist === 0 ? 0.3 + 0.7 * clamp01(reach * 2.5) : clamp01((reach - dist + 0.5) * 1.6);
+        // processing: diagonal scan bands sweeping across the grid
+        const scan = ((k + r * 0.7 - t * 16) % 11 + 11) % 11;
+        const sl = scan < 1.6 ? 1 - scan / 1.6 : 0;
+        lit = lit * (1 - ps) + sl * ps;
+        const idx = r * C + specFrom + k;
+        mxLit[idx] = lit;
+        if (lit > 0.5 && dist >= reach - 0.6 && reach > 1.2 && ps < 0.5) mxAcc[idx] = 1; // peak dots
       }
-      return d;
-    };
-    // Bigger magnitudes – more visible at the same calm speed.
-    wPath1.setAttribute('d', buildPath(0.9, 0,     26));
-    wPath2.setAttribute('d', buildPath(1.3, 1.6,   20));
-    wPath3.setAttribute('d', buildPath(0.6, 3.2,   14));
-  }
-
-  function renderAurora(t, amp) {
-    // Core breathes via transform only (cheap). The glow reaction is the
-    // pre-blurred .aurora-glow element scaled + faded – NO per-frame box-shadow.
-    const coreScale = 1 + amp * 0.5 + Math.sin(t * 1.4) * 0.05;
-    auroraCore.style.transform = `scale(${coreScale.toFixed(3)})`;
-    auroraGlow.style.transform = `scale(${(1 + amp * 0.8).toFixed(3)})`;
-    auroraGlow.style.opacity = (0.6 + amp * 0.4).toFixed(2);
-
-    // Blobs expand with amplitude – the perceived "pulsing from the inside".
-    const blobScale = 1 + amp * 0.18 + Math.sin(t * 0.8) * 0.03;
-    auroraBlob.style.transform = `rotate(${(t * 60).toFixed(1)}deg) scale(${blobScale.toFixed(3)})`;
-
-    const blob2Scale = 1 + amp * 0.3 + Math.sin(t * 1.3) * 0.04;
-    auroraBlob2.style.transform = `rotate(${(-t * 90).toFixed(1)}deg) scale(${blob2Scale.toFixed(3)})`;
-  }
-
-  function renderParticles(t, amp) {
-    const ctx = particlesCtx;
-    const w = particlesCanvas.clientWidth;
-    const h = particlesCanvas.clientHeight;
-    ctx.clearRect(0, 0, w, h);
-
-    // Always render all particles – visibility is controlled by an alpha curve
-    // tied to position (fade-in left, fade-out right) so the user never sees
-    // a hard pop-in or cut-off at the screen edge.
-    for (let i = 0; i < particles.length; i++) {
-      const p = particles[i];
-      p.x += p.vx * (0.5 + amp * 1.5);
-      p.y += p.vy + Math.sin(t * 1.4 + p.x * 0.018) * 0.5 * amp;
-      p.life++;
-
-      // Re-spawn just BEFORE the visible window so the fade-in is in front of
-      // the viewer (looks like new particles materialise from thin air).
-      // Preserve the depth band so the parallax layering stays stable.
-      if (p.x > w + 40 || p.life > p.maxLife) {
-        Object.assign(p, makeParticle(-40 - Math.random() * 60, p.depth));
-        p.y = h / 2 + (Math.random() - 0.5) * h * 0.65;
-      }
-
-      // Position-based alpha curve:
-      //   0%  ──►  fade in over first 18% of width
-      //   18-82%  full visibility
-      //   82-100%  fade out
-      // Multiplied by amplitude (more particles "light up" when louder).
-      const xT = p.x / w;
-      let xFade;
-      if (xT < 0)        xFade = 0;
-      else if (xT < 0.18) xFade = xT / 0.18;
-      else if (xT > 0.82) xFade = Math.max(0, (1 - xT) / 0.18);
-      else                xFade = 1;
-      // smoothstep so the fade is curve, not linear
-      xFade = xFade * xFade * (3 - 2 * xFade);
-
-      // Depth drives brightness: near particles brighter, far ones dimmer.
-      const baseAlpha = xFade * (0.35 + p.depth * 0.5) * (0.6 + amp * 0.5);
-      if (baseAlpha < 0.01) continue;  // skip invisible particles entirely
-
-      // Glow halo: draw the cached sprite (no per-frame gradient allocation).
-      const haloR = p.r * 5.5 + amp * 7;
-      const d = haloR * 2;
-      ctx.globalAlpha = Math.min(1, baseAlpha);
-      ctx.drawImage(haloSprite, p.x - haloR, p.y - haloR, d, d);
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  function renderPulse(t, amp) {
-    // Core breathes via transform only; the box-shadow is now STATIC (CSS).
-    // The amplitude glow reaction is the pre-blurred .pulse-glow element scaled
-    // + faded – no per-frame box-shadow recomputation (which re-rasterizes).
-    const coreScale = 1 + amp * 0.45 + Math.sin(t * 0.9) * 0.03;
-    pulseCore.style.transform = `scale(${coreScale.toFixed(3)})`;
-    pulseGlow.style.transform = `scale(${(1 + amp * 0.9).toFixed(3)})`;
-    pulseGlow.style.opacity = (0.55 + amp * 0.45).toFixed(2);
-  }
-
-  function renderRibbon(t, amp) {
-    // Slower, calmer wave – frequencies roughly halved from the previous
-    // hyperactive version. More control points (10 instead of 6) for visibly
-    // smoother curves at the cost of a few extra path segments.
-    // A 3D band: compute a centre spine wave, then a variable thickness that
-    // tapers to 0 at both ends. The band is the area between the top and
-    // bottom edges, filled with a vertical gradient (light top → dark bottom).
-    const W = 600, CY = 44, STEPS = 22;
-    const top = [], bot = [], topPts = [];
-    for (let i = 0; i <= STEPS; i++) {
-      const x = (i / STEPS) * W;
-      const n = i / STEPS;
-      const edge = Math.min(1, Math.min(n, 1 - n) / 0.16);
-      const smooth = edge * edge * (3 - 2 * edge);
-      const yc = CY + (
-        Math.sin(t * 0.45 + i * 0.55) * 12 +
-        Math.sin(t * 0.85 + i * 0.32) * 6
-      ) * smooth * (amp + 0.2);
-      const th = (6 + (amp + 0.1) * 26) * smooth;   // thickness tapers at ends
-      top.push({ x, y: yc - th / 2 });
-      bot.push({ x, y: yc + th / 2 });
-      topPts.push({ x, y: yc - th / 2 });
-    }
-    // Smooth quadratic path through a point list (open).
-    const smoothOpen = (pts) => {
-      let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(2)}`;
-      for (let i = 1; i < pts.length; i++) {
-        const xc = (pts[i - 1].x + pts[i].x) / 2;
-        const yc = (pts[i - 1].y + pts[i].y) / 2;
-        d += ` Q ${pts[i - 1].x.toFixed(1)} ${pts[i - 1].y.toFixed(2)} ${xc.toFixed(1)} ${yc.toFixed(2)}`;
-      }
-      d += ` T ${pts[pts.length - 1].x.toFixed(1)} ${pts[pts.length - 1].y.toFixed(2)}`;
-      return d;
-    };
-    // Closed band: top edge L→R, then bottom edge R→L, close.
-    let band = `M ${top[0].x.toFixed(1)} ${top[0].y.toFixed(2)}`;
-    for (let i = 1; i <= STEPS; i++) band += ` L ${top[i].x.toFixed(1)} ${top[i].y.toFixed(2)}`;
-    for (let i = STEPS; i >= 0; i--) band += ` L ${bot[i].x.toFixed(1)} ${bot[i].y.toFixed(2)}`;
-    band += ' Z';
-
-    ribBody.setAttribute('d', band);
-    ribShadow.setAttribute('d', band);
-    ribTop.setAttribute('d', smoothOpen(topPts));
-  }
-
-  // ── AMOLED synth: mirrored rounded bars in the brand gradient ────
-  const amBarCanvas = document.getElementById('amBarCanvas');
-  const amCenterCanvas = document.getElementById('amCenterCanvas');
-  const amBarCtx = amBarCanvas.getContext('2d');
-  const amCenterCtx = amCenterCanvas.getContext('2d');
-  const amGradients = new WeakMap();
-
-  function sizeAmoledCanvas(canvas) {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const r = canvas.getBoundingClientRect();
-    if (r.width && r.height) {
-      canvas.width = Math.round(r.width * dpr);
-      canvas.height = Math.round(r.height * dpr);
-      amGradients.delete(canvas);  // gradient depends on width
     }
   }
-
-  function renderAmoledSynth(ctx, canvas, t, amp) {
-    const W = canvas.width, H = canvas.height;
-    if (!W || !H) return;
-    ctx.clearRect(0, 0, W, H);
-
-    let grad = amGradients.get(canvas);
-    if (!grad) {
-      grad = ctx.createLinearGradient(0, 0, W, 0);
-      grad.addColorStop(0.0, '#00d4aa');
-      grad.addColorStop(0.55, '#2ee9c6');
-      grad.addColorStop(1.0, '#4dd0ff');
-      amGradients.set(canvas, grad);
-    }
-    ctx.fillStyle = grad;
-
-    const N = Math.max(20, Math.round(W / (H * 0.42)));
-    const step = W / N;
-    const barW = Math.max(2, step * 0.52);
-    const mid = H / 2;
-
-    for (let i = 0; i < N; i++) {
-      const ph = i * 0.55;
-      // Layered sines fake a lively frequency spectrum from plain amplitude
-      let v = 0.42
-        + 0.34 * Math.sin(t * 2.1 + ph)
-        + 0.20 * Math.sin(t * 3.6 + ph * 1.7)
-        + 0.12 * Math.sin(t * 5.3 + ph * 0.6);
-      // Energy concentrates toward the middle – reads as "voice", not noise
-      const centerBias = 0.28 + 0.72 * Math.exp(-0.5 * (((i - N / 2) / (N / 2.6)) ** 2));
-      const h = Math.min(H * 0.94,
-        Math.max(H * 0.08, Math.abs(v) * centerBias * amp * H * 1.9));
-      const x = (i + 0.5) * step;
+  // boot-up: the grid switches on column by column after a recording starts
+  const boot = S.state === 'listening' ? clamp01((now() - S.recAt) / 360) : 1;
+  const acc = ACC().bar[0];
+  for (let r = 0; r < R; r++) {
+    for (let c = 0; c < C; c++) {
+      if (c / C > boot) continue;
+      const idx = r * C + c, v = mxLit[idx];
+      const x = (c + 0.5) * P, y = (r + 0.5) * (H / R);
       ctx.beginPath();
-      ctx.roundRect(x - barW / 2, mid - h / 2, barW, h, barW / 2);
+      ctx.arc(x, y, v > 0.05 ? 1.45 : 1.2, 0, Math.PI * 2);
+      if (v > 0.05) {
+        ctx.fillStyle = mxAcc[idx] ? acc : '#ffffff';
+        ctx.globalAlpha = 0.25 + 0.75 * v;
+      } else {
+        ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.1;
+      }
       ctx.fill();
     }
   }
+  ctx.globalAlpha = 1;
+}
 
-  function renderSpectrum(t, amp) {
-    for (let i = 0; i < SPEC_BAR_COUNT; i++) {
-      const freqWeight = Math.pow(1 - (i / SPEC_BAR_COUNT) * 0.55, 1.2);
-      let w = 0;
-      w += Math.sin(t * 1.4 + i * 0.4) * 0.4;
-      w += Math.sin(t * 2.3 + i * 0.7) * 0.3;
-      w += Math.sin(t * 3.7 + i * 0.25) * 0.2;
-      const center = SPEC_BAR_COUNT / 2.6;
-      const dist = Math.abs(i - center);
-      const gauss = Math.exp(-0.5 * (dist / (SPEC_BAR_COUNT / 3)) ** 2);
-      // Bigger scalar (110 instead of 80) – spectrum fills more of the card.
-      const h = Math.max(4, (0.55 + w) * gauss * freqWeight * amp * 110);
-      specBars[i].style.height = h.toFixed(1) + 'px';
-    }
+// ═══ 3. ISLAND ═══════════════════════════════════════════════════
+// Critically-damped-ish springs on width/height; children are pinned to
+// the edges. Compact: glyph + timer. With text: grows to fit, max 2 lines.
+const IS = { w: 40, h: 40, vw: 0, vh: 0, COMPACT_W: 176, H1: 40, MAX_W: 600, TEXT_MAX: 476 };
+const isMeasure = document.createElement('canvas').getContext('2d');
+function islandTarget() {
+  if (S.state === 'idle' || S.leaving) return [40, 40];
+  if (!S.hasText) return [IS.COMPACT_W, IS.H1];
+  isMeasure.font = "14.5px 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif";
+  const tw = isMeasure.measureText(S.text).width;
+  if (tw <= IS.TEXT_MAX) return [Math.max(IS.COMPACT_W + 60, 56 + tw + 72), 52];
+  return [IS.MAX_W, 72];
+}
+function renderIsland(dt, t) {
+  const [tw, th] = islandTarget();
+  const k = 340, c = 2 * Math.sqrt(k) * 0.74;               // slight overshoot = "alive"
+  for (let s = dt; s > 0; s -= 1 / 120) {
+    const h = Math.min(s, 1 / 120);
+    IS.vw += (k * (tw - IS.w) - c * IS.vw) * h; IS.w += IS.vw * h;
+    IS.vh += (k * (th - IS.h) - c * IS.vh) * h; IS.h += IS.vh * h;
   }
+  const shape = $('isShape');
+  shape.style.width = IS.w.toFixed(1) + 'px';
+  shape.style.height = IS.h.toFixed(1) + 'px';
+  shape.style.borderRadius = Math.min(IS.h / 2, 26).toFixed(1) + 'px';
+  const open = clamp01((IS.w - IS.COMPACT_W - 30) / 90);
+  const isText = $('isText');
+  isText.style.opacity = (S.hasText ? open : 0).toFixed(3);
+  if (isText.classList.contains('one') !== (th < 60)) isText.classList.toggle('one', th < 60);
+  const inner = clamp01((IS.w - 60) / 70);                  // glyph/timer fade in as it opens
+  const glyph = $('isGlyph'), time = shape.querySelector('.is-time');
+  glyph.style.opacity = inner.toFixed(3);
+  time.style.opacity = (inner * (S.state === 'done' ? 0 : 1)).toFixed(3);
 
-  // ── Animation loop — HARD frame-rate cap via wall-clock time gate ──
-  // Critical for GPU safety: a bare rAF loop renders at the monitor's refresh
-  // rate, so on a 144/240/360 Hz panel it does 2.4-6x the blur/blend/canvas
-  // work of 60 Hz (and runs the frame-count-driven animation that much faster).
-  // Gating on elapsed time caps composite/raster cost to TARGET_FPS regardless
-  // of refresh rate AND normalises animation speed across all monitors.
-  const TARGET_FPS = 40;
-  const FRAME_MS = 1000 / TARGET_FPS;
-  let lastFrameTs = 0;
-  function loop(ts) {
-    requestAnimationFrame(loop);
-    if (document.hidden) return;                 // idle: render nothing
-    if (ts - lastFrameTs < FRAME_MS) return;     // drop extra frames on high-Hz panels
-    lastFrameTs = ts;
-
-    frame++;
-    amplitude += (targetAmp - amplitude) * 0.2;
-    const amp = Math.max(amplitude, 0.08);
-    const t = frame * 0.10;
-
-    switch (currentStyle) {
-      case 'wave_classic': renderWaveClassic(t, amp); break;
-      case 'wave':         renderWave(t, amp); break;
-      case 'aurora':       renderAurora(t, amp); break;
-      case 'particles':    renderParticles(t, amp); break;
-      case 'pulse':        renderPulse(t, amp); break;
-      case 'ribbon':       renderRibbon(t, amp); break;
-      case 'spectrum':     renderSpectrum(t, amp); break;
-      case 'amoled':       renderAmoledSynth(amBarCtx, amBarCanvas, t, amp); break;
-      case 'amoled_card':  renderAmoledSynth(amCenterCtx, amCenterCanvas, t, amp); break;
-    }
+  const [ctx, W, H] = prep(glyph);
+  const pal = ACC().bar, ps = mix.processing, ds = mix.done, mid = H / 2;
+  ctx.fillStyle = lineGrad(ctx, 0, W, pal);
+  const N = 5, bw = 3.2, gap = (W - bw) / (N - 1);
+  for (let j = 0; j < N; j++) {
+    const d = Math.abs(j - 2) / 2;
+    const v = Math.pow(band(0.08 + d * 0.5), 0.7);
+    let h = bw + (H - bw) * v * (1 - 0.2 * d);
+    const hop = Math.pow(Math.max(0, Math.sin(t * 6 - j * 0.9)), 4);  // processing: rolling dots
+    h += (bw + (H * 0.5 - bw) * hop - h) * ps;
+    ctx.globalAlpha = (v < 0.04 && ps < 0.5 ? 0.55 + 0.35 * Math.sin(t * 2.6 - j * 0.8) : 1) * (1 - ds);
+    ctx.beginPath(); ctx.roundRect(j * gap, mid - h / 2, bw, h, bw / 2); ctx.fill();
   }
-  requestAnimationFrame(loop);
+  ctx.globalAlpha = 1;
+  if (ds > 0.01) drawCheck(ctx, W / 2, mid, 9.5, doneProgress(), pal[0], 2.6);
+}
 
-  // ── IPC ──────────────────────────────────────────────────────────
-  if (window.notype) {
-    window.notype.onAmplitude((val) => { targetAmp = Math.max(val, 0.08); });
-    window.notype.onRecordingStarted(() => {
-      targetAmp = 0.15;
-      document.body.classList.remove('processing', 'done', 'busy', 'leaving');
-      // Replay the active style's entry animation – the element stays in
-      // the DOM between dictations, so CSS alone would only animate once.
-      const active = document.querySelector('.style-' + currentStyle.replace(/_/g, '-')
-        .replace('amoled-card', 'amoled-center').replace(/^amoled$/, 'amoled-bar'));
-      if (active) { active.style.animation = 'none'; void active.offsetWidth; active.style.animation = ''; }
-      // Particle stream reset
-      for (let i = 0; i < particles.length; i++) {
-        Object.assign(particles[i], makeParticle());
-      }
-      resizeParticlesCanvas();
-      // Stale caption from the previous dictation
-      document.getElementById('livePreview').classList.remove('visible');
-      document.getElementById('livePreviewText').textContent = '';
-      for (const id of ['amBarText', 'amCenterText']) {
-        const el = document.getElementById(id);
-        el.textContent = listenText;
-        el.classList.add('dim');
-      }
-      playChime('start');
-    });
-    window.notype.onRecordingStopped(() => {
-      playChime('stop');
-      // Stay visible while the final pass runs; the animation settles and the
-      // pill shows a sweep. main.js hides us after 'transcription-done'.
-      targetAmp = 0.08;
-      document.body.classList.add('processing');
-      for (const id of ['amBarText', 'amCenterText']) {
-        const el = document.getElementById(id);
-        if (el.classList.contains('dim')) el.textContent = processingText;
-      }
-    });
-    if (window.notype.onTranscriptionDone) {
-      window.notype.onTranscriptionDone((data) => {
-        document.body.classList.remove('processing');
-        if (!data || !data.ok) return;
-        document.body.classList.add('done');
-        // Show the sentence that was actually inserted (main.js keeps the
-        // window up ~1.4 s for this) – the preview was only a rough draft.
-        if (data.text) {
-          for (const id of ['amBarText', 'amCenterText']) {
-            const el = document.getElementById(id);
-            el.textContent = data.text;
-            el.classList.remove('dim');
-          }
-          document.getElementById('livePreviewText').textContent = data.text;
-          if (document.body.classList.contains('with-preview')) {
-            document.getElementById('livePreview').classList.add('visible');
-          }
-        }
-      });
-    }
-    if (window.notype.onOverlayLeaving) {
-      window.notype.onOverlayLeaving(() => document.body.classList.add('leaving'));
-    }
-    if (window.notype.onBusy) {
-      window.notype.onBusy(() => {
-        playBusy();
-        document.body.classList.remove('busy');
-        void document.body.offsetWidth;  // restart the CSS animation
-        document.body.classList.add('busy');
-        setTimeout(() => document.body.classList.remove('busy'), 320);
-      });
-    }
-    window.notype.onSetTheme((theme) => {
-      document.body.classList.toggle('dark', theme === 'dark');
-    });
-    if (window.notype.onSetStyle) {
-      window.notype.onSetStyle((style) => {
-        const valid = ['wave_classic', 'wave', 'aurora', 'particles', 'pulse', 'ribbon', 'spectrum',
-                       'amoled', 'amoled_card'];
-        // Pre-2.6 ids carried the position; placement is main.js's job now.
-        const legacy = { amoled_top: 'amoled', amoled_bottom: 'amoled', amoled_center: 'amoled_card' };
-        style = legacy[style] || style;
-        currentStyle = valid.includes(style) ? style : 'wave';
-        document.body.dataset.style = currentStyle;
-        // canvases need a re-measure when switched in (element was display:none)
-        if (currentStyle === 'particles') setTimeout(resizeParticlesCanvas, 50);
-        if (currentStyle.startsWith('amoled')) {
-          setTimeout(() => { sizeAmoledCanvas(amBarCanvas); sizeAmoledCanvas(amCenterCanvas); }, 50);
-        }
-      });
-    }
-    if (window.notype.onPreviewEnabled) {
-      window.notype.onPreviewEnabled((enabled) => {
-        document.body.classList.toggle('with-preview', !!enabled);
-      });
-    }
-    if (window.notype.onAppLang) {
-      window.notype.onAppLang((lang) => {
-        listenText = lang === 'en' ? 'Listening…' : 'Ich höre zu…';
-        processingText = lang === 'en' ? 'Processing…' : 'Verarbeite…';
-        for (const id of ['amBarText', 'amCenterText']) {
-          const el = document.getElementById(id);
-          if (el.classList.contains('dim')) el.textContent = listenText;
-        }
-      });
-    }
-    if (window.notype.onPreviewText) {
-      window.notype.onPreviewText((text) => {
-        document.getElementById('livePreviewText').textContent = text;
-        document.getElementById('livePreview').classList.add('visible');
-        for (const id of ['amBarText', 'amCenterText']) {
-          const el = document.getElementById(id);
-          el.textContent = text;
-          el.classList.remove('dim');
-        }
-      });
-    }
+// ═══ 4. HALO ═════════════════════════════════════════════════════
+// Rim = stacked strokes of a rotating conic gradient (additive), which
+// reads as bloom without any blur filter. A second, band-driven gradient
+// adds bright spots that dance with the voice.
+const HA = { rot: 0, rot2: 0, x: 28, y: 30, w: 560, h: 58 };
+const HA_PASSES = [[30, 0.03], [19, 0.055], [11, 0.1], [5, 0.2], [2.2, 0.5]];
+function renderHalo(dt, t) {
+  const [ctx, W, H] = prep($('haRim'));
+  const pal = ACC().ring, e = energy(), ps = mix.processing, ds = mix.done;
+  HA.rot += dt * (0.5 + e * 2.4) * (1 - ps * 0.7);
+  HA.rot2 -= dt * (0.35 + e * 1.2);
+  const cx = W / 2, cy = H / 2;
+  const g = ctx.createConicGradient(HA.rot, cx, cy);
+  pal.forEach((col, i) => g.addColorStop(i / pal.length, col));
+  g.addColorStop(1, pal[0]);
+  // voice spots: alpha stops from the spectrum, mirrored around the ring
+  const g2 = ctx.createConicGradient(HA.rot2, cx, cy);
+  const SP = 16;
+  for (let i = 0; i <= SP; i++) {
+    const d = Math.abs((i / SP) * 2 - 1);
+    g2.addColorStop(i / SP, `rgba(255,255,255,${(Math.pow(band(d * 0.85), 1.1) * 0.95).toFixed(3)})`);
   }
+  const flash = S.state === 'done' ? Math.max(0, 1 - sinceState() * 1.6) : 0;
+  const I = (0.42 + 0.95 * e) * (1 - 0.65 * ps) + ds * 0.35 + flash * 0.6;
+  const path = () => { ctx.beginPath(); ctx.roundRect(HA.x, HA.y, HA.w, HA.h, HA.h / 2); };
+  path();
+  ctx.globalCompositeOperation = 'lighter';
+  for (const [lw, a] of HA_PASSES) {
+    ctx.lineWidth = lw * (0.85 + 0.4 * e);
+    ctx.strokeStyle = g; ctx.globalAlpha = Math.min(1, a * I); ctx.stroke();
+  }
+  for (const [lw, a] of [[12, 0.1], [5, 0.24], [2, 0.5]]) {
+    ctx.lineWidth = lw; ctx.strokeStyle = g2; ctx.globalAlpha = a * (1 - ps); ctx.stroke();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.fill();
+  // light bleeding into the glass: soft falloff, not a second border
+  ctx.save(); ctx.clip();
+  ctx.strokeStyle = g;
+  for (const [lw, a] of [[22, 0.03], [12, 0.045], [5, 0.07]]) {
+    ctx.lineWidth = lw; ctx.globalAlpha = a * Math.min(1.4, I); ctx.stroke();
+  }
+  ctx.restore();
+  ctx.lineWidth = 1.4; ctx.strokeStyle = g; ctx.globalAlpha = Math.min(1, 0.5 + 0.5 * I); ctx.stroke();
+  // processing: a white comet circling the rim
+  if (ps > 0.01) {
+    const cg = ctx.createConicGradient(t * 5.5, cx, cy);
+    cg.addColorStop(0, 'rgba(255,255,255,0)'); cg.addColorStop(0.78, 'rgba(255,255,255,0)');
+    cg.addColorStop(0.97, 'rgba(255,255,255,1)'); cg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = cg;
+    for (const [lw, a] of [[10, 0.12], [4, 0.35], [1.6, 1]]) { ctx.lineWidth = lw; ctx.globalAlpha = a * ps; ctx.stroke(); }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ═══ 5. ORB ═════════════════════════════════════════════════════
+// Black glass sphere; three coloured light blobs orbit inside and mix
+// additively – louder voice = bigger, faster, brighter.
+const ORB = { a: [0, 2.1, 4.2], spd: [0.9, -1.25, 1.6] };
+function renderOrb(dt, t) {
+  const [ctx, W, H] = prep($('orbCv'));
+  const acc = ACC(), pal = acc.ring, e = energy(), ps = mix.processing, ds = mix.done;
+  const cx = W / 2, cy = H / 2, R = 30 + e * 3.5;
+  const flash = S.state === 'done' ? Math.max(0, 1 - sinceState() * 1.4) : 0;
+  const I = (0.45 + 0.8 * e) * (1 - 0.5 * ps) + flash * 0.7;
+  // outer glow
+  const og = ctx.createRadialGradient(cx, cy, R * 0.7, cx, cy, Math.min(W / 2, R + 28));
+  og.addColorStop(0, `rgba(${acc.glow},${(0.34 * Math.min(1.3, I)).toFixed(3)})`);
+  og.addColorStop(1, `rgba(${acc.glow},0)`);
+  ctx.fillStyle = og; ctx.fillRect(0, 0, W, H);
+  // glass body
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.fillStyle = '#000'; ctx.fill();
+  ctx.save(); ctx.clip();
+  // faint base tint so the glass between the lights isn't dead black
+  const base = ctx.createRadialGradient(cx, cy + R * 0.35, 0, cx, cy, R);
+  base.addColorStop(0, pal[2] + '40'); base.addColorStop(1, pal[2] + '00');
+  ctx.fillStyle = base; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+  ctx.globalCompositeOperation = 'lighter';
+  for (let k = 0; k < 3; k++) {
+    ORB.a[k] += dt * ORB.spd[k] * (0.55 + e * 2.0) * (1 - ps * 0.6);
+    const orbit = R * (0.34 + 0.16 * e + 0.08 * Math.sin(t * 1.3 + k * 2)) * (1 - ds * 0.7);
+    const bx = cx + Math.cos(ORB.a[k]) * orbit, by = cy + Math.sin(ORB.a[k]) * orbit * 0.85;
+    const br = R * (0.5 + 0.4 * Math.pow(band(0.1 + k * 0.3), 0.8) + 0.05 * Math.sin(t * 2.1 + k));
+    const bg = ctx.createRadialGradient(bx, by, 0, bx, by, br);
+    const col = pal[k % pal.length];
+    bg.addColorStop(0, col); bg.addColorStop(0.35, col + '99'); bg.addColorStop(1, col + '00');
+    ctx.globalAlpha = Math.min(1, 0.45 + 0.5 * I) * (1 - ps * 0.45);
+    ctx.fillStyle = bg; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+  }
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  // depth: dark rim vignette + specular highlight
+  const vg = ctx.createRadialGradient(cx, cy, R * 0.45, cx, cy, R);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.62)');
+  ctx.fillStyle = vg; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+  const sg = ctx.createRadialGradient(cx - R * 0.34, cy - R * 0.46, 0, cx - R * 0.34, cy - R * 0.46, R * 0.5);
+  sg.addColorStop(0, 'rgba(255,255,255,0.32)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = sg; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+  ctx.restore();
+  ctx.beginPath(); ctx.arc(cx, cy, R - 0.5, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.14)'; ctx.lineWidth = 1; ctx.stroke();
+  if (ps > 0.01) {                                            // processing: orbiting arc
+    ctx.beginPath(); ctx.arc(cx, cy, R + 4, t * 5, t * 5 + 1.1);
+    ctx.strokeStyle = acc.hi; ctx.globalAlpha = ps * 0.9; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  if (ds > 0.01) drawCheck(ctx, cx, cy, 10, doneProgress(), '#ffffff', 2.8);
+}
+
+const RENDER = { amoled: renderAmoled, matrix: renderMatrix, island: renderIsland, halo: renderHalo, orb: renderOrb };
+
+// ── Text + timer ──────────────────────────────────────────────────
+// kind: 'live' (transcript), 'final' (inserted text), 'status' (placeholder)
+function setText(text, kind) {
+  S.text = text;
+  S.hasText = kind !== 'status' && !!text;
+  for (const box of document.querySelectorAll('.txt, .is-text')) {
+    const span = box.firstElementChild;
+    span.textContent = text;
+    const island = box.classList.contains('is-text');
+    // status: shimmer while working, dim on the matrix (its header already animates)
+    span.className = kind !== 'status' || S.state === 'done' ? ''
+      : island || box.closest('.s-matrix') ? 'dim' : 'shimmer';
+  }
+  requestAnimationFrame(updateClip);
+}
+function updateClip() {
+  for (const box of document.querySelectorAll('.txt')) box.classList.toggle('clip', box.scrollWidth > box.clientWidth + 1);
+  // bottom-anchored flex column: overflow goes upward and isn't in scrollHeight
+  const it = $('isText');
+  it.classList.toggle('clip', it.firstElementChild.offsetHeight > it.clientHeight + 1);
+}
+function timerText() {
+  if (!S.recAt) return '0:00';
+  const s = Math.max(0, Math.floor(((S.recEnd || now()) - S.recAt) / 1000));
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+let lastTimer = '';
+function tickTimer() {
+  const txt = timerText();
+  if (txt === lastTimer) return;
+  lastTimer = txt;
+  for (const el of document.querySelectorAll('[data-timer]')) el.textContent = txt;
+}
+function setLabel() {
+  const lab = S.state === 'processing' ? L().procL : S.state === 'done' ? L().doneL : L().rec;
+  $('mxLabel').textContent = lab;
+}
+
+// ── State transitions ────────────────────────────────────────────
+function setState(st) {
+  S.state = st; S.stateAt = now();
+  document.body.dataset.state = st;
+  document.body.classList.toggle('processing-dim', st === 'processing');
+  setLabel();
+}
+function replayEntry() {
+  for (const el of document.querySelectorAll('.shape')) {
+    el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+  }
+}
+function recordingStarted(opts) {
+  S.command = !!(opts && opts.command);
+  document.body.classList.remove('leaving', 'busy');
+  S.leaving = false;
+  S.recAt = now(); S.recEnd = 0;
+  bandsIn.fill(0); bandsSm.fill(0); levelIn = levelSm = 0;
+  IS.w = IS.h = 40; IS.vw = IS.vh = 0;
+  setState('listening');
+  setText(L().listen, 'status');
+  replayEntry();
+  if (S.sounds && !DEMO) chime('start');
+}
+function recordingStopped() {
+  S.recEnd = now();
+  setState('processing');
+  if (!S.hasText) setText(L().proc, 'status');
+  if (S.sounds && !DEMO) chime('stop');
+}
+function transcriptionDone(data) {
+  if (!data || !data.ok) return;          // error: main.js hides us right away
+  setState('done');
+  if (data.text) setText(String(data.text), 'final');
+  else setText(L().done, 'status');
+}
+function leaving() {
+  S.leaving = true;
+  document.body.classList.add('leaving');
+}
+function busy() {
+  if (S.sounds && !DEMO) blip();
+  document.body.classList.remove('busy');
+  void document.body.offsetWidth;
+  document.body.classList.add('busy');
+  setTimeout(() => document.body.classList.remove('busy'), 320);
+}
+function applyStyle(style, opts) {
+  style = LEGACY_STYLES[style] || style;
+  S.style = STYLES.includes(style) ? style : 'amoled';
+  document.body.dataset.style = S.style;
+  if (opts) {
+    if (opts.accent) S.accent = ACCENTS[opts.accent] ? opts.accent : 'mint';
+    if (opts.position) S.pos = ['top', 'bottom', 'center'].includes(opts.position) ? opts.position : 'bottom';
+    if (typeof opts.sounds === 'boolean') S.sounds = opts.sounds;
+  }
+  document.body.dataset.accent = S.accent;
+  document.body.dataset.pos = S.pos;
+  requestAnimationFrame(updateClip);
+}
+function applyLang(lang) {
+  S.lang = I18N[lang] ? lang : 'de';
+  document.documentElement.lang = S.lang;
+  setLabel();
+  if (!S.hasText) {
+    const st = S.state === 'processing' ? L().proc : S.state === 'done' ? L().done : L().listen;
+    setText(st, 'status');
+  }
+}
+
+// ── Sounds (Web Audio) – short glassy two-note chimes ─────────────
+let audioCtx = null;
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new AudioContext();
+  return audioCtx;
+}
+function tone(ctx, freq, t0, peak, dur, type) {
+  const osc = ctx.createOscillator(), gain = ctx.createGain();
+  osc.type = type || 'sine'; osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0, t0);
+  gain.gain.linearRampToValueAtTime(peak, t0 + 0.008);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.02);
+}
+function chime(type) {
+  try {
+    const ctx = getAudioCtx(), t = ctx.currentTime;
+    const notes = type === 'start' ? [659.25, 987.77] : [987.77, 659.25];
+    const peak = type === 'start' ? 0.12 : 0.1;
+    notes.forEach((f, i) => {
+      tone(ctx, f, t + i * 0.085, peak, 0.42);
+      tone(ctx, f * 2, t + i * 0.085, peak * 0.16, 0.22);   // airy overtone
+    });
+  } catch (_) {}
+}
+// Hotkey pressed while the previous dictation is still being processed.
+function blip() {
+  try { const ctx = getAudioCtx(); tone(ctx, 330, ctx.currentTime, 0.08, 0.14, 'triangle'); } catch (_) {}
+}
+
+// ── Frame loop (~60 fps cap, idle when hidden) ────────────────────
+let lastTs = 0, T = 0;
+function frame(ts) {
+  requestAnimationFrame(frame);
+  if (document.hidden) { lastTs = 0; return; }
+  if (lastTs && ts - lastTs < 1000 / 60 - 3) return;      // 120/144/240 Hz panels: skip extra frames
+  const dt = Math.min(0.05, lastTs ? (ts - lastTs) / 1000 : 1 / 60);
+  lastTs = ts; T += dt;
+  if (DEMO) { if (D.paused) return; demoTick(dt); }
+  stepAudio(dt, T);
+  stepMix(dt);
+  tickTimer();
+  const r = RENDER[S.style];
+  if (r) r(dt, T);
+}
+requestAnimationFrame(frame);
+
+// ── IPC ───────────────────────────────────────────────────────────
+if (!DEMO) {
+  const nt = window.notype;
+  nt.onAmplitude(onAudio);
+  nt.onRecordingStarted(recordingStarted);
+  nt.onRecordingStopped(recordingStopped);
+  if (nt.onTranscriptionDone) nt.onTranscriptionDone(transcriptionDone);
+  if (nt.onOverlayLeaving) nt.onOverlayLeaving(leaving);
+  if (nt.onBusy) nt.onBusy(busy);
+  if (nt.onSetStyle) nt.onSetStyle(applyStyle);
+  if (nt.onPreviewEnabled) nt.onPreviewEnabled((on) => { S.preview = !!on; });
+  if (nt.onAppLang) nt.onAppLang(applyLang);
+  if (nt.onPreviewText) {
+    nt.onPreviewText((text) => {
+      if (S.preview && text && S.state === 'listening') setText(String(text), 'live');
+    });
+  }
+}
+
+// ── Demo (settings preview) ──────────────────────────────────────
+// A scripted dictation on repeat: listen (words appear) → process → done.
+const DEMO_TEXT = {
+  de: 'Kurzes Update zum Projekt: Das neue Design ist fertig, ich schicke dir die Links heute Nachmittag.',
+  en: 'Quick project update: the new design is done, I will send you the links this afternoon.',
+};
+const D = { t: 0, phase: 'gap', words: 0, syl: 0, paused: false };
+function demoTick(dt) {
+  D.t += dt;
+  if (D.phase === 'gap' && D.t > 0.5) {
+    D.phase = 'listen'; D.t = 0; D.words = 0;
+    recordingStarted();
+  } else if (D.phase === 'listen') {
+    // speech-like spectrum: syllables at ~4.5 Hz, formant humps, word gaps
+    const words = DEMO_TEXT[S.lang].split(' ');
+    const speaking = (D.t % 1.9) < 1.62 && D.t > 0.35;
+    D.syl += dt * (4.1 + Math.sin(D.t * 0.9) * 0.8);
+    const env = speaking ? Math.pow(Math.abs(Math.sin(D.syl * Math.PI)), 1.4) * (0.75 + 0.25 * Math.sin(D.t * 2.3)) : 0;
+    const f1 = 4 + 1.5 * Math.sin(D.t * 1.7), f2 = 9 + 2 * Math.sin(D.t * 1.1 + 1);
+    for (let i = 0; i < NB; i++) {
+      const shape = 0.95 * Math.exp(-((i - f1) ** 2) / 6) + 0.7 * Math.exp(-((i - f2) ** 2) / 8)
+        + 0.25 * Math.exp(-((i - 14) ** 2) / 10) + 0.12;
+      bandsIn[i] = clamp01(env * shape * (0.85 + 0.3 * Math.random()));
+    }
+    haveBands = true; levelIn = env * 0.4;
+    const n = Math.min(words.length, Math.floor(Math.max(0, D.t - 0.9) / 0.36));
+    if (n !== D.words && S.preview) { D.words = n; if (n > 0) setText(words.slice(0, n).join(' '), 'live'); }
+    if (D.t > 0.9 + words.length * 0.36 + 0.5) { D.phase = 'proc'; D.t = 0; recordingStopped(); }
+  } else if (D.phase === 'proc' && D.t > 1.1) {
+    D.phase = 'done'; D.t = 0;
+    transcriptionDone({ ok: true, text: S.preview ? DEMO_TEXT[S.lang] : '' });
+  } else if (D.phase === 'done' && D.t > 1.7) {
+    D.phase = 'leave'; D.t = 0; leaving();
+  } else if (D.phase === 'leave' && D.t > 0.3) {
+    D.phase = 'gap'; D.t = 0; setState('idle');
+  }
+}
+if (DEMO) {
+  const q = new URLSearchParams(location.search);
+  applyStyle(q.get('style') || 'amoled', { accent: q.get('accent') || 'mint', position: 'center', sounds: false });
+  applyLang(q.get('lang') || 'de');
+  window.addEventListener('message', (e) => {
+    const m = e.data;
+    if (!m || m.type !== 'notype-demo') return;
+    if (m.lang) applyLang(m.lang);
+    if (typeof m.preview === 'boolean') S.preview = m.preview;
+    if (typeof m.paused === 'boolean') D.paused = m.paused;
+    const restart = m.style && m.style !== S.style;
+    applyStyle(m.style || S.style, { accent: m.accent, position: 'center', sounds: false });
+    if (restart) { D.phase = 'gap'; D.t = 0.45; }
+  });
+}
 </script>
 </body>
 </html>

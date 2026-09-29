@@ -59,11 +59,17 @@ DEFAULT_CONFIG = {
     "autostart": False,
     "auto_language_detect": True,
     "overlay_enabled": True,
-    "overlay_style": "wave",         # wave | wave_classic | aurora | particles | pulse | ribbon | spectrum | amoled | amoled_card
+    "overlay_style": "amoled",       # amoled | matrix | island | halo | orb (retired ids are migrated by the Electron app)
     "overlay_position": "bottom",    # bottom | top | center – applies to every style
+    "overlay_accent": "mint",        # mint | mono | aurora | blue | violet | red | amber
+    "overlay_sounds": True,          # start/stop chimes
     "initial_prompt": "",            # custom-vocab bias for Whisper
+    "dictionary": [],                # learned corrections [{"from": heard, "to": meant}]
+    "learn_corrections": True,       # offer fixes typed right after a dictation
+    "command_enabled": True,         # command mode: rewrite the selection by voice
+    "command_hotkey": "ctrl+alt+space",
     "cleanup_mode": "fast",          # off | fast (rules) | ai (local LLM via Ollama)
-    "llm_model": "qwen2.5:3b-instruct",  # Ollama model for cleanup_mode="ai"
+    "llm_model": "qwen3:4b-instruct",  # Ollama model for cleanup_mode="ai"
     "llm_min_words": 8,              # below this, "ai" mode uses rules only (latency)
     "insert_method": "auto",         # auto (Ctrl+V, fallback typing) | type
     "live_preview_enabled": True,    # rolling transcript in the overlay while recording

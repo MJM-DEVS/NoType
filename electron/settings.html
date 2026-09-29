@@ -224,6 +224,8 @@
     border-color: #ef4444; color: #ef4444;
     animation: hotkey-pulse 1s infinite;
   }
+  .field-desc.warn { color: #ef4444; }
+  .learn-auto { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--card-border); }
   @keyframes hotkey-pulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.2); }
     50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1); }
@@ -244,13 +246,13 @@
 
   /* ── Vocabulary table ── */
   .vocab-add { display: flex; gap: 8px; margin-bottom: 12px; }
-  .vocab-add input {
-    flex: 1; padding: 9px 12px; font-size: 13px; font-family: inherit;
+  .vocab-add input, .hist-edit input {
+    flex: 1; min-width: 0; padding: 9px 12px; font-size: 13px; font-family: inherit;
     background: var(--input-bg); color: var(--fg);
     border: 1px solid var(--input-border); border-radius: 8px; outline: none;
     transition: border-color 0.15s;
   }
-  .vocab-add input:focus { border-color: var(--input-focus); }
+  .vocab-add input:focus, .hist-edit input:focus { border-color: var(--input-focus); }
   .vocab-list {
     display: flex; flex-wrap: wrap; gap: 8px;
     min-height: 40px; max-height: 300px; overflow-y: auto;
@@ -271,6 +273,69 @@
   }
   .vocab-chip button:hover { background: var(--hover-bg); color: #ef4444; }
   .vocab-budget { font-size: 11px; color: var(--fg-dim); margin-top: 10px; }
+  .cmd-examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .cmd-examples span {
+    font-size: 11.5px; color: var(--fg-muted); padding: 5px 10px; border-radius: 999px;
+    background: var(--input-bg); border: 1px solid var(--input-border);
+  }
+  .cmd-note { margin-top: 12px; }
+  .card.off .cmd-examples, .card.off .cmd-note, .card.off #cmdHotkeyField { opacity: 0.45; }
+  .x-btn {
+    border: none; background: none; cursor: pointer; flex: 0 0 auto;
+    width: 20px; height: 20px; border-radius: 50%;
+    color: var(--fg-dim); font-size: 12px; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .x-btn:hover { background: var(--hover-bg); color: #ef4444; }
+  .btn-sm.primary { background: var(--save-bg); border-color: transparent; color: var(--save-fg); font-weight: 600; }
+  .btn-sm.primary:hover { background: var(--save-bg-hover); }
+
+  /* ── Dictionary: corrections + learn from recent dictations ── */
+  .dict-arrow { align-self: center; color: var(--fg-dim); font-size: 13px; }
+  .dict-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+  .dict-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 8px 7px 12px; font-size: 12.5px;
+    background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 8px;
+  }
+  .dict-row .from {
+    color: var(--fg-dim); text-decoration: line-through;
+    text-decoration-color: rgba(239, 68, 68, 0.55); overflow-wrap: anywhere;
+  }
+  .dict-row .arrow { color: var(--fg-dim); flex: 0 0 auto; }
+  .dict-row .to { flex: 1; min-width: 0; color: var(--fg); font-weight: 600; overflow-wrap: anywhere; }
+  .dict-row.flash { animation: dict-flash 1.4s ease-out; }
+  @keyframes dict-flash {
+    from { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
+  }
+  .dict-empty { font-size: 12px; color: var(--fg-dim); padding: 4px 2px; }
+
+  .hist-list { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; }
+  .hist-item {
+    padding: 10px 12px; border-radius: 10px;
+    background: var(--input-bg); border: 1px solid var(--input-border);
+  }
+  .hist-time { font-size: 10.5px; color: var(--fg-dim); margin-bottom: 3px; letter-spacing: 0.3px; }
+  .hist-text { font-size: 13px; line-height: 1.8; color: var(--fg-muted); overflow-wrap: anywhere; }
+  .hist-text > span { padding: 2px 0; }
+  .hist-text .tok { cursor: pointer; border-radius: 4px; transition: background 0.12s, color 0.12s; }
+  .hist-text .tok:hover { background: var(--hover-bg); color: var(--fg); }
+  .hist-text .fixed, .hist-text .fixed:hover { color: var(--accent); font-weight: 600; }
+  /* A selected range reads as one continuous highlight, rounded at its ends. */
+  .hist-text .sel, .hist-text .sel:hover {
+    background: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--fg); border-radius: 0;
+  }
+  .hist-text .sel-a { border-top-left-radius: 4px; border-bottom-left-radius: 4px; }
+  .hist-text .sel-b { border-top-right-radius: 4px; border-bottom-right-radius: 4px; }
+  .hist-edit {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--input-border);
+  }
+  .hist-edit .heard {
+    flex: 0 1 auto; max-width: 38%; font-size: 12.5px; color: var(--fg-dim);
+    text-decoration: line-through; text-decoration-color: rgba(239, 68, 68, 0.55);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .vocab-budget.full { color: #ef4444; font-weight: 600; }
 
   /* ── Save bar ── */
@@ -307,6 +372,54 @@
   .status-badge.loading { background: #fff3e0; color: #d97706; }
   [data-theme="dark"] .status-badge.ok { background: rgba(34, 197, 94, 0.18); color: #34d399; }
   [data-theme="dark"] .status-badge.loading { background: rgba(217, 119, 6, 0.20); color: #fbbf24; }
+
+  /* ── Overlay pane ── */
+  /* Live preview: the real overlay.html in demo mode on a desktop-like
+     backdrop (the overlay is always OLED-black, whatever the app theme). */
+  .ovl-stage {
+    position: relative; height: calc(180px * var(--s, 0.9)); border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--card-border);
+    background:
+      radial-gradient(520px 260px at 18% 0%, #3d4f74 0%, transparent 70%),
+      radial-gradient(480px 300px at 92% 100%, #6e3d5f 0%, transparent 70%),
+      linear-gradient(160deg, #1b2231, #2a2e3a 55%, #372f3e);
+  }
+  .ovl-stage iframe {
+    position: absolute; left: 50%; top: 0; width: 720px; height: 180px; border: 0;
+    transform-origin: 50% 0; transform: translateX(-50%) scale(var(--s, 0.9));
+    pointer-events: none; background: transparent;
+  }
+  .ovl-stage .stage-tag {
+    position: absolute; left: 12px; top: 10px;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.9px; text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.55);
+  }
+
+  .style-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+  .style-card {
+    display: flex; flex-direction: column; gap: 8px; padding: 8px 8px 10px;
+    border: 1px solid var(--input-border); border-radius: 12px;
+    background: var(--input-bg); cursor: pointer; text-align: left;
+    font-family: inherit; color: var(--fg); transition: border-color 0.15s, background 0.15s;
+  }
+  .style-card:hover { border-color: var(--input-border-hover); }
+  .style-card.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+  .style-card .thumb {
+    height: 52px; border-radius: 8px; overflow: hidden;
+    background: linear-gradient(160deg, #222b3c, #352d3d);
+  }
+  .style-card .thumb svg { display: block; width: 100%; height: 100%; }
+  .style-card .sc-name { font-size: 12.5px; font-weight: 600; padding: 0 2px; }
+  .style-card .sc-desc { font-size: 10.5px; color: var(--fg-dim); line-height: 1.35; padding: 0 2px; }
+
+  .swatches { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .swatch {
+    width: 26px; height: 26px; border-radius: 50%; border: none; cursor: pointer; padding: 0;
+    position: relative; transition: transform 0.12s;
+  }
+  .swatch:hover { transform: scale(1.1); }
+  .swatch.active { box-shadow: 0 0 0 2px var(--bg-solid, #fff), 0 0 0 4px var(--fg); }
+  [data-theme="dark"] .swatch.active { box-shadow: 0 0 0 2px #1c1c1e, 0 0 0 4px var(--fg); }
 </style>
 </head>
 <body>
@@ -323,7 +436,7 @@
     <!-- Inline stroke icons (render identically everywhere, unlike emoji). -->
     <button class="nav-item active" data-pane="general"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="17" r="2"/></svg></span><span data-i18n="nav.general">Allgemein</span></button>
     <button class="nav-item" data-pane="speech"><span class="nav-ico"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></svg></span><span data-i18n="nav.speech">Sprache &amp; Modell</span></button>
-    <button class="nav-item" data-pane="vocab"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19a2 2 0 0 1 2-2h13M9 7h6"/></svg></span><span data-i18n="nav.vocab">Eigene Begriffe</span></button>
+    <button class="nav-item" data-pane="vocab"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19a2 2 0 0 1 2-2h13M9 7h6"/></svg></span><span data-i18n="nav.vocab">Wörterbuch</span></button>
     <button class="nav-item" data-pane="cleanup"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M11 3l1.9 4.9L17.8 9.8l-4.9 1.9L11 16.6l-1.9-4.9L4.2 9.8l4.9-1.9z"/><path d="M18.5 14l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg></span><span data-i18n="nav.cleanup">Text-Bereinigung</span></button>
     <button class="nav-item" data-pane="overlay"><span class="nav-ico"><svg viewBox="0 0 24 24"><path d="M3 12h2l2-5 3 10 3-8 2 5 2-2h4"/></svg></span><span data-i18n="nav.overlay">Overlay</span></button>
     <button class="nav-item" data-pane="system"><span class="nav-ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></span><span data-i18n="nav.system">System</span></button>
@@ -352,6 +465,16 @@
           </div>
           <label class="toggle">
             <input type="checkbox" id="successToastToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="general.dark">Dunkles Design</div>
+            <div class="field-desc" data-i18n="general.dark.desc">Für Einstellungen, Hinweise und Einrichtung</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="darkModeToggle">
             <span class="slider"></span>
           </label>
         </div>
@@ -386,6 +509,38 @@
             <option value="press_to_speak" data-i18n="general.mode.press">Drücken für Start/Stopp</option>
           </select>
         </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title" data-i18n="cmd.title">Befehlsmodus</div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="cmd.enable">Text per Sprache umschreiben</div>
+            <div class="field-desc" data-i18n="cmd.enable.desc">Text markieren, Befehls-Hotkey drücken und sagen, was damit passieren soll</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="cmdToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="field" id="cmdHotkeyField">
+          <div>
+            <div class="field-label" data-i18n="cmd.hotkey">Befehls-Hotkey</div>
+            <div class="field-desc" data-i18n="cmd.hotkey.desc">Gleicher Modus wie beim Diktieren (halten oder drücken)</div>
+          </div>
+          <div class="hotkey-display">
+            <div class="hotkey-value" id="cmdHotkeyValue">ctrl+alt+space</div>
+            <button class="btn-sm" id="cmdHotkeyBtn" data-i18n="general.change">Ändern</button>
+          </div>
+        </div>
+        <div class="cmd-examples" id="cmdExamples">
+          <span data-i18n="cmd.ex.1">„Mach das förmlicher“</span>
+          <span data-i18n="cmd.ex.2">„Übersetz das ins Englische“</span>
+          <span data-i18n="cmd.ex.3">„Als Stichpunkte“</span>
+          <span data-i18n="cmd.ex.4">„Kürzer und freundlicher“</span>
+          <span data-i18n="cmd.ex.5">Ohne Markierung: „Schreib eine kurze Absage für morgen“</span>
+        </div>
+        <div class="field-desc cmd-note" data-i18n="cmd.note">Nutzt die lokale KI aus „Text-Bereinigung“ – auch wenn die Bereinigung selbst aus ist.</div>
       </div>
     </section>
 
@@ -472,8 +627,44 @@
       </div>
     </section>
 
-    <!-- ═══ Pane: Eigene Begriffe ═══ -->
+    <!-- ═══ Pane: Wörterbuch ═══ -->
     <section class="pane" id="pane-vocab">
+      <div class="card">
+        <div class="card-title" data-i18n="dict.learn.title">Aus letzten Diktaten lernen</div>
+        <div class="field-desc" style="margin-bottom: 14px;" data-i18n="dict.learn.desc">
+          Klicke auf ein falsch erkanntes Wort – oder ziehe über mehrere – und tippe die
+          richtige Schreibweise ein. Ab dann korrigiert NoType es automatisch.
+        </div>
+        <div class="hist-list" id="histList"></div>
+        <div class="field learn-auto">
+          <div>
+            <div class="field-label" data-i18n="dict.auto">Korrekturen automatisch vorschlagen</div>
+            <div class="field-desc" data-i18n="dict.auto.desc">Korrigierst du ein diktiertes Wort gleich danach, fragt NoType, ob es das lernen soll. Liest dafür kurz das Textfeld mit – nur lokal, nie Passwortfelder.</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="learnToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title" data-i18n="dict.fix.title">Korrekturen</div>
+        <div class="field-desc" style="margin-bottom: 14px;" data-i18n="dict.fix.desc">
+          Was die Spracherkennung falsch versteht → wie es geschrieben werden soll.
+        </div>
+        <div class="vocab-add">
+          <input type="text" id="dictFrom" maxlength="80"
+                 placeholder="Erkannt als …" data-i18n-placeholder="dict.fix.from">
+          <span class="dict-arrow">→</span>
+          <input type="text" id="dictTo" maxlength="80"
+                 placeholder="Richtig geschrieben …" data-i18n-placeholder="dict.fix.to">
+          <button class="btn-sm" id="dictAddBtn">+</button>
+        </div>
+        <div class="dict-list" id="dictList"></div>
+        <div class="vocab-budget" id="dictCount">0 / 500</div>
+      </div>
+
       <div class="card">
         <div class="card-title" data-i18n="vocab.title">Eigene Begriffe</div>
         <div class="field-desc" style="margin-bottom: 14px;" data-i18n="vocab.desc">
@@ -511,10 +702,11 @@
             <div class="field-desc" data-i18n="cleanup.model.desc">Größer = bessere Korrekturen, aber langsamer. Antwortet das Modell nicht in 2,5 s, wird der regelbasierte Text eingefügt.</div>
           </div>
           <select id="llmModelSelect">
-            <option value="qwen2.5:3b-instruct" data-i18n="llm.qwen3">Qwen 2.5 3B – Standard, ~2 GB, schnell</option>
-            <option value="qwen2.5:7b-instruct" data-i18n="llm.qwen7">Qwen 2.5 7B – ~4,7 GB, genauer (GPU ≥ 8 GB)</option>
-            <option value="llama3.2:3b" data-i18n="llm.llama3">Llama 3.2 3B – ~2 GB, stark auf Englisch</option>
-            <option value="gemma2:2b" data-i18n="llm.gemma2">Gemma 2 2B – ~1,6 GB, am schnellsten</option>
+            <option value="qwen3:4b-instruct" data-i18n="llm.qwen3_4b">Qwen 3 4B – Standard, ~2,5 GB, schnell &amp; wortgetreu</option>
+            <option value="qwen3.5:4b" data-i18n="llm.qwen35_4b">Qwen 3.5 4B – ~3,4 GB, freier formuliert, langsamer</option>
+            <option value="qwen3.5:9b" data-i18n="llm.qwen35_9b">Qwen 3.5 9B – ~6,6 GB, gründlicher (GPU ≥ 10 GB)</option>
+            <option value="gemma4:12b" data-i18n="llm.gemma4_12b">Gemma 4 12B – ~7,6 GB, stark in vielen Sprachen (GPU ≥ 12 GB)</option>
+            <option value="qwen2.5:3b-instruct" data-i18n="llm.qwen25_3b">Qwen 2.5 3B – ~1,9 GB, bisheriger Standard</option>
           </select>
         </div>
         <div class="field">
@@ -522,6 +714,7 @@
             <div class="field-label" data-i18n="cleanup.engine">KI-Engine (Ollama)</div>
             <div class="field-desc" id="ollamaDesc" data-i18n="cleanup.checking">Status wird geprüft...</div>
           </div>
+          <button class="btn-sm" id="ollamaUpdBtn" style="display:none;" data-i18n="cleanup.update">Aktualisieren</button>
           <button class="btn-sm" id="ollamaBtn" style="display:none;" data-i18n="cleanup.install">Installieren</button>
           <span class="status-badge loading" id="ollamaBadge" style="display:none;">…</span>
         </div>
@@ -530,24 +723,22 @@
 
     <!-- ═══ Pane: Overlay ═══ -->
     <section class="pane" id="pane-overlay">
+      <div class="ovl-stage" id="ovlStage">
+        <iframe id="ovlPreview" tabindex="-1" aria-hidden="true"></iframe>
+        <span class="stage-tag" data-i18n="overlay.preview">Live-Vorschau</span>
+      </div>
       <div class="card">
-        <div class="card-title" data-i18n="overlay.title">Overlay</div>
+        <div class="card-title" data-i18n="overlay.style">Stil</div>
+        <div class="style-grid" id="styleGrid"></div>
+      </div>
+      <div class="card">
+        <div class="card-title" data-i18n="overlay.look">Darstellung</div>
         <div class="field">
           <div>
-            <div class="field-label" data-i18n="overlay.style">Overlay-Stil</div>
-            <div class="field-desc" data-i18n="overlay.style.desc">Aussehen der Aufnahme-Anzeige</div>
+            <div class="field-label" data-i18n="overlay.accent">Akzentfarbe</div>
+            <div class="field-desc" id="accentName"></div>
           </div>
-          <select id="overlayStyleSelect">
-            <option value="amoled" data-i18n="ovl.amoled">AMOLED Bar – Schwarz + Live-Text</option>
-            <option value="amoled_card" data-i18n="ovl.amoled_card">AMOLED Card – große Karte + Live-Text</option>
-            <option value="wave" data-i18n="ovl.wave">Wave – mehrlagige Sinuswellen</option>
-            <option value="wave_classic" data-i18n="ovl.wave_classic">Wave Classic – Original-Sinuslinie</option>
-            <option value="aurora" data-i18n="ovl.aurora">Aurora – rotierender Farb-Vortex</option>
-            <option value="particles" data-i18n="ovl.particles">Particles – Partikelstrom</option>
-            <option value="pulse" data-i18n="ovl.pulse">Pulse – atmender Orb</option>
-            <option value="ribbon" data-i18n="ovl.ribbon">Ribbon – fließende Bänder</option>
-            <option value="spectrum" data-i18n="ovl.spectrum">Spectrum – Glas-Card mit FFT-Bars</option>
-          </select>
+          <div class="swatches" id="accentSwatches"></div>
         </div>
         <div class="field">
           <div>
@@ -562,21 +753,21 @@
         </div>
         <div class="field">
           <div>
-            <div class="field-label" data-i18n="overlay.dark">Dark Mode Overlay</div>
-            <div class="field-desc" data-i18n="overlay.dark.desc">Dunkler Overlay-Hintergrund</div>
-          </div>
-          <label class="toggle">
-            <input type="checkbox" id="darkModeToggle">
-            <span class="slider"></span>
-          </label>
-        </div>
-        <div class="field">
-          <div>
             <div class="field-label" data-i18n="overlay.live">Live-Text im Overlay</div>
             <div class="field-desc" data-i18n="overlay.live.desc">Zeigt den erkannten Text schon während der Aufnahme</div>
           </div>
           <label class="toggle">
             <input type="checkbox" id="livePreviewToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="overlay.sounds">Töne</div>
+            <div class="field-desc" data-i18n="overlay.sounds.desc">Kurzer Klang bei Start und Ende der Aufnahme</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="soundsToggle">
             <span class="slider"></span>
           </label>
         </div>
@@ -653,7 +844,7 @@
   // ── i18n ─────────────────────────────────────────────────────────
   const I18N = {
     de: {
-      'nav.general': 'Allgemein', 'nav.speech': 'Sprache & Modell', 'nav.vocab': 'Eigene Begriffe',
+      'nav.general': 'Allgemein', 'nav.speech': 'Sprache & Modell', 'nav.vocab': 'Wörterbuch',
       'nav.cleanup': 'Text-Bereinigung', 'nav.overlay': 'Overlay', 'nav.system': 'System',
       'general.app': 'App', 'general.applang': 'App-Sprache',
       'general.applang.desc': 'Sprache der Benutzeroberfläche',
@@ -663,6 +854,14 @@
       'general.change': 'Ändern', 'general.waiting': 'Warte auf Eingabe...',
       'general.mode': 'Modus', 'general.mode.desc': 'Wie die Aufnahme gesteuert wird',
       'general.mode.hold': 'Halten zum Sprechen', 'general.mode.press': 'Drücken für Start/Stopp',
+      'cmd.title': 'Befehlsmodus', 'cmd.enable': 'Text per Sprache umschreiben',
+      'cmd.enable.desc': 'Text markieren, Befehls-Hotkey drücken und sagen, was damit passieren soll',
+      'cmd.hotkey': 'Befehls-Hotkey', 'cmd.hotkey.desc': 'Gleicher Modus wie beim Diktieren (halten oder drücken)',
+      'cmd.ex.1': '„Mach das förmlicher“', 'cmd.ex.2': '„Übersetz das ins Englische“',
+      'cmd.ex.3': '„Als Stichpunkte“', 'cmd.ex.4': '„Kürzer und freundlicher“',
+      'cmd.ex.5': 'Ohne Markierung: „Schreib eine kurze Absage für morgen“',
+      'cmd.note': 'Nutzt die lokale KI aus „Text-Bereinigung“ – auch wenn die Bereinigung selbst aus ist.',
+      'cmd.same': 'Muss sich vom Diktier-Hotkey unterscheiden',
       'speech.title': 'Sprache', 'speech.lang': 'Sprache', 'speech.lang.desc': '99 Sprachen verfügbar',
       'speech.autodetect': 'Automatische Spracherkennung',
       'speech.autodetect.desc': 'Erkennt die gesprochene Sprache automatisch',
@@ -681,36 +880,50 @@
       'vocab.title': 'Eigene Begriffe',
       'vocab.desc': 'Firmen-, Produkt- oder Eigennamen, damit sie korrekt geschrieben werden. Ein Begriff pro Eintrag – Enter oder „+" zum Hinzufügen.',
       'vocab.placeholder': 'z.B. MetricDash, Supabase, Mijo …',
+      'dict.learn.title': 'Aus letzten Diktaten lernen',
+      'dict.learn.desc': 'Klicke auf ein falsch erkanntes Wort – oder ziehe über mehrere – und tippe die richtige Schreibweise ein. Ab dann korrigiert NoType es automatisch.',
+      'dict.auto': 'Korrekturen automatisch vorschlagen',
+      'dict.auto.desc': 'Korrigierst du ein diktiertes Wort gleich danach, fragt NoType, ob es das lernen soll. Liest dafür kurz das Textfeld mit – nur lokal, nie Passwortfelder.',
+      'dict.learn.empty': 'Noch keine Diktate – sobald du diktierst, erscheinen sie hier.',
+      'dict.learn.placeholder': 'Richtige Schreibweise', 'dict.learn.apply': 'Übernehmen',
+      'dict.fix.title': 'Korrekturen',
+      'dict.fix.desc': 'Was die Spracherkennung falsch versteht → wie es geschrieben werden soll. Gilt für jedes Diktat, auch ohne KI – und die richtige Schreibweise hilft zusätzlich der Erkennung.',
+      'dict.fix.from': 'Erkannt als …', 'dict.fix.to': 'Richtig geschrieben …',
+      'dict.fix.empty': 'Noch keine Korrekturen.', 'dict.full': 'Wörterbuch voll',
       'cleanup.title': 'Text-Bereinigung', 'cleanup.mode': 'Bereinigungsmodus',
       'cleanup.mode.desc': 'Entfernt Füllwörter & Versprecher nach dem Diktat',
       'cleanup.off': 'Aus – Rohtext', 'cleanup.fast': 'Schnell – Regelbasiert',
       'cleanup.ai': 'KI – Lokales LLM (Ollama)',
       'cleanup.model': 'KI-Modell',
       'cleanup.model.desc': 'Größer = bessere Korrekturen, aber langsamer. Antwortet das Modell nicht in 2,5 s, wird der regelbasierte Text eingefügt.',
-      'llm.qwen3': 'Qwen 2.5 3B – Standard, ~2 GB, schnell',
-      'llm.qwen7': 'Qwen 2.5 7B – ~4,7 GB, genauer (GPU ≥ 8 GB)',
-      'llm.llama3': 'Llama 3.2 3B – ~2 GB, stark auf Englisch',
-      'llm.gemma2': 'Gemma 2 2B – ~1,6 GB, am schnellsten',
+      'llm.qwen3_4b': 'Qwen 3 4B – Standard, ~2,5 GB, schnell & wortgetreu',
+      'llm.qwen35_4b': 'Qwen 3.5 4B – ~3,4 GB, freier formuliert, langsamer',
+      'llm.qwen35_9b': 'Qwen 3.5 9B – ~6,6 GB, gründlicher (GPU ≥ 10 GB)',
+      'llm.gemma4_12b': 'Gemma 4 12B – ~7,6 GB, stark in vielen Sprachen (GPU ≥ 12 GB)',
+      'llm.qwen25_3b': 'Qwen 2.5 3B – ~1,9 GB, bisheriger Standard',
       'cleanup.engine': 'KI-Engine (Ollama)', 'cleanup.checking': 'Status wird geprüft...',
       'cleanup.install': 'Installieren', 'cleanup.install.size': 'Installieren (~2,5 GB)',
       'cleanup.activate': 'Aktivieren', 'cleanup.loadmodel': 'KI-Modell laden',
       'cleanup.running': 'Läuft...',
+      'cleanup.update': 'Aktualisieren', 'cleanup.update.title': 'Prüft bei GitHub auf eine neuere Ollama-Version und installiert sie – deine Modelle bleiben erhalten',
       'cleanup.active': 'Aktiv ✓', 'cleanup.ready.desc': 'Lokales LLM bereit – Modus „KI" nutzt es automatisch',
       'cleanup.installed.desc': 'Installiert, aber noch nicht einsatzbereit',
       'cleanup.notinstalled.desc': 'Einmaliger Download – danach läuft die KI-Bereinigung komplett lokal',
-      'overlay.title': 'Overlay', 'overlay.style': 'Overlay-Stil',
-      'overlay.style.desc': 'Aussehen der Aufnahme-Anzeige',
-      'ovl.amoled': 'AMOLED Bar – Schwarz + Live-Text',
-      'ovl.amoled_card': 'AMOLED Card – große Karte + Live-Text',
+      'general.dark': 'Dunkles Design', 'general.dark.desc': 'Für Einstellungen, Hinweise und Einrichtung',
+      'overlay.preview': 'Live-Vorschau', 'overlay.style': 'Stil', 'overlay.look': 'Darstellung',
+      'overlay.accent': 'Akzentfarbe',
       'overlay.pos': 'Position', 'overlay.pos.desc': 'Wo die Anzeige auf dem Bildschirm erscheint',
       'overlay.pos.bottom': 'Unten', 'overlay.pos.top': 'Oben', 'overlay.pos.center': 'Mitte',
-      'ovl.wave': 'Wave – mehrlagige Sinuswellen', 'ovl.wave_classic': 'Wave Classic – Original-Sinuslinie',
-      'ovl.aurora': 'Aurora – rotierender Farb-Vortex', 'ovl.particles': 'Particles – Partikelstrom',
-      'ovl.pulse': 'Pulse – atmender Orb', 'ovl.ribbon': 'Ribbon – fließende Bänder',
-      'ovl.spectrum': 'Spectrum – Glas-Card mit FFT-Bars',
-      'overlay.dark': 'Dark Mode Overlay', 'overlay.dark.desc': 'Dunkler Overlay-Hintergrund',
       'overlay.live': 'Live-Text im Overlay',
       'overlay.live.desc': 'Zeigt den erkannten Text schon während der Aufnahme',
+      'overlay.sounds': 'Töne', 'overlay.sounds.desc': 'Kurzer Klang bei Start und Ende der Aufnahme',
+      'ovl.amoled': 'AMOLED Bar', 'ovl.amoled.desc': 'Spektrum, Live-Text und Timer in einer Pille',
+      'ovl.matrix': 'Dot Matrix', 'ovl.matrix.desc': 'LED-Punkte mit Pixel-Timer – im Nothing-Stil',
+      'ovl.island': 'Island', 'ovl.island.desc': 'Kompakte Kapsel, die mit dem Text mitwächst',
+      'ovl.halo': 'Halo', 'ovl.halo.desc': 'Leuchtender Farbrand, der auf deine Stimme reagiert',
+      'ovl.orb': 'Orb', 'ovl.orb.desc': 'Flüssiges Licht in einer Glaskugel',
+      'acc.mint': 'Mint', 'acc.mono': 'Mono', 'acc.aurora': 'Aurora', 'acc.blue': 'Blau',
+      'acc.violet': 'Violett', 'acc.red': 'Rot', 'acc.amber': 'Bernstein',
       'system.audio': 'Audio', 'system.mic': 'Mikrofon', 'system.mic.desc': 'Audioeingangsgerät auswählen',
       'system.mic.default': 'Standard (System)', 'system.mic.defaulttag': ' (Standard)',
       'system.mictest': 'Mikrofon-Test', 'system.mictest.desc': 'Prüfe ob dein Mikrofon funktioniert',
@@ -722,7 +935,7 @@
       'save': 'Speichern', 'save.done': 'Gespeichert ✓',
     },
     en: {
-      'nav.general': 'General', 'nav.speech': 'Language & Model', 'nav.vocab': 'Custom Vocabulary',
+      'nav.general': 'General', 'nav.speech': 'Language & Model', 'nav.vocab': 'Dictionary',
       'nav.cleanup': 'Text Cleanup', 'nav.overlay': 'Overlay', 'nav.system': 'System',
       'general.app': 'App', 'general.applang': 'App language',
       'general.applang.desc': 'Language of the user interface',
@@ -732,6 +945,14 @@
       'general.change': 'Change', 'general.waiting': 'Waiting for input...',
       'general.mode': 'Mode', 'general.mode.desc': 'How recording is controlled',
       'general.mode.hold': 'Hold to speak', 'general.mode.press': 'Press to start/stop',
+      'cmd.title': 'Command mode', 'cmd.enable': 'Rewrite text by voice',
+      'cmd.enable.desc': 'Select text, press the command hotkey and say what should happen to it',
+      'cmd.hotkey': 'Command hotkey', 'cmd.hotkey.desc': 'Same mode as dictation (hold or press)',
+      'cmd.ex.1': '“Make this more formal”', 'cmd.ex.2': '“Translate this to German”',
+      'cmd.ex.3': '“As bullet points”', 'cmd.ex.4': '“Shorter and friendlier”',
+      'cmd.ex.5': 'Nothing selected: “Write a short decline for tomorrow”',
+      'cmd.note': 'Uses the local AI from “Text Cleanup” – even when cleanup itself is off.',
+      'cmd.same': 'Must differ from the dictation hotkey',
       'speech.title': 'Language', 'speech.lang': 'Language', 'speech.lang.desc': '99 languages available',
       'speech.autodetect': 'Automatic language detection',
       'speech.autodetect.desc': 'Detects the spoken language automatically',
@@ -750,36 +971,50 @@
       'vocab.title': 'Custom Vocabulary',
       'vocab.desc': 'Company, product or personal names so they are spelled correctly. One term per entry – Enter or "+" to add.',
       'vocab.placeholder': 'e.g. MetricDash, Supabase, Mijo …',
+      'dict.learn.title': 'Learn from recent dictations',
+      'dict.learn.desc': 'Click a misrecognized word – or drag across several – and type the correct spelling. From then on NoType fixes it automatically.',
+      'dict.auto': 'Suggest corrections automatically',
+      'dict.auto.desc': 'When you fix a dictated word right afterwards, NoType asks whether to learn it. It briefly reads the text field for that – locally only, never password fields.',
+      'dict.learn.empty': 'No dictations yet – they show up here as soon as you dictate.',
+      'dict.learn.placeholder': 'Correct spelling', 'dict.learn.apply': 'Apply',
+      'dict.fix.title': 'Corrections',
+      'dict.fix.desc': 'What speech recognition gets wrong → how it should be written. Applies to every dictation, even without AI – and the correct spelling also helps recognition.',
+      'dict.fix.from': 'Heard as …', 'dict.fix.to': 'Correct spelling …',
+      'dict.fix.empty': 'No corrections yet.', 'dict.full': 'Dictionary full',
       'cleanup.title': 'Text Cleanup', 'cleanup.mode': 'Cleanup mode',
       'cleanup.mode.desc': 'Removes filler words & stutters after dictation',
       'cleanup.off': 'Off – raw text', 'cleanup.fast': 'Fast – rule-based',
       'cleanup.ai': 'AI – local LLM (Ollama)',
       'cleanup.model': 'AI model',
       'cleanup.model.desc': 'Bigger = better corrections but slower. If the model does not answer within 2.5 s, the rule-cleaned text is inserted.',
-      'llm.qwen3': 'Qwen 2.5 3B – default, ~2 GB, fast',
-      'llm.qwen7': 'Qwen 2.5 7B – ~4.7 GB, more accurate (GPU ≥ 8 GB)',
-      'llm.llama3': 'Llama 3.2 3B – ~2 GB, strong in English',
-      'llm.gemma2': 'Gemma 2 2B – ~1.6 GB, fastest',
+      'llm.qwen3_4b': 'Qwen 3 4B – default, ~2.5 GB, fast & faithful',
+      'llm.qwen35_4b': 'Qwen 3.5 4B – ~3.4 GB, freer wording, slower',
+      'llm.qwen35_9b': 'Qwen 3.5 9B – ~6.6 GB, more thorough (GPU ≥ 10 GB)',
+      'llm.gemma4_12b': 'Gemma 4 12B – ~7.6 GB, strong across languages (GPU ≥ 12 GB)',
+      'llm.qwen25_3b': 'Qwen 2.5 3B – ~1.9 GB, previous default',
       'cleanup.engine': 'AI engine (Ollama)', 'cleanup.checking': 'Checking status...',
       'cleanup.install': 'Install', 'cleanup.install.size': 'Install (~2.5 GB)',
       'cleanup.activate': 'Activate', 'cleanup.loadmodel': 'Download AI model',
       'cleanup.running': 'Working...',
+      'cleanup.update': 'Update', 'cleanup.update.title': 'Checks GitHub for a newer Ollama and installs it – your models are kept',
       'cleanup.active': 'Active ✓', 'cleanup.ready.desc': 'Local LLM ready – "AI" mode uses it automatically',
       'cleanup.installed.desc': 'Installed, but not ready yet',
       'cleanup.notinstalled.desc': 'One-time download – afterwards AI cleanup runs fully local',
-      'overlay.title': 'Overlay', 'overlay.style': 'Overlay style',
-      'overlay.style.desc': 'Look of the recording indicator',
-      'ovl.amoled': 'AMOLED bar – black + live text',
-      'ovl.amoled_card': 'AMOLED card – large card + live text',
+      'general.dark': 'Dark theme', 'general.dark.desc': 'For settings, notifications and setup',
+      'overlay.preview': 'Live preview', 'overlay.style': 'Style', 'overlay.look': 'Appearance',
+      'overlay.accent': 'Accent color',
       'overlay.pos': 'Position', 'overlay.pos.desc': 'Where the indicator appears on screen',
       'overlay.pos.bottom': 'Bottom', 'overlay.pos.top': 'Top', 'overlay.pos.center': 'Center',
-      'ovl.wave': 'Wave – layered sine waves', 'ovl.wave_classic': 'Wave Classic – original sine line',
-      'ovl.aurora': 'Aurora – rotating color vortex', 'ovl.particles': 'Particles – particle stream',
-      'ovl.pulse': 'Pulse – breathing orb', 'ovl.ribbon': 'Ribbon – flowing bands',
-      'ovl.spectrum': 'Spectrum – glass card with FFT bars',
-      'overlay.dark': 'Dark mode overlay', 'overlay.dark.desc': 'Dark overlay background',
       'overlay.live': 'Live text in overlay',
       'overlay.live.desc': 'Shows recognized text while you are still speaking',
+      'overlay.sounds': 'Sounds', 'overlay.sounds.desc': 'Short chime when recording starts and stops',
+      'ovl.amoled': 'AMOLED Bar', 'ovl.amoled.desc': 'Spectrum, live text and timer in one pill',
+      'ovl.matrix': 'Dot Matrix', 'ovl.matrix.desc': 'LED dots with a pixel timer – Nothing style',
+      'ovl.island': 'Island', 'ovl.island.desc': 'Compact capsule that grows with your text',
+      'ovl.halo': 'Halo', 'ovl.halo.desc': 'Glowing color rim that reacts to your voice',
+      'ovl.orb': 'Orb', 'ovl.orb.desc': 'Liquid light inside a glass sphere',
+      'acc.mint': 'Mint', 'acc.mono': 'Mono', 'acc.aurora': 'Aurora', 'acc.blue': 'Blue',
+      'acc.violet': 'Violet', 'acc.red': 'Red', 'acc.amber': 'Amber',
       'system.audio': 'Audio', 'system.mic': 'Microphone', 'system.mic.desc': 'Select the audio input device',
       'system.mic.default': 'Default (system)', 'system.mic.defaulttag': ' (default)',
       'system.mictest': 'Microphone test', 'system.mictest.desc': 'Check that your microphone works',
@@ -815,6 +1050,8 @@
       document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b === btn));
       document.querySelectorAll('.pane').forEach(p =>
         p.classList.toggle('active', p.id === 'pane-' + btn.dataset.pane));
+      if (btn.dataset.pane === 'overlay') showPreview();
+      else pushPreview();   // pauses the demo loop
     };
   });
 
@@ -863,16 +1100,25 @@
   $('setupBtn').onclick = () => window.notype.openOnboarding();
 
   // ── Hotkey Recording ──
-  $('hotkeyBtn').onclick = () => {
+  // `recordingHotkey` is the id prefix of the recorder in use ('hotkey' for
+  // dictation, 'cmdHotkey' for command mode) – or false.
+  let hotkeyBefore = '';
+  function startHotkeyCapture(which) {
     if (recordingHotkey) return;
-    recordingHotkey = true;
+    recordingHotkey = which;
+    hotkeyBefore = $(which + 'Value').textContent;
     // Park the global shortcut so pressing the new combo can't start a dictation.
     if (window.notype.setHotkeyCapture) window.notype.setHotkeyCapture(true);
     hotkeyParts.clear();
-    $('hotkeyValue').textContent = t('general.waiting');
-    $('hotkeyValue').classList.add('recording');
-    $('hotkeyBtn').textContent = '...';
-  };
+    $(which + 'Value').textContent = t('general.waiting');
+    $(which + 'Value').classList.add('recording');
+    $(which + 'Btn').textContent = '...';
+  }
+  $('hotkeyBtn').onclick = () => startHotkeyCapture('hotkey');
+  $('cmdHotkeyBtn').onclick = () => startHotkeyCapture('cmdHotkey');
+  const renderCmdCard = () =>
+    $('cmdToggle').closest('.card').classList.toggle('off', !$('cmdToggle').checked);
+  $('cmdToggle').addEventListener('change', renderCmdCard);
 
   document.addEventListener('keydown', (e) => {
     if (!recordingHotkey) return;
@@ -888,18 +1134,37 @@
 
     const mapped = map[key] || (e.code.startsWith('Key') ? e.code.slice(3).toLowerCase() : key);
     hotkeyParts.add(mapped);
-    $('hotkeyValue').textContent = Array.from(hotkeyParts).join('+');
+    $(recordingHotkey + 'Value').textContent = Array.from(hotkeyParts).join('+');
   });
 
   document.addEventListener('keyup', (e) => {
     if (!recordingHotkey) return;
     if (hotkeyParts.size > 0) {
+      const which = recordingHotkey;
       recordingHotkey = false;
       if (window.notype.setHotkeyCapture) window.notype.setHotkeyCapture(false);
-      markDirty();
-      $('hotkeyValue').classList.remove('recording');
-      $('hotkeyBtn').textContent = t('general.change');
-      $('hotkeyValue').textContent = Array.from(hotkeyParts).join('+');
+      $(which + 'Value').classList.remove('recording');
+      $(which + 'Btn').textContent = t('general.change');
+      let combo = Array.from(hotkeyParts).join('+');
+      // Both hotkeys on one combo can't work – keep the previous one.
+      const other = $(which === 'hotkey' ? 'cmdHotkeyValue' : 'hotkeyValue').textContent.trim();
+      if (combo.toLowerCase() === other.toLowerCase()) {
+        combo = hotkeyBefore;
+        // Say why inline – the row's description turns into the reason.
+        const desc = $(which + 'Value').closest('.field').querySelector('.field-desc');
+        const descText = desc.textContent;
+        desc.textContent = t('cmd.same');
+        desc.classList.add('warn');
+        $(which + 'Value').classList.add('recording');
+        setTimeout(() => {
+          $(which + 'Value').classList.remove('recording');
+          desc.classList.remove('warn');
+          if (desc.textContent === t('cmd.same')) desc.textContent = descText;
+        }, 2200);
+      } else {
+        markDirty();
+      }
+      $(which + 'Value').textContent = combo;
     }
   });
 
@@ -997,17 +1262,272 @@
     if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addVocabTerm(); }
   });
 
+  // ── Dictionary: learned corrections ("heard" → "meant") ──
+  // Applied by the backend (dictionary.py) to every dictation; the correct
+  // spellings also bias Whisper and the AI cleanup.
+  const DICT_MAX = 500;
+  let dictEntries = [];   // [{from, to}], oldest first
+  // Same word split as the backend: "Kuber-Netis" and "kuber netis" are one mistake.
+  const phraseKey = (s) => (String(s).toLowerCase().match(/[\p{L}\p{N}_]+/gu) || []).join(' ');
+
+  function renderDict(flashNewest = false) {
+    const list = $('dictList');
+    list.innerHTML = '';
+    if (!dictEntries.length) {
+      const empty = document.createElement('div');
+      empty.className = 'dict-empty';
+      empty.textContent = t('dict.fix.empty');
+      list.appendChild(empty);
+    }
+    // Newest on top – that's the one the user just taught.
+    for (let i = dictEntries.length - 1; i >= 0; i--) {
+      const e = dictEntries[i];
+      const row = document.createElement('div');
+      row.className = 'dict-row' + (flashNewest && i === dictEntries.length - 1 ? ' flash' : '');
+      const from = document.createElement('span'); from.className = 'from'; from.textContent = e.from;
+      const arrow = document.createElement('span'); arrow.className = 'arrow'; arrow.textContent = '→';
+      const to = document.createElement('span'); to.className = 'to'; to.textContent = e.to;
+      const del = document.createElement('button'); del.className = 'x-btn'; del.textContent = '✕';
+      del.onclick = () => { dictEntries.splice(i, 1); renderDict(); markDirty(); };
+      row.append(from, arrow, to, del);
+      list.appendChild(row);
+    }
+    const count = $('dictCount');
+    count.textContent = dictEntries.length >= DICT_MAX
+      ? `${t('dict.full')} · ${DICT_MAX} / ${DICT_MAX}` : `${dictEntries.length} / ${DICT_MAX}`;
+    count.classList.toggle('full', dictEntries.length >= DICT_MAX);
+  }
+
+  function addDictEntry(from, to) {
+    from = from.trim(); to = to.trim();
+    const fk = phraseKey(from), tk = phraseKey(to);
+    if (!fk || !tk || from === to) return false;
+    // Teaching the same mistake again replaces the old spelling; the exact
+    // reverse of an existing pair would flip back and forth, so it goes too.
+    const kept = dictEntries.filter(e =>
+      phraseKey(e.from) !== fk && !(phraseKey(e.from) === tk && phraseKey(e.to) === fk));
+    if (kept.length >= DICT_MAX) { renderDict(); return false; }
+    dictEntries = kept.concat({ from, to });
+    renderDict(true);
+    markDirty();
+    return true;
+  }
+
+  function addDictFromInputs() {
+    if (addDictEntry($('dictFrom').value, $('dictTo').value)) {
+      $('dictFrom').value = ''; $('dictTo').value = '';
+      $('dictFrom').focus();
+    }
+  }
+  $('dictAddBtn').onclick = addDictFromInputs;
+  $('dictFrom').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); $('dictTo').focus(); }
+  });
+  $('dictTo').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addDictFromInputs(); }
+  });
+
+  // ── Learn from recent dictations ──
+  // Each dictation is shown as clickable words. Click one (or drag across a
+  // few), type the correct spelling → a new correction. Corrections made
+  // here are also shown in place, so the list reflects what was taught.
+  const HIST_MAX_WORDS = 8;
+  const WORD_RE = /[\p{L}\p{N}_]+(?:['’\-][\p{L}\p{N}_]+)*/gu;
+  let histItems = [];   // [{time, text, marks: [[start, end]]}] – local view
+  let histSel = null;   // {time, anchor, a, b} – selected word range
+  let histDragging = false;
+
+  function histTime(ms) {
+    const d = new Date(ms);
+    const hm = d.toLocaleTimeString(uiLang, { hour: '2-digit', minute: '2-digit' });
+    return d.toDateString() === new Date().toDateString()
+      ? hm : `${d.toLocaleDateString(uiLang, { day: '2-digit', month: '2-digit' })} · ${hm}`;
+  }
+
+  function setHistory(list) {
+    const prev = new Map(histItems.map(it => [it.time, it]));
+    histItems = (Array.isArray(list) ? list : [])
+      .filter(h => h && typeof h.text === 'string' && h.text.trim())
+      .map(h => prev.get(h.time) || { time: h.time, text: h.text, marks: [] });
+    if (histSel && !histItems.some(it => it.time === histSel.time)) histSel = null;
+    renderHist();
+  }
+
+  function renderHist() {
+    const box = $('histList');
+    // Keep a half-typed correction across re-renders (a new dictation can
+    // arrive while the editor is open).
+    const pending = box.querySelector('.hist-edit input');
+    const pendingValue = pending ? pending.value : null;
+    box.innerHTML = '';
+    if (!histItems.length) {
+      const empty = document.createElement('div');
+      empty.className = 'dict-empty';
+      empty.textContent = t('dict.learn.empty');
+      box.appendChild(empty);
+      return;
+    }
+    for (const it of histItems) {
+      const item = document.createElement('div');
+      item.className = 'hist-item';
+      item.dataset.time = it.time;
+      const time = document.createElement('div');
+      time.className = 'hist-time';
+      time.textContent = histTime(it.time);
+      const text = document.createElement('div');
+      text.className = 'hist-text';
+      let last = 0, k = 0;
+      const marked = (s, e) => it.marks.some(([a, b]) => s < b && e > a);
+      const sep = (str, after) => {
+        const span = document.createElement('span');
+        span.dataset.after = after;
+        span.textContent = str;
+        text.appendChild(span);
+      };
+      for (const m of it.text.matchAll(WORD_RE)) {
+        if (m.index > last) sep(it.text.slice(last, m.index), k - 1);
+        const end = m.index + m[0].length;
+        const tok = document.createElement('span');
+        tok.className = 'tok' + (marked(m.index, end) ? ' fixed' : '');
+        tok.dataset.k = k++;
+        tok.dataset.s = m.index;
+        tok.dataset.e = end;
+        tok.textContent = m[0];
+        text.appendChild(tok);
+        last = end;
+      }
+      if (last < it.text.length) sep(it.text.slice(last), k - 1);
+      item.append(time, text);
+      box.appendChild(item);
+      if (histSel && histSel.time === it.time) {
+        paintHistSel(item);
+        if (!histDragging) openHistEditor(item, pendingValue);
+      }
+    }
+  }
+
+  function paintHistSel(item) {
+    const sel = histSel && String(histSel.time) === item.dataset.time ? histSel : null;
+    item.querySelectorAll('.hist-text > span').forEach(el => {
+      let on = false;
+      if (sel && el.dataset.k !== undefined) on = +el.dataset.k >= sel.a && +el.dataset.k <= sel.b;
+      else if (sel) on = +el.dataset.after >= sel.a && +el.dataset.after < sel.b;
+      el.classList.toggle('sel', on);
+      el.classList.toggle('sel-a', on && +el.dataset.k === sel.a);
+      el.classList.toggle('sel-b', on && +el.dataset.k === sel.b);
+    });
+  }
+
+  function selRange(item) {
+    const toks = item.querySelectorAll('.hist-text .tok');
+    return [+toks[histSel.a].dataset.s, +toks[histSel.b].dataset.e];
+  }
+
+  function closeHistEditor() {
+    histSel = null;
+    renderHist();
+  }
+
+  function openHistEditor(item, value = null) {
+    const it = histItems.find(h => String(h.time) === item.dataset.time);
+    if (!it || !histSel) return;
+    const [s, e] = selRange(item);
+    const heardText = it.text.slice(s, e);
+    const edit = document.createElement('div');
+    edit.className = 'hist-edit';
+    const heard = document.createElement('span');
+    heard.className = 'heard';
+    heard.textContent = heardText;
+    heard.title = heardText;
+    const arrow = document.createElement('span');
+    arrow.className = 'dict-arrow';
+    arrow.textContent = '→';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.maxLength = 80;
+    input.placeholder = t('dict.learn.placeholder');
+    input.value = value ?? heardText;
+    const ok = document.createElement('button');
+    ok.className = 'btn-sm primary';
+    ok.textContent = t('dict.learn.apply');
+    const cancel = document.createElement('button');
+    cancel.className = 'x-btn';
+    cancel.textContent = '✕';
+    const apply = () => {
+      const to = input.value.trim();
+      if (!to || to === heardText) { closeHistEditor(); return; }
+      if (!addDictEntry(heardText, to)) return;
+      // Show the correction in place and highlight it.
+      const delta = to.length - heardText.length;
+      it.text = it.text.slice(0, s) + to + it.text.slice(e);
+      it.marks = it.marks
+        .filter(([a, b]) => b <= s || a >= e)
+        .map(([a, b]) => (a >= e ? [a + delta, b + delta] : [a, b]))
+        .concat([[s, s + to.length]]);
+      closeHistEditor();
+    };
+    ok.onclick = apply;
+    cancel.onclick = closeHistEditor;
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter') { ev.preventDefault(); apply(); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); closeHistEditor(); }
+    });
+    edit.append(heard, arrow, input, ok, cancel);
+    item.appendChild(edit);
+    input.focus();
+    if (value === null) input.select();
+  }
+
+  $('histList').addEventListener('mousedown', (ev) => {
+    const tok = ev.target.closest('.tok');
+    if (!tok || ev.button !== 0) return;
+    ev.preventDefault();
+    const item = tok.closest('.hist-item');
+    const time = +item.dataset.time, k = +tok.dataset.k;
+    if (ev.shiftKey && histSel && histSel.time === time) {
+      histSel.a = Math.max(Math.min(histSel.anchor, k), histSel.anchor - HIST_MAX_WORDS + 1);
+      histSel.b = Math.min(Math.max(histSel.anchor, k), histSel.anchor + HIST_MAX_WORDS - 1);
+    } else {
+      histSel = { time, anchor: k, a: k, b: k };
+    }
+    histDragging = true;
+    // Selecting in another dictation closes the editor of the previous one.
+    document.querySelectorAll('#histList .hist-edit').forEach(el => el.remove());
+    document.querySelectorAll('#histList .hist-item').forEach(paintHistSel);
+  });
+  $('histList').addEventListener('mouseover', (ev) => {
+    if (!histDragging || !histSel) return;
+    const tok = ev.target.closest('.tok');
+    if (!tok || +tok.closest('.hist-item').dataset.time !== histSel.time) return;
+    const k = +tok.dataset.k;
+    histSel.a = Math.max(Math.min(histSel.anchor, k), histSel.anchor - HIST_MAX_WORDS + 1);
+    histSel.b = Math.min(Math.max(histSel.anchor, k), histSel.anchor + HIST_MAX_WORDS - 1);
+    paintHistSel(tok.closest('.hist-item'));
+  });
+  document.addEventListener('mouseup', () => {
+    if (!histDragging) return;
+    histDragging = false;
+    const item = histSel && document.querySelector(`#histList .hist-item[data-time="${histSel.time}"]`);
+    if (item) openHistEditor(item);
+  });
+
   // ── Ollama (KI-Bereinigung) ──
   let ollamaBusy = false;   // true while an in-app setup is running
 
   function renderOllamaStatus(s) {
     const btn = $('ollamaBtn'), badge = $('ollamaBadge'), desc = $('ollamaDesc');
+    // Only NoType's own portable copy is ours to update; a system-wide
+    // Ollama updates itself.
+    const upd = $('ollamaUpdBtn');
+    upd.style.display = s.portable ? '' : 'none';
+    upd.textContent = t('cleanup.update');
+    upd.title = t('cleanup.update.title');
     if (s.running && s.model_pulled) {
       badge.textContent = t('cleanup.active');
       badge.className = 'status-badge ok';
       badge.style.display = '';
       btn.style.display = 'none';
-      desc.textContent = t('cleanup.ready.desc');
+      desc.textContent = t('cleanup.ready.desc') + (s.version ? ` · Ollama ${s.version}` : '');
     } else if (s.installed) {
       badge.style.display = 'none';
       btn.textContent = s.running ? t('cleanup.loadmodel') : t('cleanup.activate');
@@ -1032,9 +1552,150 @@
   $('ollamaBtn').onclick = () => {
     ollamaBusy = true;
     $('ollamaBtn').disabled = true;
+    $('ollamaUpdBtn').disabled = true;
     $('ollamaBtn').textContent = t('cleanup.running');
     window.notype.ollamaSetup();
   };
+
+  $('ollamaUpdBtn').onclick = () => {
+    ollamaBusy = true;
+    $('ollamaBtn').disabled = true;
+    $('ollamaUpdBtn').disabled = true;
+    $('ollamaUpdBtn').textContent = t('cleanup.running');
+    window.notype.ollamaUpdate();
+  };
+
+  // ── Overlay: style cards, accent swatches, live preview ──
+  const OVL_STYLES = ['amoled', 'matrix', 'island', 'halo', 'orb'];
+  // Retired style ids → successor (mirrors main.js LEGACY_OVERLAY_STYLES).
+  const OVL_LEGACY = {
+    amoled_top: 'amoled', amoled_bottom: 'amoled', amoled_center: 'amoled', amoled_card: 'amoled',
+    wave: 'amoled', wave_classic: 'amoled', ribbon: 'amoled', particles: 'amoled', spectrum: 'amoled',
+    aurora: 'orb', pulse: 'orb',
+  };
+  const OVL_LEGACY_POS = { amoled_top: 'top', amoled_bottom: 'bottom', amoled_center: 'center' };
+  const OVL_ACCENTS = {
+    mint:   ['#00d4aa', '#2ee9c6', '#4dd0ff'],
+    mono:   ['#ffffff', '#e6e6e6', '#bdbdbd'],
+    aurora: ['#ff7a45', '#ff4fb4', '#8f7bff'],
+    blue:   ['#0a84ff', '#409cff', '#64d2ff'],
+    violet: ['#bf5af2', '#a472ff', '#7d7aff'],
+    red:    ['#ff453a', '#ff5e6c', '#ff8a80'],
+    amber:  ['#ffb340', '#ffa21a', '#ffd60a'],
+  };
+  // Miniature previews (120×52) – shapes in black like the real overlays,
+  // accent strokes via --g1..--g3 so they follow the chosen color.
+  const svgGrad = (id, x1, x2) =>
+    `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${x1}" y1="0" x2="${x2}" y2="0">` +
+    `<stop offset="0" style="stop-color:var(--g1)"/><stop offset=".5" style="stop-color:var(--g2)"/>` +
+    `<stop offset="1" style="stop-color:var(--g3)"/></linearGradient>`;
+  const RIM = 'stroke="rgba(255,255,255,.16)" stroke-width=".8"';
+  const OVL_THUMBS = {
+    amoled: (() => {
+      const hs = [3, 5, 8, 11, 14, 11, 8, 5, 3];
+      const bars = hs.map((h, i) => `M${14 + i * 3} ${26 - h / 2}v${h}`).join('');
+      return `<svg viewBox="0 0 120 52"><defs>${svgGrad('tgAm', 14, 38)}</defs>
+        <rect x="6" y="15" width="108" height="22" rx="11" fill="#000" ${RIM}/>
+        <path d="${bars}" stroke="url(#tgAm)" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M44 21v10" stroke="rgba(255,255,255,.14)" stroke-width=".8"/>
+        <path d="M50 26h38" stroke="rgba(255,255,255,.75)" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M96 26h9" stroke="rgba(255,255,255,.35)" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+    })(),
+    matrix: (() => {
+      const hs = [0, 1, 1, 2, 2, 1, 2, 2, 1, 1, 0], mid = 2;
+      let d = '';
+      for (let c = 0; c < 11; c++) for (let r = 0; r < 5; r++) {
+        const lit = Math.abs(r - mid) <= hs[c];
+        const peak = lit && hs[c] === 2 && Math.abs(r - mid) === 2;
+        const fill = peak ? 'var(--g1)' : lit ? '#fff' : 'rgba(255,255,255,.16)';
+        d += `<circle cx="${13 + c * 3.4}" cy="${18 + r * 4}" r="${lit ? 0.95 : 0.7}" style="fill:${fill}"/>`;
+      }
+      return `<svg viewBox="0 0 120 52"><rect x="6" y="11" width="108" height="30" rx="9" fill="#000" ${RIM}/>
+        ${d}<path d="M53 18v16" stroke="rgba(255,255,255,.14)" stroke-width=".8"/>
+        <circle cx="60" cy="21" r="1.4" style="fill:var(--g1)"/>
+        <path d="M64 21h16" stroke="rgba(255,255,255,.45)" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="1.6 1.4"/>
+        <path d="M59 30h44" stroke="rgba(255,255,255,.75)" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+    })(),
+    island: `<svg viewBox="0 0 120 52"><defs>${svgGrad('tgIs', 37, 47)}</defs>
+        <rect x="28" y="16" width="64" height="20" rx="10" fill="#000" ${RIM}/>
+        <path d="M37 24v4M40.5 21.5v9M44 23v6M47.5 24.5v3" stroke="url(#tgIs)" stroke-width="1.8" stroke-linecap="round"/>
+        <path d="M74 26h9" style="stroke:var(--g1)" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+    halo: `<svg viewBox="0 0 120 52"><defs>${svgGrad('tgHa', 10, 110)}</defs>
+        <rect x="10" y="16" width="100" height="20" rx="10" fill="none" stroke="url(#tgHa)" stroke-width="7" opacity=".22"/>
+        <rect x="10" y="16" width="100" height="20" rx="10" fill="none" stroke="url(#tgHa)" stroke-width="3.5" opacity=".35"/>
+        <rect x="10" y="16" width="100" height="20" rx="10" fill="#000" stroke="url(#tgHa)" stroke-width="1.3"/>
+        <path d="M40 26h40" stroke="rgba(255,255,255,.75)" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+    orb: `<svg viewBox="0 0 120 52"><defs>
+        <radialGradient id="tgOrb" cx=".4" cy=".35" r=".75"><stop offset="0" style="stop-color:var(--g2)"/>
+        <stop offset=".55" style="stop-color:var(--g3)"/><stop offset="1" stop-color="#000"/></radialGradient></defs>
+        <circle cx="60" cy="20" r="14" style="fill:var(--g2)" opacity=".16"/>
+        <circle cx="60" cy="20" r="10" fill="url(#tgOrb)" ${RIM}/>
+        <rect x="38" y="33" width="44" height="11" rx="5.5" fill="#000" ${RIM}/>
+        <path d="M45 38.5h30" stroke="rgba(255,255,255,.75)" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+  };
+  let ovlStyle = 'amoled', ovlAccent = 'mint';
+
+  function renderOverlayPicker() {
+    const grid = $('styleGrid');
+    OVL_ACCENTS[ovlAccent].forEach((c, i) => grid.style.setProperty('--g' + (i + 1), c));
+    grid.innerHTML = '';
+    for (const id of OVL_STYLES) {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'style-card' + (id === ovlStyle ? ' active' : '');
+      card.innerHTML = `<div class="thumb">${OVL_THUMBS[id]}</div><div class="sc-name"></div><div class="sc-desc"></div>`;
+      card.querySelector('.sc-name').textContent = t('ovl.' + id);
+      card.querySelector('.sc-desc').textContent = t('ovl.' + id + '.desc');
+      card.onclick = () => {
+        if (id === ovlStyle) return;
+        ovlStyle = id; markDirty(); renderOverlayPicker(); pushPreview();
+      };
+      grid.appendChild(card);
+    }
+    const sw = $('accentSwatches');
+    sw.innerHTML = '';
+    for (const [id, c] of Object.entries(OVL_ACCENTS)) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'swatch' + (id === ovlAccent ? ' active' : '');
+      b.style.background = `linear-gradient(135deg, ${c[0]}, ${c[2]})`;
+      if (id === 'mono') b.style.outline = '1px solid rgba(128,128,128,.35)';
+      b.title = t('acc.' + id);
+      b.onclick = () => {
+        if (id === ovlAccent) return;
+        ovlAccent = id; markDirty(); renderOverlayPicker(); pushPreview();
+      };
+      sw.appendChild(b);
+    }
+    $('accentName').textContent = t('acc.' + ovlAccent);
+  }
+
+  // The preview iframe runs overlay.html in demo mode (no preload there, so
+  // it can't touch IPC). Loaded on first visit, paused while hidden.
+  let previewLoaded = false;
+  const overlayPaneActive = () => $('pane-overlay').classList.contains('active');
+  function pushPreview() {
+    const f = $('ovlPreview');
+    if (!previewLoaded || !f.contentWindow) return;
+    f.contentWindow.postMessage({
+      type: 'notype-demo', style: ovlStyle, accent: ovlAccent, lang: uiLang,
+      preview: $('livePreviewToggle').checked, paused: !overlayPaneActive(),
+    }, '*');
+  }
+  function fitStage() {
+    const w = $('ovlStage').clientWidth;
+    if (w) $('ovlStage').style.setProperty('--s', Math.min(1, w / 720).toFixed(4));
+  }
+  function showPreview() {
+    fitStage();
+    const f = $('ovlPreview');
+    if (f.getAttribute('src')) { pushPreview(); return; }
+    f.addEventListener('load', () => { previewLoaded = true; pushPreview(); }, { once: true });
+    f.src = `overlay.html?demo=1&style=${ovlStyle}&accent=${ovlAccent}&lang=${uiLang}`;
+  }
+  window.addEventListener('resize', fitStage);
+  $('livePreviewToggle').addEventListener('change', pushPreview);
+  renderOverlayPicker();
 
   // ── Populate from config ──
   function applyConfig(cfg) {
@@ -1046,6 +1707,10 @@
     $('appLangSelect').value = I18N[cfg.app_language] ? cfg.app_language : 'de';
     $('hotkeyValue').textContent = cfg.hotkey || 'ctrl+shift+space';
     $('modeSelect').value = cfg.mode || 'hold_to_speak';
+    $('cmdToggle').checked = cfg.command_enabled !== false;
+    $('learnToggle').checked = cfg.learn_corrections !== false;
+    $('cmdHotkeyValue').textContent = cfg.command_hotkey || 'ctrl+alt+space';
+    renderCmdCard();
     $('langSelect').value = cfg.language || 'de';
     $('autoLangToggle').checked = cfg.auto_language_detect !== false;
     selectedModel = cfg.model_size || 'small';
@@ -1053,21 +1718,26 @@
     window.notype.listModels();
     $('darkModeToggle').checked = cfg.overlay_theme === 'dark';
     {
-      // Pre-2.6 configs carried the AMOLED position inside the style id.
-      const legacy = { amoled_top: ['amoled', 'top'], amoled_bottom: ['amoled', 'bottom'], amoled_center: ['amoled_card', 'center'] };
-      const l = legacy[cfg.overlay_style];
-      $('overlayStyleSelect').value = l ? l[0] : (cfg.overlay_style || 'wave');
-      $('overlayPositionSelect').value = cfg.overlay_position || (l ? l[1] : 'bottom');
+      const st = OVL_LEGACY[cfg.overlay_style] || cfg.overlay_style;
+      ovlStyle = OVL_STYLES.includes(st) ? st : 'amoled';
+      ovlAccent = OVL_ACCENTS[cfg.overlay_accent] ? cfg.overlay_accent : 'mint';
+      $('overlayPositionSelect').value = cfg.overlay_position || OVL_LEGACY_POS[cfg.overlay_style] || 'bottom';
+      $('soundsToggle').checked = cfg.overlay_sounds !== false;
+      renderOverlayPicker();
     }
     $('gpuSafeModeToggle').checked = !!cfg.gpu_safe_mode;
     vocabTerms = (cfg.initial_prompt || '')
       .split(',').map(s => s.trim()).filter(Boolean);
     renderVocab();
+    dictEntries = (Array.isArray(cfg.dictionary) ? cfg.dictionary : [])
+      .filter(e => e && e.from && e.to)
+      .map(e => ({ from: String(e.from), to: String(e.to) }));
+    renderDict();
     $('cleanupSelect').value = cfg.cleanup_mode || 'fast';
     {
       // Unknown/custom model names from settings.json stay selectable.
       const sel = $('llmModelSelect');
-      const want = cfg.llm_model || 'qwen2.5:3b-instruct';
+      const want = cfg.llm_model || 'qwen3:4b-instruct';
       if (![...sel.options].some(o => o.value === want)) {
         const opt = document.createElement('option');
         opt.value = want; opt.textContent = want;
@@ -1092,10 +1762,15 @@
     configApplied = true;
     dirty = false;
     $('saveBtn').classList.remove('dirty');
+    pushPreview();
   }
 
   // Live language switch (before saving)
-  $('appLangSelect').onchange = () => { applyI18n($('appLangSelect').value); renderModels(); };
+  $('appLangSelect').onchange = () => {
+    applyI18n($('appLangSelect').value);
+    renderModels(); renderOverlayPicker(); pushPreview();
+    renderDict(); renderHist();
+  };
 
   // ── Save ──
   $('saveBtn').onclick = () => {
@@ -1104,14 +1779,20 @@
       app_language: $('appLangSelect').value,
       hotkey: $('hotkeyValue').textContent.trim(),
       mode: $('modeSelect').value,
+      command_enabled: $('cmdToggle').checked,
+      learn_corrections: $('learnToggle').checked,
+      command_hotkey: $('cmdHotkeyValue').textContent.trim(),
       language: $('langSelect').value,
       auto_language_detect: $('autoLangToggle').checked,
       model_size: selectedModel,
       overlay_theme: $('darkModeToggle').checked ? 'dark' : 'light',
-      overlay_style: $('overlayStyleSelect').value,
+      overlay_style: ovlStyle,
+      overlay_accent: ovlAccent,
       overlay_position: $('overlayPositionSelect').value,
+      overlay_sounds: $('soundsToggle').checked,
       gpu_safe_mode: $('gpuSafeModeToggle').checked,
       initial_prompt: vocabJoined(),
+      dictionary: dictEntries,
       cleanup_mode: $('cleanupSelect').value,
       llm_model: $('llmModelSelect').value,
       live_preview_enabled: $('livePreviewToggle').checked,
@@ -1150,6 +1831,21 @@
   // ── Listen for config ──
   if (window.notype) {
     window.notype.onConfig(applyConfig);
+    if (window.notype.onHistory) {
+      window.notype.onHistory(setHistory);
+      window.notype.getHistory();
+    }
+    // Learned from a correction suggestion while this window is open – it's
+    // saved already; merge it without discarding unsaved edits here.
+    if (window.notype.onDictionary) {
+      window.notype.onDictionary((entries) => {
+        const have = new Set(dictEntries.map(e => phraseKey(e.from)));
+        const added = (entries || []).filter(e => !have.has(phraseKey(e.from)));
+        if (!added.length) return;
+        dictEntries = dictEntries.concat(added.map(e => ({ from: e.from, to: e.to })));
+        renderDict(true);
+      });
+    }
     window.notype.onModelReady((data) => {
       $('modelStatus').textContent = `${window.NoTypeModels ? window.NoTypeModels.nameOf(data.model) : data.model} · ${data.device}`;
       $('modelStatus').className = 'status-badge ok';
@@ -1176,7 +1872,7 @@
     });
     let lastOllamaMsg = '';
     window.notype.onOllamaProgress((p) => {
-      const pct = (p.stage === 'install' || p.stage === 'pull') ? ` (${p.percent}%)` : '';
+      const pct = (p.stage === 'install' || p.stage === 'pull' || p.stage === 'update') ? ` (${p.percent}%)` : '';
       lastOllamaMsg = p.message + pct;
       $('ollamaDesc').textContent = lastOllamaMsg;
     });
@@ -1187,9 +1883,13 @@
       if (ollamaBusy && !s.final) return;
       ollamaBusy = false;
       $('ollamaBtn').disabled = false;
+      $('ollamaUpdBtn').disabled = false;
       renderOllamaStatus(s);
-      // Setup ended but didn't reach "active"? Keep the error visible.
-      if (s.final && !(s.running && s.model_pulled) && lastOllamaMsg) {
+      // An update always reports its outcome ("aktuell", "0.31 → 0.34",
+      // or why it failed); a setup that didn't reach "active" keeps its error.
+      if (s.final && s.note) {
+        $('ollamaDesc').textContent = s.note;
+      } else if (s.final && !(s.running && s.model_pulled) && lastOllamaMsg) {
         $('ollamaDesc').textContent = lastOllamaMsg;
       }
     });

@@ -22,6 +22,7 @@ VK_CONTROL = 0x11
 VK_SHIFT = 0x10
 VK_MENU = 0x12  # Alt
 VK_RETURN = 0x0D
+VK_C = 0x43
 VK_V = 0x56
 
 
@@ -131,32 +132,104 @@ def _type_unicode(text: str) -> bool:
     return True
 
 
-def _send_ctrl_v():
-    """Simulate Ctrl+V using Windows SendInput API."""
+def _send_ctrl(vk: int) -> bool:
+    """Simulate Ctrl+<vk> using Windows SendInput API."""
     inputs = (INPUT * 4)()
-
-    # Ctrl down
-    inputs[0].type = INPUT_KEYBOARD
-    inputs[0].ki.wVk = VK_CONTROL
-
-    # V down
-    inputs[1].type = INPUT_KEYBOARD
-    inputs[1].ki.wVk = VK_V
-
-    # V up
-    inputs[2].type = INPUT_KEYBOARD
-    inputs[2].ki.wVk = VK_V
-    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP
-
-    # Ctrl up
-    inputs[3].type = INPUT_KEYBOARD
-    inputs[3].ki.wVk = VK_CONTROL
-    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP
+    for i, (key, flags) in enumerate(((VK_CONTROL, 0), (vk, 0),
+                                      (vk, KEYEVENTF_KEYUP), (VK_CONTROL, KEYEVENTF_KEYUP))):
+        inputs[i].type = INPUT_KEYBOARD
+        inputs[i].ki.wVk = key
+        inputs[i].ki.dwFlags = flags
 
     result = user32.SendInput(4, ctypes.byref(inputs), ctypes.sizeof(INPUT))
     if result != 4:
         logger.warning(f"SendInput returned {result}, expected 4 (error: {ctypes.GetLastError()})")
     return result == 4
+
+
+def _send_ctrl_v():
+    return _send_ctrl(VK_V)
+
+
+# Separate DLL handles: pyperclip sets its own argtypes on the shared
+# ctypes.windll function objects.
+_u32 = ctypes.WinDLL("user32", use_last_error=True)
+_k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+_u32.RegisterClipboardFormatW.argtypes = [ctypes.wintypes.LPCWSTR]
+_u32.RegisterClipboardFormatW.restype = ctypes.wintypes.UINT
+_u32.IsClipboardFormatAvailable.argtypes = [ctypes.wintypes.UINT]
+_u32.OpenClipboard.argtypes = [ctypes.wintypes.HWND]
+_u32.GetClipboardData.argtypes = [ctypes.wintypes.UINT]
+_u32.GetClipboardData.restype = ctypes.wintypes.HANDLE
+_k32.GlobalLock.argtypes = [ctypes.wintypes.HGLOBAL]
+_k32.GlobalLock.restype = ctypes.c_void_p
+_k32.GlobalUnlock.argtypes = [ctypes.wintypes.HGLOBAL]
+_k32.GlobalSize.argtypes = [ctypes.wintypes.HGLOBAL]
+_k32.GlobalSize.restype = ctypes.c_size_t
+
+
+def _clipboard_raw(format_name: str) -> bytes | None:
+    """Raw bytes of a registered clipboard format, None if absent."""
+    fmt = _u32.RegisterClipboardFormatW(format_name)
+    if not fmt or not _u32.IsClipboardFormatAvailable(fmt):
+        return None
+    for _ in range(5):  # another app may hold the clipboard for a moment
+        if _u32.OpenClipboard(None):
+            break
+        time.sleep(0.01)
+    else:
+        return None
+    try:
+        h = _u32.GetClipboardData(fmt)
+        ptr = _k32.GlobalLock(h) if h else None
+        if not ptr:
+            return None
+        try:
+            return ctypes.string_at(ptr, _k32.GlobalSize(h))
+        finally:
+            _k32.GlobalUnlock(h)
+    finally:
+        _u32.CloseClipboard()
+
+
+def _copied_from_empty_selection() -> bool:
+    """VS Code copies the whole line on Ctrl+C without a selection and marks
+    it in its editor metadata – which Chromium stores (UTF-16) inside its
+    custom-MIME clipboard format."""
+    raw = _clipboard_raw("Chromium Web Custom MIME Data Format")
+    if not raw:
+        return False
+    data = raw.decode("utf-16-le", errors="ignore")
+    return "vscode-editor-data" in data and '"isFromEmptySelection":true' in data
+
+
+def copy_selection(timeout: float = 0.35) -> str:
+    """Return the text currently selected in the focused app ('' if none).
+
+    Sends Ctrl+C and watches the clipboard sequence number: apps leave the
+    clipboard alone when nothing is selected, so no change means no
+    selection – except editors that copy the current line then (VS Code,
+    detected via its metadata). Like insert_text(), the clipboard is not
+    restored afterwards – the command result replaces it a moment later."""
+    # Held hotkey modifiers would turn Ctrl+C into e.g. Ctrl+Shift+C (dev
+    # tools in browsers) – give a toggle-mode user time to let go.
+    _wait_modifiers_released(1.0)
+    try:
+        seq = user32.GetClipboardSequenceNumber()
+        if not _send_ctrl(VK_C):
+            return ""
+        if not _wait_clipboard_updated(seq, timeout):
+            return ""
+        # Some apps update the clipboard in several steps (formats) – read
+        # after a short settle so we don't catch it half-written.
+        time.sleep(0.03)
+        if _copied_from_empty_selection():
+            logger.info("Ctrl+C copied a whole line (no selection) – ignoring it")
+            return ""
+        return pyperclip.paste() or ""
+    except Exception as e:
+        logger.warning(f"Reading the selection failed: {e}")
+        return ""
 
 
 def insert_text(text: str, method: str = "auto") -> bool:

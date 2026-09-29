@@ -48,11 +48,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from audio_recorder import AudioRecorder
 from transcriber import Transcriber
-from text_output import insert_text
+from text_output import insert_text, copy_selection
 from config import load_config, save_config, get_config, CONFIG_DIR
 from postprocess import (clean_transcript, warm_up, reset_availability_cache,
-                         DEFAULT_LLM_MODEL)
+                         rule_clean, run_command, DEFAULT_LLM_MODEL)
+import dictionary
 import ollama_manager
+from correction_watch import CorrectionWatcher
 
 # Log to file only (stdout is for IPC). Rotate so the log file never grows unbounded.
 # CONFIG_DIR is %APPDATA%/NoType — same directory the frontend uses, survives rebuilds.
@@ -83,6 +85,11 @@ class Backend:
         self.transcriber = None
         self._amplitude_thread = None
         self._running = True
+        # Dictionary stage 2: fixes the user types right after a dictation
+        # are offered as dictionary entries (Electron asks first).
+        self.corrections = CorrectionWatcher(
+            lambda items: self.send("dictionary_suggestions", {
+                "items": [{"from": heard, "to": meant} for heard, meant in items]}))
 
     def send(self, msg_type, data=None):
         """Send a JSON message to Electron via stdout. No-op if stdout is None
@@ -159,13 +166,14 @@ class Backend:
             # Get amplitude from recorder's internal state
             time.sleep(0.04)  # ~25fps
 
-    def _on_amplitude(self, amplitude):
-        """Called by AudioRecorder with amplitude data."""
-        self.send("amplitude", {"value": round(amplitude, 4)})
+    def _on_amplitude(self, amplitude, bands=None):
+        """Called by AudioRecorder per block: level + spectrum for the overlay."""
+        self.send("amplitude", {"value": round(amplitude, 4), "bands": bands or []})
 
     def handle_start_recording(self):
         """Start audio recording."""
         logger.info("Recording START")
+        self.corrections.cancel()
         device_index = self.config.get("mic_device_index", None)
         self.recorder = AudioRecorder(
             on_amplitude=self._on_amplitude,
@@ -213,7 +221,8 @@ class Backend:
                 break
             if not recorder.is_recording or recorder is not self.recorder:
                 break
-            tail = result["text"][-120:]
+            text = dictionary.apply(result["text"], self.config.get("dictionary"))
+            tail = text[-120:]
             if tail:
                 self.send("preview", {"text": _safe_str(tail)})
 
@@ -307,18 +316,20 @@ class Backend:
 
         threading.Thread(target=loop, daemon=True).start()
 
-    def handle_stop_recording(self):
-        """Stop recording and transcribe."""
+    def handle_stop_recording(self, command: bool = False):
+        """Stop recording and transcribe. `command`: the recording is a spoken
+        instruction for the selected text (command mode) instead of dictation."""
         if not self.recorder:
             self.send("error", {"message": "Not recording"})
             return
 
-        logger.info("Recording STOP")
+        logger.info("Recording STOP" + (" (command)" if command else ""))
         audio = self.recorder.stop()
+        done = {"command": True} if command else {}
 
         if len(audio) == 0:
             logger.warning("No audio captured")
-            self.send("transcription_done", {"text": "", "empty": True})
+            self.send("transcription_done", {"text": "", "empty": True, **done})
             return
 
         self.send("transcribing")
@@ -328,14 +339,21 @@ class Backend:
             duration = time.time() - getattr(self, '_record_start_time', 0)
             if duration < 0.5:
                 logger.info(f"Recording too short ({duration:.1f}s), discarding")
-                self.send("transcription_done", {"text": "", "empty": True, "reason": "too_short"})
+                self.send("transcription_done", {"text": "", "empty": True, "reason": "too_short", **done})
                 return
+
+            # Command mode: grab the selection right away, while the target
+            # app still has focus and nothing has moved.
+            selection = copy_selection() if command else ""
 
             language = self.config.get("language", "de")
             auto_detect = self.config.get("auto_language_detect", True)
             beam_size = self.config.get("beam_size", "auto")
             vad_sensitivity = self.config.get("vad_sensitivity", 300)
-            initial_prompt = self.config.get("initial_prompt", "") or None
+            entries = self.config.get("dictionary") or []
+            # Learned spellings join the vocabulary as a hint for Whisper.
+            initial_prompt = dictionary.whisper_prompt(
+                self.config.get("initial_prompt", ""), entries)
 
             if not self.transcriber or not self.transcriber.is_loaded:
                 self.send("error", {"message": "Model not loaded yet"})
@@ -362,20 +380,33 @@ class Backend:
                 save_config(self.config)
                 logger.info(f"Persisted compute_type fallback: {result['compute_type']}")
 
+            if command:
+                self._run_command(text, selection, entries, stats)
+                return
+
             if text:
+                # Dictionary before the cleanup (so the LLM already sees the
+                # right words) and after it (the LLM may re-split or
+                # re-capitalize a term). Idempotent, ~1 ms per pass.
+                text = dictionary.apply(text, entries)
                 cleaned = clean_transcript(
                     text,
                     mode=self.config.get("cleanup_mode", "fast"),
                     llm_model=self.config.get("llm_model", DEFAULT_LLM_MODEL),
                     llm_min_words=self.config.get("llm_min_words", 8),
+                    terms=dictionary.hint_terms(
+                        self.config.get("initial_prompt", ""), entries),
                 )
-                text = cleaned["text"] or text
+                text = dictionary.apply(cleaned["text"] or text, entries)
                 stats["cleanup"] = cleaned["engine"]
                 stats["cleanup_ms"] = cleaned["ms"]
 
             if text:
                 logger.info(f"Transcribed: '{_safe_str(text[:80])}'")
-                insert_text(text, method=self.config.get("insert_method", "auto"))
+                if insert_text(text, method=self.config.get("insert_method", "auto")) \
+                        and self.config.get("learn_corrections", True):
+                    self.corrections.watch(
+                        text, known={(e.get("from"), e.get("to")) for e in entries})
                 self.send("transcription_done", {"text": text, **stats})
             else:
                 logger.info("No speech detected")
@@ -384,6 +415,35 @@ class Backend:
         except Exception as e:
             logger.error(f"Transcription error: {e}", exc_info=True)
             self.send("error", {"message": f"Transcription failed: {e}"})
+
+    def _run_command(self, spoken: str, selection: str, entries, stats: dict):
+        """Command mode: rewrite the selection per the spoken instruction (or
+        write new text at the cursor) with the local LLM, then paste."""
+        instruction = dictionary.apply(rule_clean(spoken or ""), entries)
+        if not instruction:
+            self.send("transcription_done", {"text": "", "empty": True, "command": True, **stats})
+            return
+        # AI cleanup may be off – command mode still needs the LLM, so bring
+        # Ollama up on demand (no-op when it's already running).
+        if ollama_manager.ensure_running_if_installed():
+            reset_availability_cache()
+        started = time.perf_counter()
+        result = run_command(instruction, selection, model=self._llm_model())
+        ms = int((time.perf_counter() - started) * 1000)
+        logger.info(f"Command '{_safe_str(instruction[:60])}' on {len(selection)} chars "
+                    f"-> {len(result or '')} chars ({ms} ms)")
+        if not result:
+            installed = ollama_manager.status(self._llm_model())
+            reason = ("command_no_llm" if not (installed.get("installed") and installed.get("model_pulled"))
+                      else "command_failed")
+            self.send("transcription_done", {"text": "", "empty": True, "command": True,
+                                             "reason": reason, **stats})
+            return
+        insert_text(result, method=self.config.get("insert_method", "auto"))
+        self.send("transcription_done", {"text": result, "command": True,
+                                         "instruction": instruction,
+                                         "replaced": bool(selection.strip()),
+                                         "llm_ms": ms, **stats})
 
     def _llm_model(self) -> str:
         return self.config.get("llm_model", DEFAULT_LLM_MODEL)
@@ -418,6 +478,24 @@ class Backend:
             # routine status refreshes while setup runs are ignored there.
             self.send("ollama_status",
                       {**ollama_manager.status(self._llm_model()), "final": True})
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def handle_ollama_update(self):
+        """Update the portable Ollama in place. Only ever user-triggered –
+        the release check on GitHub is the click's sole network access."""
+        def progress(stage, percent, message):
+            self.send("ollama_progress",
+                      {"stage": stage, "percent": percent, "message": message})
+
+        def worker():
+            ok, note = ollama_manager.update(on_progress=progress)
+            reset_availability_cache()
+            if self.config.get("cleanup_mode") == "ai":
+                self._ensure_ai_ready()
+            self.send("ollama_status",
+                      {**ollama_manager.status(self._llm_model()),
+                       "final": True, "note": note, "ok": ok})
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -571,6 +649,8 @@ class Backend:
                     self.handle_start_recording()
                 elif cmd == "stop_recording":
                     self.handle_stop_recording()
+                elif cmd == "stop_command":
+                    self.handle_stop_recording(command=True)
                 elif cmd == "pause_recording":
                     if self.recorder and self.recorder.is_recording:
                         self.recorder.pause()
@@ -615,6 +695,8 @@ class Backend:
                     self.handle_ollama_status()
                 elif cmd == "ollama_setup":
                     self.handle_ollama_setup()
+                elif cmd == "ollama_update":
+                    self.handle_ollama_update()
                 elif cmd == "list_models":
                     self.handle_list_models()
                 elif cmd == "watch_hotkey_release":

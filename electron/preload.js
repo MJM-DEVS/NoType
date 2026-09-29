@@ -2,15 +2,15 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('notype', {
   // Receive messages from main process
-  onAmplitude: (callback) => ipcRenderer.on('amplitude', (_, val) => callback(val)),
-  onRecordingStarted: (callback) => ipcRenderer.on('recording-started', () => callback()),
+  onAmplitude: (callback) => ipcRenderer.on('amplitude', (_, val, bands) => callback(val, bands)),
+  onRecordingStarted: (callback) => ipcRenderer.on('recording-started', (_, opts) => callback(opts || {})),
   onRecordingStopped: (callback) => ipcRenderer.on('recording-stopped', () => callback()),
   onRecordingPaused: (callback) => ipcRenderer.on('recording-paused', () => callback()),
   onRecordingResumed: (callback) => ipcRenderer.on('recording-resumed', () => callback()),
   onTranscribing: (callback) => ipcRenderer.on('transcribing', () => callback()),
   onTranscriptionDone: (callback) => ipcRenderer.on('transcription-done', (_, data) => callback(data)),
   onSetTheme: (callback) => ipcRenderer.on('set-theme', (_, theme) => callback(theme)),
-  onSetStyle: (callback) => ipcRenderer.on('set-style', (_, style) => callback(style)),
+  onSetStyle: (callback) => ipcRenderer.on('set-style', (_, style, opts) => callback(style, opts || {})),
   onStatus: (callback) => ipcRenderer.on('status', (_, msg) => callback(msg)),
   onModelReady: (callback) => ipcRenderer.on('model-ready', (_, data) => callback(data)),
   onConfig: (callback) => ipcRenderer.on('config', (_, data) => callback(data)),
@@ -24,10 +24,14 @@ contextBridge.exposeInMainWorld('notype', {
   onModels: (callback) => ipcRenderer.on('models', (_, data) => callback(data)),
   onBusy: (callback) => ipcRenderer.on('busy', () => callback()),
   onOverlayLeaving: (callback) => ipcRenderer.on('overlay-leaving', () => callback()),
+  onHistory: (callback) => ipcRenderer.on('history', (_, list) => callback(list)),
+  onSuggestData: (callback) => ipcRenderer.on('suggest-data', (_, data) => callback(data)),
+  onDictionary: (callback) => ipcRenderer.on('dictionary', (_, entries) => callback(entries)),
 
   // Send messages to main process
   saveConfig: (config) => ipcRenderer.send('save-config', config),
   getConfig: () => ipcRenderer.send('get-config'),
+  getHistory: () => ipcRenderer.send('get-history'),
   listDevices: () => ipcRenderer.send('list-devices'),
   listModels: () => ipcRenderer.send('list-models'),
   // While a page captures a new hotkey, the global shortcut must not fire.
@@ -37,7 +41,11 @@ contextBridge.exposeInMainWorld('notype', {
   openSettings: () => ipcRenderer.send('open-settings'),
   closeSettings: () => ipcRenderer.send('close-settings'),
   closeToast: () => ipcRenderer.send('close-toast'),
+  // Correction suggestion: learn the shown pairs, or dismiss (false).
+  suggestAnswer: (learn) => ipcRenderer.send('suggest-answer', !!learn),
+  suggestHover: (hovering) => ipcRenderer.send('suggest-hover', !!hovering),
   registerHotkey: (key) => ipcRenderer.send('register-hotkey', key),
   ollamaStatus: () => ipcRenderer.send('ollama-status'),
   ollamaSetup: () => ipcRenderer.send('ollama-setup'),
+  ollamaUpdate: () => ipcRenderer.send('ollama-update'),
 });

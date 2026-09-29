@@ -136,6 +136,9 @@ let overlayIdleTimer = null;       // destroys the hidden overlay after long idl
 const OVERLAY_IDLE_MS = 5 * 60 * 1000;
 let settingsWin = null;
 let toastWin = null;
+let suggestWin = null;           // "learn this correction?" pill
+let suggestItems = [];
+let suggestTimer = null;
 let pythonProcess = null;
 let pythonStartCount = 0;          // how many times we've spawned the backend
 let lastBackendDeath = 0;          // ms timestamp of the last unexpected exit
@@ -155,6 +158,7 @@ let recordStopTs = 0;            // when the user released – for the insert-la
 let holdReleaseViaBackend = true;// backend reports real key-up (optimistic; see 'hotkey_watch')
 let onboardingWin = null;        // first-run wizard (also reachable from settings/tray)
 let lastBusyTs = 0;              // throttle for the "still processing" nudge
+let commandActive = false;       // current recording is a command-mode instruction
 let config = {};
 let clipboardHistory = [];  // Last 10 transcriptions
 const MAX_HISTORY = 10;
@@ -212,11 +216,16 @@ function loadConfig() {
     autostart: false,
     auto_language_detect: true,
     overlay_enabled: true,
-    overlay_style: 'wave',
+    overlay_style: 'amoled',
+    overlay_accent: 'mint',
+    overlay_sounds: true,
     live_preview_enabled: true,
     success_toast: false,
     gpu_safe_mode: false,
     first_run_complete: false,
+    command_enabled: true,
+    command_hotkey: 'ctrl+alt+space',
+    learn_corrections: true,
     ...config,
   };
   // Legacy AMOLED style ids → style + position (persist so the backend and
@@ -420,7 +429,7 @@ function handlePythonMessage(line) {
 
       case 'amplitude':
         if (overlayWin && !overlayWin.isDestroyed()) {
-          overlayWin.webContents.send('amplitude', data.value);
+          overlayWin.webContents.send('amplitude', data.value, data.bands || null);
         }
         break;
 
@@ -442,11 +451,20 @@ function handlePythonMessage(line) {
         }
         break;
 
+      case 'dictionary_suggestions':
+        if (config.learn_corrections !== false) showSuggestion(data && data.items);
+        break;
 
       case 'transcription_done':
         finishTranscription(!!(data && data.text && !data.empty), data && data.text);
         sendToOnboarding('transcription-done', data || {});
-        if (data && data.text && !data.empty) {
+        if (data && data.command) {
+          // Command mode: the result is LLM output, not a dictation – it
+          // stays out of the history (that's for learning recognition errors).
+          if (data.reason === 'command_no_llm') showToast(trayT().commandNoLlm, 'warning');
+          else if (data.reason === 'command_failed') showToast(trayT().commandFailed, 'error');
+          else if (data.reason === 'too_short') showToast(trayT().tooShort, 'warning');
+        } else if (data && data.text && !data.empty) {
           addToHistory(data.text);
           trackStats(data.text);
           // Success popup is opt-in – the inserted text IS the feedback.
@@ -504,9 +522,11 @@ function handlePythonMessage(line) {
         // If the backend's hotkey/mode differ from what we registered at boot, re-register.
         {
           const prevHotkey = config.hotkey, prevMode = config.mode;
+          const prevCmd = `${config.command_enabled}|${config.command_hotkey}`;
           config = data;
           if (normalizeOverlayConfig()) writeConfigToDisk();
-          if (data.hotkey !== prevHotkey || data.mode !== prevMode) {
+          if (data.hotkey !== prevHotkey || data.mode !== prevMode ||
+              `${data.command_enabled}|${data.command_hotkey}` !== prevCmd) {
             registerHotkeys();
           }
         }
@@ -576,82 +596,82 @@ function handlePythonMessage(line) {
 // Every style can sit at the bottom, top or center of the screen
 // (config.overlay_position). `bottom`/`top` are the per-style margins from
 // that screen edge – orbs float a bit higher than bars so they don't sit on
-// the taskbar.
+// the taskbar. All styles render the live transcript themselves; each window
+// carries transparent padding so glows fade out inside it instead of being
+// clipped into a hard rectangle (sizes match the fixed layouts in overlay.html).
 const OVERLAY_STYLES = {
-  wave_classic: { w: 600, h: 48,  bottom: 60,  top: 44 },
-  wave:         { w: 600, h: 72,  bottom: 60,  top: 44 },
-  aurora:       { w: 168, h: 168, bottom: 190, top: 60 },
-  particles:    { w: 640, h: 96,  bottom: 56,  top: 40 },
-  pulse:        { w: 190, h: 190, bottom: 190, top: 60 },
-  ribbon:       { w: 600, h: 88,  bottom: 60,  top: 44 },
-  spectrum:     { w: 320, h: 104, bottom: 60,  top: 44 },
-  // AMOLED family: pure-black pill/card with the live transcript INSIDE –
-  // no external caption, so previewCaptionH() is 0 for these.
-  // +28 px on each dimension = 14 px in-window padding so the pill's glow
-  // fades out inside the window instead of clipping into a hard rectangle.
-  amoled:       { w: 708, h: 92,  bottom: 14,  top: 2  },
-  amoled_card:  { w: 588, h: 228, bottom: 40,  top: 40 },
+  amoled: { w: 708, h: 92,  bottom: 14, top: 2 },   // pill 680×64
+  matrix: { w: 708, h: 104, bottom: 14, top: 2 },   // card 680×76
+  island: { w: 648, h: 116, bottom: 6,  top: 0 },   // morphing shape, ≤600×72
+  halo:   { w: 616, h: 118, bottom: 0,  top: 0 },   // capsule 560×58 + rim glow
+  orb:    { w: 540, h: 172, bottom: 16, top: 0 },   // orb 110 + caption
 };
-const DEFAULT_OVERLAY_STYLE = 'wave';
+const DEFAULT_OVERLAY_STYLE = 'amoled';
 const OVERLAY_POSITIONS = ['bottom', 'top', 'center'];
-// Pre-2.6 the AMOLED placement was baked into the style id.
+const OVERLAY_ACCENTS = ['mint', 'mono', 'aurora', 'blue', 'violet', 'red', 'amber'];
+// Retired style ids → [successor, position]. Pre-2.6 the AMOLED placement was
+// baked into the id; 2.7 replaced the classic visualizers.
 const LEGACY_OVERLAY_STYLES = {
   amoled_top:    ['amoled', 'top'],
   amoled_bottom: ['amoled', 'bottom'],
-  amoled_center: ['amoled_card', 'center'],
+  amoled_center: ['amoled', 'center'],
+  amoled_card:   ['amoled', null],
+  wave:          ['amoled', null],
+  wave_classic:  ['amoled', null],
+  ribbon:        ['amoled', null],
+  particles:     ['amoled', null],
+  spectrum:      ['amoled', null],
+  aurora:        ['orb', null],
+  pulse:         ['orb', null],
 };
 
-// Map legacy style ids onto style + position and fill the position default.
+// Map legacy style ids onto style + position and fill defaults.
 // Returns true when something changed (caller persists).
 function normalizeOverlayConfig() {
   let changed = false;
   const legacy = LEGACY_OVERLAY_STYLES[config.overlay_style];
   if (legacy) {
     config.overlay_style = legacy[0];
-    if (!OVERLAY_POSITIONS.includes(config.overlay_position)) config.overlay_position = legacy[1];
+    if (legacy[1] && !OVERLAY_POSITIONS.includes(config.overlay_position)) config.overlay_position = legacy[1];
+    changed = true;
+  }
+  if (!OVERLAY_STYLES[config.overlay_style]) {
+    config.overlay_style = DEFAULT_OVERLAY_STYLE;
     changed = true;
   }
   if (!OVERLAY_POSITIONS.includes(config.overlay_position)) {
     config.overlay_position = 'bottom';
     changed = true;
   }
+  if (!OVERLAY_ACCENTS.includes(config.overlay_accent)) {
+    config.overlay_accent = 'mint';
+    changed = true;
+  }
   return changed;
 }
-// Extra window height above the animation for the live-transcript caption.
-const PREVIEW_CAPTION_H = 30;
 
 function getStyleConfig(name) {
   return OVERLAY_STYLES[name] || OVERLAY_STYLES[DEFAULT_OVERLAY_STYLE];
 }
 
-function previewCaptionH() {
-  // AMOLED styles render the transcript inside the pill/card themselves.
-  if ((config.overlay_style || '').startsWith('amoled')) return 0;
-  return config.live_preview_enabled !== false ? PREVIEW_CAPTION_H : 0;
-}
-
 // Apply the right size + anchor for the current overlay style.
 function applyOverlayBounds() {
   if (!overlayWin || overlayWin.isDestroyed()) return;
-  const styleName = OVERLAY_STYLES[config.overlay_style] ? config.overlay_style : DEFAULT_OVERLAY_STYLE;
-  const s = getStyleConfig(styleName);
+  const s = getStyleConfig(config.overlay_style);
 
   const cursor = screen.getCursorScreenPoint();
   const display = screen.getDisplayNearestPoint(cursor);
   const { x, y, width, height } = display.workArea;
 
-  // Caption space sits ABOVE the animation – the anchor math keeps the
-  // animation itself at the same screen position with or without it.
-  const cap = previewCaptionH();
-  overlayWin.setBounds({ width: s.w, height: s.h + cap, x: 0, y: 0 });
+  overlayWin.setBounds({ width: s.w, height: s.h, x: 0, y: 0 });
 
   const posX = x + Math.round((width - s.w) / 2);
   let posY;
   switch (config.overlay_position) {
     case 'top':    posY = y + s.top; break;
-    case 'center': posY = y + Math.round((height - s.h - cap) / 2); break;
+    case 'center': posY = y + Math.round((height - s.h) / 2); break;
     case 'bottom':
-    default:       posY = y + height - s.h - cap - s.bottom; break;
+    default:       posY = y + height - s.h - s.bottom; break;
   }
   overlayWin.setPosition(posX, posY);
 }
@@ -660,7 +680,7 @@ function createOverlay() {
   const initial = getStyleConfig(config.overlay_style);
   overlayWin = new BrowserWindow({
     width: initial.w,
-    height: initial.h + previewCaptionH(),
+    height: initial.h,
     show: false,
     frame: false,
     transparent: true,
@@ -699,9 +719,13 @@ function pushOverlayState() {
     if (!overlayWin || overlayWin.isDestroyed()) return;
     overlayWin.webContents.send('preview-enabled', config.live_preview_enabled !== false);
     overlayWin.webContents.send('app-lang', config.app_language || 'de');
-    overlayWin.webContents.send('set-style', styleName);
+    overlayWin.webContents.send('set-style', styleName, {
+      accent: config.overlay_accent || 'mint',
+      position: config.overlay_position || 'bottom',
+      sounds: config.overlay_sounds !== false,
+    });
     overlayWin.webContents.send('set-theme', currentTheme());
-    overlayWin.webContents.send('recording-started');
+    overlayWin.webContents.send('recording-started', { command: commandActive });
   };
   if (overlayReady) send();
   else overlayWin.webContents.once('did-finish-load', send);
@@ -728,7 +752,7 @@ function hideOverlay() {
       overlayHideTimer = setTimeout(() => {
         overlayHideTimer = null;
         if (overlayWin && !overlayWin.isDestroyed() && !isRecording) overlayWin.hide();
-      }, 170);
+      }, 230);
     }
     // Destroy the transparent always-on-top surface after a long idle period
     // so it isn't kept alive for the whole session. Recreated lazily on next
@@ -767,6 +791,42 @@ function configHotkeyToElectron(hotkey) {
 
 let holdTimer = null;  // Timer for hold-to-speak release detection
 
+// One handler for both hotkeys: dictation and command mode (`command`).
+function onHotkey(command) {
+  const mode = config.mode || 'press_to_speak';
+  const keys = command ? config.command_hotkey : config.hotkey;
+  if (mode === 'hold_to_speak') {
+    // Hold-to-speak: globalShortcut fires repeatedly while held.
+    // Start recording on first fire, reset release-detection timer each fire.
+    if (!isRecording && !isTranscribing) {
+      startRecording({ command });
+      // Precise release: the backend polls the hotkey's virtual keys
+      // (GetAsyncKeyState, ~15 ms) and sends 'hotkey_released'.
+      // globalShortcut has no key-up event – the old 350 ms-after-last-
+      // repeat timer added 350 ms to every dictation and, when the key
+      // was held shorter than the OS repeat delay (~500 ms), fired before
+      // the first repeat and cut the recording off mid-word.
+      if (isRecording) sendToPython('watch_hotkey_release', { hotkey: keys });
+    }
+    // The other hotkey's repeats must not keep this recording alive.
+    if (isRecording && commandActive !== command) return;
+    // Timer is now only a fallback (hotkey not mappable by the backend):
+    // long enough that it can't fire before OS key-repeat kicks in.
+    if (holdTimer) clearTimeout(holdTimer);
+    holdTimer = setTimeout(() => {
+      holdTimer = null;
+      if (isRecording) stopRecording();
+    }, holdReleaseViaBackend ? 1200 : 350);
+  } else {
+    // Press-to-speak: toggle
+    if (!isRecording) {
+      startRecording({ command });
+    } else {
+      stopRecording();
+    }
+  }
+}
+
 function registerHotkeys() {
   globalShortcut.unregisterAll();
   if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
@@ -776,36 +836,7 @@ function registerHotkeys() {
   console.log(`Registering hotkey: ${hotkey} (mode: ${mode})`);
 
   try {
-    const success = globalShortcut.register(hotkey, () => {
-      if (mode === 'hold_to_speak') {
-        // Hold-to-speak: globalShortcut fires repeatedly while held.
-        // Start recording on first fire, reset release-detection timer each fire.
-        if (!isRecording && !isTranscribing) {
-          startRecording();
-          // Precise release: the backend polls the hotkey's virtual keys
-          // (GetAsyncKeyState, ~15 ms) and sends 'hotkey_released'.
-          // globalShortcut has no key-up event – the old 350 ms-after-last-
-          // repeat timer added 350 ms to every dictation and, when the key
-          // was held shorter than the OS repeat delay (~500 ms), fired before
-          // the first repeat and cut the recording off mid-word.
-          if (isRecording) sendToPython('watch_hotkey_release', { hotkey: config.hotkey });
-        }
-        // Timer is now only a fallback (hotkey not mappable by the backend):
-        // long enough that it can't fire before OS key-repeat kicks in.
-        if (holdTimer) clearTimeout(holdTimer);
-        holdTimer = setTimeout(() => {
-          holdTimer = null;
-          if (isRecording) stopRecording();
-        }, holdReleaseViaBackend ? 1200 : 350);
-      } else {
-        // Press-to-speak: toggle
-        if (!isRecording) {
-          startRecording();
-        } else {
-          stopRecording();
-        }
-      }
-    });
+    const success = globalShortcut.register(hotkey, () => onHotkey(false));
 
     if (!success) {
       console.error(`✗ Failed to register hotkey: ${hotkey}`);
@@ -820,9 +851,25 @@ function registerHotkeys() {
   } catch (e) {
     console.error('Hotkey registration error:', e);
   }
+
+  // Command mode: select text, hold the second hotkey, speak an instruction.
+  if (config.command_enabled !== false && config.command_hotkey) {
+    const cmdKey = configHotkeyToElectron(config.command_hotkey);
+    try {
+      if (cmdKey.toLowerCase() === hotkey.toLowerCase()) {
+        console.error(`✗ Command hotkey equals the dictation hotkey (${cmdKey}) – skipped`);
+      } else if (globalShortcut.register(cmdKey, () => onHotkey(true))) {
+        console.log(`✓ Command hotkey registered: ${cmdKey}`);
+      } else {
+        console.error(`✗ Failed to register command hotkey: ${cmdKey}`);
+      }
+    } catch (e) {
+      console.error('Command hotkey registration error:', e);
+    }
+  }
 }
 
-function startRecording() {
+function startRecording({ command = false } = {}) {
   if (isTranscribing) {
     // Previous dictation is still being transcribed. The press is ignored,
     // but not silently: a low blip + nudge on the (still visible) overlay.
@@ -840,6 +887,8 @@ function startRecording() {
     return;
   }
   isRecording = true;
+  commandActive = !!command;
+  closeSuggestion();  // a new dictation supersedes it (and the overlay sits there)
   sendToOnboarding('recording-started');
   isPaused = false;
   showOverlay();
@@ -862,18 +911,19 @@ function stopRecording() {
   // Unregister hotkeys during paste to prevent Ctrl+V from triggering
   globalShortcut.unregisterAll();
   recordStopTs = Date.now();
-  sendToPython('stop_recording');
+  sendToPython(commandActive ? 'stop_command' : 'stop_recording');
   updateTray('processing');
 
   // Safety net: if the backend NEVER replies (process crashed, IPC stuck),
-  // make sure we unlock after 30 s instead of leaving the user dead.
+  // make sure we unlock after 30 s instead of leaving the user dead. A
+  // command also waits on the LLM (up to 25 s) – give it more room.
   setTimeout(() => {
     if (isTranscribing) {
       console.error('Transcription timeout – forcing state reset');
       finishTranscription();
       showToast(trayT().transcribeStuck, 'error');
     }
-  }, 30_000);
+  }, commandActive ? 45_000 : 30_000);
 }
 
 // Single place to reset post-recording state. Called from `transcription_done`,
@@ -1016,6 +1066,8 @@ function trayT() {
     modelNotReady: 'Modell lädt noch – bitte kurz warten',
     transcribeStuck: 'Transkription hängt – Status zurückgesetzt',
     bootReady: 'NoType bereit · {model} · {device}',
+    commandNoLlm: 'Befehlsmodus braucht die lokale KI – Einstellungen → Text-Bereinigung',
+    commandFailed: 'Befehl fehlgeschlagen – die KI hat nicht rechtzeitig geantwortet',
     locale: 'de-DE',
   };
   const en = {
@@ -1031,6 +1083,8 @@ function trayT() {
     modelNotReady: 'Model still loading – one moment',
     transcribeStuck: 'Transcription stalled – state reset',
     bootReady: 'NoType ready · {model} · {device}',
+    commandNoLlm: 'Command mode needs the local AI – Settings → Text Cleanup',
+    commandFailed: 'Command failed – the AI did not answer in time',
     locale: 'en-US',
   };
   return config.app_language === 'en' ? en : de;
@@ -1229,9 +1283,11 @@ ipcMain.on('save-config', (_, newConfig) => {
   //    model *because* the big one kept crashing lost exactly that change.
   const prevModel = config.model_size;
   const prevHotkey = config.hotkey, prevMode = config.mode;
+  const prevCmd = `${config.command_enabled}|${config.command_hotkey}`;
   config = { ...config, ...newConfig };
   writeConfigToDisk();
-  if (config.hotkey !== prevHotkey || config.mode !== prevMode) registerHotkeys();
+  if (config.hotkey !== prevHotkey || config.mode !== prevMode ||
+      `${config.command_enabled}|${config.command_hotkey}` !== prevCmd) registerHotkeys();
 
   const modelChanged = !!newConfig.model_size && newConfig.model_size !== prevModel;
   if (modelChanged) {
@@ -1255,6 +1311,7 @@ ipcMain.on('save-config', (_, newConfig) => {
   }
 });
 ipcMain.on('get-config', () => pushConfigToSettings());
+ipcMain.on('get-history', () => pushHistoryToSettings());
 ipcMain.on('list-devices', () => sendToPython('list_devices'));
 ipcMain.on('list-models', () => sendToPython('list_models'));
 ipcMain.on('hotkey-capture', (_, active) => {
@@ -1272,11 +1329,105 @@ ipcMain.on('close-onboarding', () => {
 });
 ipcMain.on('ollama-status', () => sendToPython('ollama_status'));
 ipcMain.on('ollama-setup', () => sendToPython('ollama_setup'));
+ipcMain.on('ollama-update', () => sendToPython('ollama_update'));
 ipcMain.on('close-settings', () => {
   if (settingsWin && !settingsWin.isDestroyed()) settingsWin.close();
 });
 ipcMain.on('close-toast', () => {
   if (toastWin && !toastWin.isDestroyed()) toastWin.close();
+});
+
+// ── Correction suggestions (dictionary stage 2) ──
+// The backend spotted a fix the user typed right after a dictation. The pill
+// is clickable but never takes focus – the user keeps typing where they were.
+const DICT_MAX = 500;
+const phraseKey = (s) => (String(s).toLowerCase().match(/[\p{L}\p{N}_]+/gu) || []).join(' ');
+
+function closeSuggestion() {
+  if (suggestTimer) { clearTimeout(suggestTimer); suggestTimer = null; }
+  if (suggestWin && !suggestWin.isDestroyed()) suggestWin.close();
+  suggestWin = null;
+}
+
+function armSuggestTimer(ms) {
+  if (suggestTimer) clearTimeout(suggestTimer);
+  suggestTimer = setTimeout(closeSuggestion, ms);
+}
+
+function showSuggestion(items) {
+  items = (items || []).filter(it => it && it.from && it.to).slice(0, 3);
+  if (!items.length) return;
+  closeSuggestion();
+  suggestItems = items;
+  const win = new BrowserWindow({
+    width: 620,
+    height: 72,
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: false,
+    hasShadow: false,
+    type: 'toolbar',
+    webPreferences: {
+      preload: PRELOAD,
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
+  });
+  suggestWin = win;
+  // Only the pill takes clicks; the transparent rest of the window passes
+  // them through (toggled from the page's hover events).
+  win.setIgnoreMouseEvents(true, { forward: true });
+  win.loadFile(path.join(__dirname, 'suggest.html'));
+  win.once('ready-to-show', () => {
+    if (win.isDestroyed()) return;
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const { x, y, width, height } = display.workArea;
+    const b = win.getBounds();
+    win.setPosition(x + Math.round((width - b.width) / 2), y + height - b.height - 44);
+    win.webContents.send('set-theme', currentTheme());
+    win.webContents.send('suggest-data', { items, lang: config.app_language === 'en' ? 'en' : 'de' });
+    win.showInactive();
+  });
+  armSuggestTimer(10_000);
+  win.on('closed', () => { if (suggestWin === win) closeSuggestion(); });
+}
+
+// Same rules as adding in Settings → Wörterbuch: a new spelling for a known
+// mistake replaces the old one, the exact reverse pair goes.
+function learnDictionary(items) {
+  let entries = Array.isArray(config.dictionary) ? config.dictionary.slice() : [];
+  for (const { from, to } of items) {
+    const fk = phraseKey(from), tk = phraseKey(to);
+    if (!fk || !tk || from === to) continue;
+    entries = entries.filter(e =>
+      phraseKey(e.from) !== fk && !(phraseKey(e.from) === tk && phraseKey(e.to) === fk));
+    if (entries.length >= DICT_MAX) break;
+    entries.push({ from, to });
+  }
+  config.dictionary = entries;
+  writeConfigToDisk();
+  sendToPython('save_config', { dictionary: entries });
+  if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('dictionary', entries);
+}
+
+ipcMain.on('suggest-hover', (_, hovering) => {
+  if (!suggestWin || suggestWin.isDestroyed()) return;
+  suggestWin.setIgnoreMouseEvents(!hovering, { forward: true });
+  // Reading or aiming at the pill keeps it; leaving gives a short grace.
+  if (hovering) { if (suggestTimer) clearTimeout(suggestTimer); suggestTimer = null; }
+  else armSuggestTimer(4000);
+});
+
+ipcMain.on('suggest-answer', (_, learn) => {
+  if (!learn) { closeSuggestion(); return; }
+  learnDictionary(suggestItems);
+  suggestItems = [];
+  armSuggestTimer(1800);  // the pill shows "learned" first
 });
 
 // ── Stats Tracking ──
@@ -1297,6 +1448,11 @@ function addToHistory(text) {
   if (clipboardHistory.length > MAX_HISTORY) clipboardHistory.pop();
   scheduleSave();
   updateTray('ready');  // Refresh menu with new history
+  pushHistoryToSettings();  // dictionary pane: learn from recent dictations
+}
+
+function pushHistoryToSettings() {
+  if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('history', clipboardHistory);
 }
 
 // ── Toast Notification ──
