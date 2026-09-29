@@ -49,7 +49,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from audio_recorder import AudioRecorder
 from transcriber import Transcriber
 from text_output import insert_text, copy_selection
-from config import load_config, save_config, get_config, CONFIG_DIR
+from config import load_config, save_config, CONFIG_DIR
 from postprocess import (clean_transcript, warm_up, reset_availability_cache,
                          rule_clean, run_command, DEFAULT_LLM_MODEL)
 import dictionary

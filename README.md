@@ -11,7 +11,7 @@ No cloud, no subscription, no account. Nothing you say ever leaves your computer
 
 [![Download for Windows](https://img.shields.io/badge/Download-for%20Windows-00d4aa?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/MJM-DEVS/NoType/releases/latest)
 &nbsp;
-[![Website](https://img.shields.io/badge/Website-mjm--devs.github.io%2FNoType-1f2937?style=for-the-badge)](https://mjm-devs.github.io/NoType/)
+[![Made by mjmads.com](https://img.shields.io/badge/Made%20by-mjmads.com-1f2937?style=for-the-badge)](https://mjmads.com)
 
 [![Latest release](https://img.shields.io/github/v/release/MJM-DEVS/NoType?label=latest&color=00d4aa)](https://github.com/MJM-DEVS/NoType/releases/latest)
 ![Windows 11](https://img.shields.io/badge/Windows%2011-x64-0078D6?logo=windows11&logoColor=white)
@@ -384,7 +384,7 @@ NoType/
 ├── text_output.py        # clipboard + SendInput paste/copy, Unicode typing fallback
 ├── config.py             # atomic settings with rolling backups (%APPDATA%/NoType)
 ├── backend.spec          # PyInstaller build
-├── docs/                 # website (GitHub Pages) and README images
+├── docs/assets/          # screenshots and demo used in this README
 └── electron/
     ├── main.js           # tray, overlay, hotkeys, IPC, lifecycle, GPU safety
     ├── preload.js        # contextBridge IPC surface
@@ -434,6 +434,6 @@ NoType stands on the shoulders of great open projects: [OpenAI Whisper](https://
 
 **If NoType saves you some typing, please give it a ⭐. It helps other people find it.**
 
-<sub>Built for people who think faster than they type.</sub>
+<sub>Built for people who think faster than they type · Made by Mijo Jurisic · <a href="https://mjmads.com">mjmads.com</a></sub>
 
 </div>

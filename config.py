@@ -176,7 +176,6 @@ def _try_restore_from_backup():
 
 def get_config() -> dict:
     """Get current config, loading if necessary."""
-    global _config
     if _config is None:
         return load_config()
     return _config
