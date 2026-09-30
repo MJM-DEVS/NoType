@@ -58,9 +58,27 @@ from correction_watch import CorrectionWatcher
 
 # Log to file only (stdout is for IPC). Rotate so the log file never grows unbounded.
 # CONFIG_DIR is %APPDATA%/NoType — same directory the frontend uses, survives rebuilds.
+# Never log dictated text: people attach this file to public GitHub issues.
 LOG_FILE = os.path.join(CONFIG_DIR, "notype.log")
+LOG_BACKUPS = 3
+# Versions up to 2.7 logged short snippets of every dictation. Delete those
+# files once, so the old snippets don't linger until rotation pushes them out.
+_LOG_PURGED = os.path.join(CONFIG_DIR, ".log-purged")
+_OLD_LOGS = [LOG_FILE] + [f"{LOG_FILE}.{i}" for i in range(1, LOG_BACKUPS + 1)]
+if not os.path.exists(_LOG_PURGED):
+    for _path in _OLD_LOGS:
+        try:
+            os.remove(_path)
+        except OSError:
+            pass
+    # A locked file stays behind; then try again on the next start.
+    if not any(os.path.exists(_path) for _path in _OLD_LOGS):
+        try:
+            open(_LOG_PURGED, "w").close()
+        except OSError:
+            pass
 _log_handler = logging.handlers.RotatingFileHandler(
-    LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
+    LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=LOG_BACKUPS, encoding="utf-8"
 )
 logging.basicConfig(
     level=logging.INFO,
@@ -402,7 +420,7 @@ class Backend:
                 stats["cleanup_ms"] = cleaned["ms"]
 
             if text:
-                logger.info(f"Transcribed: '{_safe_str(text[:80])}'")
+                logger.info(f"Transcribed: {len(text)} chars")
                 if insert_text(text, method=self.config.get("insert_method", "auto")) \
                         and self.config.get("learn_corrections", True):
                     self.corrections.watch(
@@ -430,7 +448,7 @@ class Backend:
         started = time.perf_counter()
         result = run_command(instruction, selection, model=self._llm_model())
         ms = int((time.perf_counter() - started) * 1000)
-        logger.info(f"Command '{_safe_str(instruction[:60])}' on {len(selection)} chars "
+        logger.info(f"Command ({len(instruction)} chars) on {len(selection)} chars "
                     f"-> {len(result or '')} chars ({ms} ms)")
         if not result:
             installed = ollama_manager.status(self._llm_model())

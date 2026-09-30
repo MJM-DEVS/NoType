@@ -259,7 +259,7 @@ def insert_text(text: str, method: str = "auto") -> bool:
     try:
         if method == "type":
             success = _type_unicode(text)
-            logger.info(f"Typed text ({success}): '{text[:50]}' ({len(text)} chars)")
+            logger.info(f"Typed text ({success}): {len(text)} chars")
             return success
 
         seq = user32.GetClipboardSequenceNumber()
@@ -271,7 +271,7 @@ def insert_text(text: str, method: str = "auto") -> bool:
         if not success:
             logger.warning("Ctrl+V injection failed, typing instead")
             success = _type_unicode(text)
-        logger.info(f"Inserted text ({success}): '{text[:50]}' ({len(text)} chars)")
+        logger.info(f"Inserted text ({success}): {len(text)} chars")
         return success
     except Exception as e:
         logger.error(f"Failed to insert text: {e}")

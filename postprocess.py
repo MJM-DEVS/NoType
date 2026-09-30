@@ -394,5 +394,5 @@ def clean_transcript(text: str, mode: str = "fast",
 
     ms = int((time.perf_counter() - start) * 1000)
     if result != text:
-        logger.info(f"Cleanup ({engine}, {ms}ms): '{text[:60]}' -> '{result[:60]}'")
+        logger.info(f"Cleanup ({engine}, {ms}ms): {len(text)} -> {len(result)} chars")
     return {"text": result, "engine": engine, "ms": ms}
