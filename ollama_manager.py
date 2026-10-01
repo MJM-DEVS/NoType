@@ -36,7 +36,8 @@ def _t(de: str, en: str) -> str:
 OLLAMA_URL = "http://127.0.0.1:11434"
 OLLAMA_DIR = os.path.join(CONFIG_DIR, "ollama")
 OLLAMA_EXE = os.path.join(OLLAMA_DIR, "ollama.exe")
-# Models live inside our own dir so uninstalling NoType removes everything.
+# Models live inside our own dir, so the uninstaller removes them together
+# with the rest of %APPDATA%\NoType (nsis.deleteAppDataOnUninstall).
 OLLAMA_MODELS_DIR = os.path.join(OLLAMA_DIR, "models")
 ZIP_NAME = "ollama-windows-amd64.zip"
 DOWNLOAD_URL = f"https://github.com/ollama/ollama/releases/latest/download/{ZIP_NAME}"

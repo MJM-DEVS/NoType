@@ -4,9 +4,11 @@ Uses faster-whisper with CUDA for local speech-to-text.
 """
 
 import logging
+import os
 import threading
 import numpy as np
 from faster_whisper import WhisperModel
+from faster_whisper.utils import download_model
 
 logger = logging.getLogger("NoType.Transcriber")
 
@@ -97,8 +99,23 @@ class Transcriber:
 
         logger.info(f"Transcriber: device={self.device}, compute_type={self.compute_type}")
 
+    def _local_model_path(self):
+        """Folder of the already downloaded model, or None.
+
+        WhisperModel(repo_id) asks the Hugging Face Hub for the latest
+        revision on every load, even when all files are cached. Loading the
+        local snapshot folder instead keeps a downloaded model fully offline.
+        A snapshot without model.bin is an interrupted download, which the
+        normal repo_id path then finishes."""
+        try:
+            path = download_model(self._repo, local_files_only=True)
+        except Exception:
+            return None
+        return path if os.path.isfile(os.path.join(path, "model.bin")) else None
+
     def load_model(self, on_progress=None):
-        """Load the Whisper model. Downloads on first use.
+        """Load the Whisper model. Downloads on first use, afterwards it
+        loads from the local files without contacting the Hub.
 
         Cached at the class level: a subsequent call with the same
         (model_size, device, compute_type) reuses the existing WhisperModel
@@ -117,11 +134,14 @@ class Transcriber:
         if on_progress:
             on_progress(f"Lade Modell '{self.model_size}' ({self.device})...")
 
-        logger.info(f"Loading model: {self.model_size} on {self.device}")
+        source = self._local_model_path()
+        logger.info(f"Loading model: {self.model_size} on {self.device} "
+                    f"({'local files' if source else 'download from Hugging Face'})")
+        source = source or self._repo
 
         try:
             self._model = WhisperModel(
-                self._repo,
+                source,
                 device=self.device,
                 compute_type=self.compute_type,
             )
@@ -133,7 +153,7 @@ class Transcriber:
                 if on_progress:
                     on_progress("int8_float16 nicht unterstützt, nutze float16...")
                 self._model = WhisperModel(
-                    self._repo,
+                    source,
                     device=self.device,
                     compute_type="float16",
                 )

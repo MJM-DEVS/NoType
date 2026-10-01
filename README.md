@@ -41,6 +41,8 @@ What makes it different from cloud dictation tools:
 - ⚡ **Fast.** On a modern NVIDIA graphics card your text usually appears in well under a second.
 - 🌍 **Works in any app and 99 languages,** including German with English terms mixed in (or the other way around).
 
+Screenshots, a live preview of every overlay style and a guide to the speech models are on the **[NoType page at mjmads.com](https://mjmads.com/en/notype/)** (also in [German](https://mjmads.com/de/notype/) and [Polish](https://mjmads.com/pl/notype/)).
+
 <br/>
 
 ## Download
@@ -196,8 +198,12 @@ Everything else stays in `%APPDATA%\NoType\` on your PC:
 |---|---|
 | Settings | `settings.json` (with automatic backups) |
 | Dictation history & stats | `history.json`, the last 10 entries |
-| Diagnostic log | `notype.log`, rotating |
-| AI engine & model | `%APPDATA%\NoType\ollama\`, removed with the app |
+| Diagnostic log | `notype.log`, rotating; timings and errors only, never your dictated text |
+| AI engine & model | the `ollama\` subfolder |
+
+**Uninstalling removes this whole folder** (updates keep it). The speech models are the exception: they live in the shared Hugging Face cache at `%USERPROFILE%\.cache\huggingface\hub\`, which other apps may use too, so the uninstaller leaves it alone. To free the space, delete the folders of the models you downloaded in NoType there; their names contain `whisper`, for example `models--mobiuslabsgmbh--faster-whisper-large-v3-turbo`. The portable version has no uninstaller: delete its folder and `%APPDATA%\NoType\` by hand.
+
+NoType pastes through the clipboard, so the dictated text stays there afterwards and you can paste it again. If you use Windows clipboard history or sync across devices, it ends up there too. To keep the clipboard out of it, choose **Always type** under **Settings → System**.
 
 To suggest corrections, NoType reads the text field you dictated into for up to a minute afterwards and compares only the dictated part. It stops as soon as you switch fields or start a new dictation. It never reads password fields and keeps nothing unless you click **Learn**. You can switch this off under **Settings → Dictionary**.
 
@@ -407,7 +413,7 @@ NoType/
 
 ### Contributing
 
-Bug reports and ideas are welcome. Please [open an issue](https://github.com/MJM-DEVS/NoType/issues) and include `%APPDATA%\NoType\notype.log` if something breaks. Pull requests are welcome too; by submitting one, you agree that your contribution is licensed under the same terms as the project.
+Bug reports and ideas are welcome. Please [open an issue](https://github.com/MJM-DEVS/NoType/issues) and include `%APPDATA%\NoType\notype.log` if something breaks (it contains no dictated text). Pull requests are welcome too; by submitting one, you agree that your contribution is licensed under the same terms as the project.
 
 <br/>
 

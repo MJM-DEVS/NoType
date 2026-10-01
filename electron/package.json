@@ -71,6 +71,7 @@
       "createStartMenuShortcut": true,
       "shortcutName": "NoType",
       "runAfterFinish": true,
+      "deleteAppDataOnUninstall": true,
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico"
     }
