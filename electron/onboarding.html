@@ -210,6 +210,23 @@
   .summary span:first-child { color: var(--fg-dim); }
   .summary span:last-child { font-weight: 500; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tips { font-size: 12.5px; color: var(--fg-muted); line-height: 1.6; }
+  .card.solo { padding-top: 4px; padding-bottom: 4px; }
+
+  /* Toggle switch (same as settings.html) */
+  .toggle { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+  .toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .toggle .slider {
+    position: absolute; inset: 0; background: var(--toggle-off);
+    border-radius: 24px; cursor: pointer; transition: background 0.2s;
+  }
+  .toggle .slider::before {
+    content: ''; position: absolute; height: 18px; width: 18px; left: 3px; bottom: 3px;
+    background: #fff; border-radius: 50%; transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  }
+  .toggle input:checked + .slider { background: var(--accent); }
+  .toggle input:checked + .slider::before { transform: translateX(20px); }
+  .toggle input:focus-visible + .slider { box-shadow: 0 0 0 2px var(--card-bg), 0 0 0 4px var(--accent); }
 </style>
 </head>
 <body>
@@ -328,6 +345,15 @@
       <div><span data-i18n="d.mode">Modus</span><span id="sumMode"></span></div>
       <div><span data-i18n="d.model">Modell</span><span id="sumModel"></span></div>
     </div>
+    <div class="card solo">
+      <div class="field">
+        <div>
+          <div class="field-label" data-i18n="d.autostart">Mit Windows starten</div>
+          <div class="field-desc" data-i18n="d.autostart.desc">Nach jedem Neustart sofort bereit, ohne NoType selbst zu öffnen. Lässt sich in den Einstellungen jederzeit ändern.</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="autostartToggle" checked><span class="slider"></span></label>
+      </div>
+    </div>
     <p class="tips" data-i18n="d.tips">Tipp: Im Overlay-Tab der Einstellungen wählst du das Aussehen der Aufnahme-Anzeige, unter „Eigene Begriffe" hinterlegst du Namen und Fachwörter, damit sie richtig geschrieben werden.</p>
   </section>
 
@@ -383,6 +409,8 @@
       'd.lead': 'NoType läuft ab jetzt im Hintergrund – du findest es unten rechts im Tray.',
       'd.mic': 'Mikrofon', 'd.hotkey': 'Hotkey', 'd.mode': 'Modus', 'd.model': 'Modell',
       'd.settings': 'Einstellungen öffnen',
+      'd.autostart': 'Mit Windows starten',
+      'd.autostart.desc': 'Nach jedem Neustart sofort bereit, ohne NoType selbst zu öffnen. Lässt sich in den Einstellungen jederzeit ändern.',
       'd.tips': 'Tipp: Im Overlay-Tab der Einstellungen wählst du das Aussehen der Aufnahme-Anzeige, unter „Eigene Begriffe" hinterlegst du Namen und Fachwörter, damit sie richtig geschrieben werden.',
     },
     en: {
@@ -421,6 +449,8 @@
       'd.lead': 'NoType now runs in the background – find it in the tray at the bottom right.',
       'd.mic': 'Microphone', 'd.hotkey': 'Hotkey', 'd.mode': 'Mode', 'd.model': 'Model',
       'd.settings': 'Open settings',
+      'd.autostart': 'Start with Windows',
+      'd.autostart.desc': 'Ready after every restart without opening NoType yourself. You can change this in settings at any time.',
       'd.tips': 'Tip: the Overlay tab in settings picks the look of the recording indicator, and "Custom Vocabulary" teaches NoType names and jargon so they are spelled right.',
     },
   };
@@ -507,6 +537,7 @@
         if (state.model_size !== cfg.model_size) { modelReady = false; testState = 'loading'; }
         save({ model_size: state.model_size });
         break;
+      case STEPS - 1: save({ autostart: $('autostartToggle').checked }); break;
     }
   }
 
@@ -523,7 +554,7 @@
   };
   $('backBtn').onclick = () => showStep(step - 1);
   $('skipBtn').onclick = finish;
-  $('settingsBtn').onclick = () => { window.notype.openSettings(); finish(); };
+  $('settingsBtn').onclick = () => { commitStep(step); window.notype.openSettings(); finish(); };
 
   // ── 0 · Language ──
   $('langSeg').querySelectorAll('button').forEach(btn => {
@@ -721,6 +752,8 @@
       state.hotkey = cfg.hotkey || 'ctrl+shift+space';
       state.mode = cfg.mode === 'press_to_speak' ? 'press_to_speak' : 'hold_to_speak';
       state.model_size = cfg.model_size || 'small';
+      // First run suggests autostart; a rerun of the wizard shows the real state.
+      $('autostartToggle').checked = cfg.first_run_complete ? cfg.autostart === true : true;
       uiLang = state.app_language;
       $('langSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.lang === uiLang));
       $('hotkeyValue').textContent = prettyHotkey(state.hotkey);

@@ -84,9 +84,16 @@ Prefer not to hold a key? Switch to **press once to start, press again to stop**
 
 ### Pick your overlay
 
-<img src="docs/assets/overlay-styles.png" alt="The five overlay styles: AMOLED Bar, Dot Matrix, Island, Halo and Buddy" width="100%" />
+<img src="docs/assets/overlay-styles.png" alt="The eight overlay styles: AMOLED Bar, Dot Matrix, Island, Halo, Buddy, Slime, Dragon and Mimic" width="100%" />
 
-Five designs react to the actual sound of your voice: **AMOLED Bar**, **Dot Matrix**, **Island**, **Halo** and **Buddy**, a little LED face that talks along while you speak, thinks while NoType works and grins when your text is in. Each comes in seven accent colors, light and dark, with optional start and stop sounds. Place the overlay at the bottom, top or center of your screen. The settings show a live preview, so you can see it before you choose it.
+Eight designs react to the actual sound of your voice. **AMOLED Bar**, **Dot Matrix**, **Island** and **Halo** keep it clean and minimal. The other four are little characters that talk along while you speak:
+
+- **Buddy**, an LED face that thinks while NoType works and grins when your text is in.
+- **Slime**, a jelly blob that jiggles with every syllable and hops while your text is on its way.
+- **Dragon**, a pixel dragon whose fire breath grows when you speak louder.
+- **Mimic**, a treasure chest that chews on your words and spits out gold when it's done.
+
+Each style comes in seven accent colors, light and dark, with optional start and stop sounds. Place the overlay at the bottom, top or center of your screen. The settings show a live preview, so you can see it before you choose it.
 
 ### It learns your words
 
@@ -146,6 +153,7 @@ The AI engine ([Ollama](https://ollama.com/)) is installed **from inside NoType 
 **And also:**
 
 - **History and stats:** your last dictations and daily word counts are one click away in the system tray.
+- **Starts with Windows if you want:** NoType then waits in the tray after you sign in. Switch it on or off under **Settings → General** or right in the tray menu.
 - **No invented words:** background noise does not turn into imaginary sentences. Repetitive and low-confidence output is dropped before it reaches your screen.
 - **Works in stubborn apps:** if pasting is blocked (some terminals, remote desktops), NoType types the text key by key instead.
 - **English or German interface:** switch any time under **Settings → General**.
@@ -201,7 +209,7 @@ Everything else stays in `%APPDATA%\NoType\` on your PC:
 | Diagnostic log | `notype.log`, rotating; timings and errors only, never your dictated text |
 | AI engine & model | the `ollama\` subfolder |
 
-**Uninstalling removes this whole folder** (updates keep it). The speech models are the exception: they live in the shared Hugging Face cache at `%USERPROFILE%\.cache\huggingface\hub\`, which other apps may use too, so the uninstaller leaves it alone. To free the space, delete the folders of the models you downloaded in NoType there; their names contain `whisper`, for example `models--mobiuslabsgmbh--faster-whisper-large-v3-turbo`. The portable version has no uninstaller: delete its folder and `%APPDATA%\NoType\` by hand.
+**Uninstalling removes this whole folder** and NoType's autostart entry (updates keep both). The speech models are the exception: they live in the shared Hugging Face cache at `%USERPROFILE%\.cache\huggingface\hub\`, which other apps may use too, so the uninstaller leaves it alone. To free the space, delete the folders of the models you downloaded in NoType there; their names contain `whisper`, for example `models--mobiuslabsgmbh--faster-whisper-large-v3-turbo`. The portable version has no uninstaller: delete its folder and `%APPDATA%\NoType\` by hand.
 
 NoType pastes through the clipboard, so the dictated text stays there afterwards and you can paste it again. If you use Windows clipboard history or sync across devices, it ends up there too. To keep the clipboard out of it, choose **Always type** under **Settings → System**.
 
@@ -395,11 +403,13 @@ NoType/
     ├── main.js           # tray, overlay, hotkeys, IPC, lifecycle, GPU safety
     ├── preload.js        # contextBridge IPC surface
     ├── model-catalog.js  # the ten speech models and their metadata
-    ├── overlay.html      # 5 spectrum-reactive overlay styles + live transcript
+    ├── overlay.html      # 8 spectrum-reactive overlay styles + live transcript
+    ├── sprites.js        # pixel art for the Dragon and Mimic overlays
     ├── settings.html     # settings window
     ├── onboarding.html   # first-run setup guide
     ├── suggest.html      # "learn this correction?" prompt
     ├── toast.html        # notification toast
+    ├── installer.nsh     # uninstaller step that removes the autostart entry
     └── package.json      # electron-builder (NSIS installer)
 ```
 

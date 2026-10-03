@@ -259,6 +259,43 @@ function writeConfigToDisk() {
   }
 }
 
+// ── Autostart (start with Windows) ──
+// A value "NoType" under HKCU\…\CurrentVersion\Run that launches this exe.
+// The registry is the truth, including the on/off switch in Task Manager;
+// config.autostart only mirrors it for the settings page. A dev run
+// (electron.exe + app folder) never registers: Windows would start a bare
+// Electron without the app. The NSIS uninstaller removes the value.
+const LOGIN_ITEM = { name: 'NoType', path: process.execPath, args: [] };
+
+function autostartEnabled() {
+  if (!IS_PACKAGED) return !!config.autostart;
+  try {
+    return app.getLoginItemSettings({ path: LOGIN_ITEM.path, args: LOGIN_ITEM.args }).executableWillLaunchAtLogin;
+  } catch (e) {
+    console.error('Autostart read failed:', e.message);
+    return !!config.autostart;
+  }
+}
+
+function setAutostart(on) {
+  on = !!on;
+  if (IS_PACKAGED) {
+    try {
+      // enabled: true also clears a "disabled" flag Task Manager may have set.
+      app.setLoginItemSettings({ ...LOGIN_ITEM, openAtLogin: on, enabled: true });
+    } catch (e) {
+      console.error('Autostart write failed:', e.message);
+    }
+  }
+  config.autostart = on;
+  console.log(`Autostart ${on ? 'on' : 'off'}${IS_PACKAGED ? '' : ' (dev run: registry untouched)'}`);
+}
+
+// Config as the settings page should see it: autostart from the registry.
+function configForSettings(cfg) {
+  return { ...cfg, autostart: autostartEnabled() };
+}
+
 // ── Python Backend ──
 function startPython() {
   // Prefer the PyInstaller-frozen backend.exe (packaged build, no Python install needed).
@@ -531,7 +568,7 @@ function handlePythonMessage(line) {
           }
         }
         if (settingsWin && !settingsWin.isDestroyed()) {
-          settingsWin.webContents.send('config', data);
+          settingsWin.webContents.send('config', configForSettings(data));
         }
         break;
 
@@ -605,6 +642,9 @@ const OVERLAY_STYLES = {
   island: { w: 648, h: 116, bottom: 6,  top: 0 },   // morphing shape, ≤600×72
   halo:   { w: 616, h: 118, bottom: 0,  top: 0 },   // capsule 560×58 + rim glow
   buddy:  { w: 652, h: 108, bottom: 10, top: 0 },   // face 90×80 + bubble 500×50
+  slime:  { w: 640, h: 112, bottom: 8,  top: 0 },   // blob 104×92 + bubble 500×50
+  dragon: { w: 612, h: 100, bottom: 8,  top: 0 },   // pixel dragon 136×80, bubble 476×50 tucked under its fire
+  mimic:  { w: 666, h: 116, bottom: 8,  top: 0 },   // pixel chest 128×96 + bubble 500×50
 };
 const DEFAULT_OVERLAY_STYLE = 'amoled';
 const OVERLAY_POSITIONS = ['bottom', 'top', 'center'];
@@ -1027,8 +1067,10 @@ function createTrayWithRetry(attempt = 0) {
   }
 }
 
+let trayStatus = 'ready';   // last status shown, so the menu can be rebuilt as-is
 function updateTray(status) {
   if (!tray) return;
+  trayStatus = status;
   const colors = { ready: '#00d4aa', recording: '#ff4444', processing: '#ffaa00', loading: '#888888', paused: '#ffaa00' };
   const T = trayT();
   const labels = {
@@ -1059,7 +1101,7 @@ function trayT() {
     loading: '⏳ Modell lädt...', paused: '⏸ Pausiert',
     today: 'Heute', words: 'Wörter', transcriptions: 'Transkriptionen',
     last7: 'Letzte 7 Tage', last30: 'Letzte 30 Tage',
-    history: 'Letzte Transkriptionen', settings: '⚙  Einstellungen', setup: '✦  Einrichtung', quit: '✕  Beenden',
+    history: 'Letzte Transkriptionen', settings: '⚙  Einstellungen', setup: '✦  Einrichtung', autostart: 'Mit Windows starten', quit: '✕  Beenden',
     tooShort: 'Aufnahme zu kurz – verworfen',
     backendCrashed: 'Backend abgestürzt – starte neu',
     backendDead: 'Backend startet nicht – bitte NoType neu starten',
@@ -1076,7 +1118,7 @@ function trayT() {
     loading: '⏳ Loading model...', paused: '⏸ Paused',
     today: 'Today', words: 'words', transcriptions: 'transcriptions',
     last7: 'Last 7 days', last30: 'Last 30 days',
-    history: 'Recent transcriptions', settings: '⚙  Settings', setup: '✦  Setup', quit: '✕  Quit',
+    history: 'Recent transcriptions', settings: '⚙  Settings', setup: '✦  Setup', autostart: 'Start with Windows', quit: '✕  Quit',
     tooShort: 'Recording too short – discarded',
     backendCrashed: 'Backend crashed – restarting',
     backendDead: 'Backend won\'t start – please restart NoType',
@@ -1164,6 +1206,15 @@ function buildTrayMenu(status = 'ready') {
   items.push(
     { label: T.settings, click: () => openSettings() },
     { label: T.setup, click: () => openOnboarding() },
+    {
+      label: T.autostart, type: 'checkbox', checked: autostartEnabled(),
+      click: (item) => {
+        setAutostart(item.checked);
+        writeConfigToDisk();
+        sendToPython('save_config', { autostart: config.autostart });
+        pushConfigToSettings();
+      },
+    },
     { type: 'separator' },
     { label: T.quit, click: () => quitApp() },
   );
@@ -1246,7 +1297,7 @@ function openOnboarding() {
     onboardingWin.webContents.send('set-theme', currentTheme());
     onboardingWin.show();
     applyMica(onboardingWin);
-    onboardingWin.webContents.send('config', config);
+    onboardingWin.webContents.send('config', configForSettings(config));
     if (modelLoaded && modelInfo) onboardingWin.webContents.send('model-ready', modelInfo);
   });
   onboardingWin.on('closed', () => {
@@ -1274,7 +1325,7 @@ function sendToOnboarding(channel, data) {
 // copy then, instead of letting the form open blank.
 function pushConfigToSettings() {
   if (pythonProcess && pythonProcess.stdin.writable) sendToPython('get_config');
-  else if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('config', config);
+  else if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('config', configForSettings(config));
 }
 
 ipcMain.on('save-config', (_, newConfig) => {
@@ -1285,7 +1336,12 @@ ipcMain.on('save-config', (_, newConfig) => {
   const prevModel = config.model_size;
   const prevHotkey = config.hotkey, prevMode = config.mode;
   const prevCmd = `${config.command_enabled}|${config.command_hotkey}`;
+  const autostartChanged = typeof newConfig.autostart === 'boolean' && newConfig.autostart !== autostartEnabled();
   config = { ...config, ...newConfig };
+  if (autostartChanged) {
+    setAutostart(newConfig.autostart);
+    updateTray(trayStatus);   // the tray menu's checkbox
+  }
   writeConfigToDisk();
   if (config.hotkey !== prevHotkey || config.mode !== prevMode ||
       `${config.command_enabled}|${config.command_hotkey}` !== prevCmd) registerHotkeys();

@@ -6,12 +6,15 @@
 <title>NoType Overlay</title>
 <style>
   /* ═══════════════════════════════════════════════════════════════
-     NoType overlay – five OLED styles on pure black.
+     NoType overlay – OLED styles on pure black, plus characters.
        amoled  AMOLED Bar   pill: mirrored spectrum + live text + timer
        matrix  Dot Matrix   LED dot grid: dot-font timer + spectrum
        island  Island       spring-morphing capsule that grows with the text
        halo    Halo         capsule with a luminous, voice-driven color rim
        buddy   Buddy        LED pixel face that talks along + speech bubble
+       slime   Slime        jelly blob that wobbles with every syllable
+       dragon  Dragon       pixel dragon; its fire breath is the visualizer
+       mimic   Mimic        treasure chest whose lid talks along
      Everything that moves is drawn on small canvases or changes opacity/
      transform only: no CSS blur filters, no backdrop-filter, no per-frame
      box-shadow (transparent always-on-top windows make those expensive and
@@ -42,7 +45,10 @@
   body[data-style="matrix"] .s-matrix,
   body[data-style="island"] .s-island,
   body[data-style="halo"]   .s-halo,
-  body[data-style="buddy"]  .s-buddy { display: flex; }
+  body[data-style="buddy"]  .s-buddy,
+  body[data-style="slime"]  .s-slime,
+  body[data-style="dragon"] .s-dragon,
+  body[data-style="mimic"]  .s-mimic { display: flex; }
 
   /* Every shape enters with a short spring and leaves with a quick fade;
      main.js sends 'overlay-leaving' ~220 ms before it hides the window. */
@@ -193,20 +199,39 @@
     animation: popIn 0.46s cubic-bezier(0.2, 1.25, 0.35, 1) both;
   }
   .bd-cv { width: 72px; height: 61px; }
-  .bd-bubble {
+  /* Speech bubble shared by every character style. */
+  .bubble {
     position: relative; width: 500px; height: 50px; border-radius: 25px;
     background: #000; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.085);
     display: flex; align-items: center; gap: 14px; padding: 0 20px 0 22px;
     animation: fadeUp 0.36s 0.08s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   /* tail: a rotated square whose two outer edges carry the hairline */
-  .bd-bubble::before {
+  .bubble::before {
     content: ''; position: absolute; left: -6px; top: 50%; width: 13px; height: 13px;
     background: #000; transform: translateY(-50%) rotate(45deg);
     box-shadow: inset 1px -1px 0 rgba(255, 255, 255, 0.085);
   }
-  .bd-bubble .txt { flex: 1 1 auto; font-size: 14.5px; }
-  .bd-bubble .time { flex: 0 0 auto; }
+  .bubble .txt { flex: 1 1 auto; font-size: 14.5px; }
+  .bubble .time { flex: 0 0 auto; }
+
+  /* ═══ 6–8. SLIME · DRAGON · MIMIC ═════════════════════════════════
+     The figure stands free on the desktop (no plate), feet on a shared
+     baseline, next to the speech bubble. Pixel-art canvases size
+     themselves in JS so every art pixel is whole device pixels; the CSS
+     sizes below are the 100 % values (identical at 125/150/175/200 %). */
+  .ch-row { display: flex; align-items: flex-end; }
+  .ch-fig { display: block; flex: 0 0 auto; }
+  .s-slime .ch-row { gap: 6px; }
+  #slCv { width: 104px; height: 92px; }
+  .s-slime .bubble { margin-bottom: 20px; }
+  /* dragon: the bubble tucks under the canvas so the fire licks into it */
+  #drCv { width: 136px; height: 80px; position: relative; z-index: 1; animation: popIn 0.46s cubic-bezier(0.2, 1.25, 0.35, 1) both; }
+  .s-dragon .bubble { width: 476px; margin-left: -28px; margin-bottom: 14px; padding-left: 40px; }
+  .s-dragon .bubble::before { display: none; }
+  .s-mimic .ch-row { gap: 8px; }
+  #mmCv { width: 128px; height: 96px; }
+  .s-mimic .bubble { margin-bottom: 22px; }
 </style>
 </head>
 <body data-style="amoled" data-accent="mint" data-pos="bottom" data-state="idle">
@@ -254,12 +279,46 @@
   <!-- 5. BUDDY -->
   <section class="style s-buddy">
     <div class="bd-face shape"><canvas class="bd-cv" id="bdFace"></canvas></div>
-    <div class="bd-bubble shape">
+    <div class="bubble shape">
       <div class="txt" data-line="1"><span class="shimmer">Ich höre zu…</span></div>
       <div class="time" data-timer="mss">0:00</div>
     </div>
   </section>
 
+  <!-- 6. SLIME -->
+  <section class="style s-slime">
+    <div class="ch-row">
+      <canvas class="ch-fig shape" id="slCv"></canvas>
+      <div class="bubble shape">
+        <div class="txt" data-line="1"><span class="shimmer">Ich höre zu…</span></div>
+        <div class="time" data-timer="mss">0:00</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. DRAGON -->
+  <section class="style s-dragon">
+    <div class="ch-row">
+      <canvas class="ch-fig shape" id="drCv"></canvas>
+      <div class="bubble shape">
+        <div class="txt" data-line="1"><span class="shimmer">Ich höre zu…</span></div>
+        <div class="time" data-timer="mss">0:00</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8. MIMIC -->
+  <section class="style s-mimic">
+    <div class="ch-row">
+      <canvas class="ch-fig shape" id="mmCv"></canvas>
+      <div class="bubble shape">
+        <div class="txt" data-line="1"><span class="shimmer">Ich höre zu…</span></div>
+        <div class="time" data-timer="mss">0:00</div>
+      </div>
+    </div>
+  </section>
+
+<script src="sprites.js"></script>
 <script>
 'use strict';
 
@@ -268,7 +327,7 @@
 // overlay runs a self-contained loop with synthetic speech.
 const DEMO = !window.notype || new URLSearchParams(location.search).has('demo');
 const NB = 20;   // spectrum bands (matches audio_recorder.N_BANDS)
-const STYLES = ['amoled', 'matrix', 'island', 'halo', 'buddy'];
+const STYLES = ['amoled', 'matrix', 'island', 'halo', 'buddy', 'slime', 'dragon', 'mimic'];
 // Ids of styles that no longer exist → their closest successor.
 const LEGACY_STYLES = {
   wave: 'amoled', wave_classic: 'amoled', ribbon: 'amoled', particles: 'amoled', spectrum: 'amoled',
@@ -399,6 +458,97 @@ function drawCheck(ctx, cx, cy, s, p, color, width) {
   ctx.restore();
 }
 const doneProgress = () => (S.state === 'done' ? ease(sinceState() / 0.36) : 0);
+
+// ── Character helpers (Buddy, Slime, Dragon, Mimic) ───────────────
+const hexRGB = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+function mixHex(a, b, f) {
+  const x = hexRGB(a), y = hexRGB(b);
+  return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * f).toString(16).padStart(2, '0')).join('');
+}
+// Lip sync: a fast envelope of the raw input with auto-gain, so mouths open
+// and close per syllable at any mic level. o: 0..1, onset: a syllable
+// started this frame.
+const LIP = { env: 0, peak: 0, o: 0, onset: false, talkUntil: 0 };
+function stepLip(dt) {
+  let raw = levelIn;
+  if (haveBands) { raw = 0; for (let i = 2; i < 14; i++) raw += bandsIn[i]; raw /= 12; }
+  if (S.state !== 'listening') raw = 0;
+  LIP.env += (raw - LIP.env) * (1 - Math.exp(-dt / (raw > LIP.env ? 0.03 : 0.09)));
+  LIP.peak = Math.max(LIP.env, LIP.peak * Math.exp(-dt / 1.5), 0.08);
+  const o = LIP.env / LIP.peak;
+  LIP.onset = o > 0.55 && LIP.o <= 0.55;
+  LIP.o = o;
+  if (o > 0.3) LIP.talkUntil = now() + 450;
+}
+const talking = () => now() < LIP.talkUntil;
+// Each character blinks on its own clock: ~130 ms every 2.2–5.6 s.
+function blinker() {
+  let at = 0;
+  return () => {
+    const ms = now();
+    if (!at || ms > at + 130) at = ms + 2200 + Math.random() * 3400;
+    return ms >= at;
+  };
+}
+
+// Pixel art: a character paints into a tiny canvas, one canvas pixel per
+// art pixel, which is then scaled up without smoothing. An art pixel is PX
+// css px rounded to whole device pixels, so edges stay crisp at any scale.
+const PX = 4;
+function pixLayer(cols, rows) {
+  const c = document.createElement('canvas');
+  c.width = cols; c.height = rows;
+  return { c, x: c.getContext('2d'), cache: new Map(), palKey: '', pal: null };
+}
+function pixPalette(L, key, build) {
+  if (L.palKey !== key) { L.palKey = key; L.pal = build(); L.cache.clear(); }
+  return L.pal;
+}
+// Sprite rows (see sprites.js) → canvas, cached until the palette changes.
+function pixSprite(L, rows) {
+  let s = L.cache.get(rows);
+  if (s) return s;
+  s = document.createElement('canvas');
+  s.width = rows[0].length; s.height = rows.length;
+  const x = s.getContext('2d');
+  rows.forEach((row, r) => {
+    for (let k = 0; k < row.length; k++) {
+      const col = L.pal[row[k]];
+      if (col) { x.fillStyle = col; x.fillRect(k, r, 1, 1); }
+    }
+  });
+  L.cache.set(rows, s);
+  return s;
+}
+function pixDraw(L, rows, x, y) { L.x.drawImage(pixSprite(L, rows), x, y); }
+function pixRect(L, x, y, w, h, color) { L.x.fillStyle = color; L.x.fillRect(x, y, w, h); }
+function pixBlit(cv, L) {
+  const d = window.devicePixelRatio || 1, pd = Math.max(1, Math.round(PX * d));
+  const bw = L.c.width * pd, bh = L.c.height * pd;
+  if (cv.width !== bw || cv.height !== bh) {
+    cv.width = bw; cv.height = bh;
+    cv.style.width = bw / d + 'px'; cv.style.height = bh / d + 'px';
+  }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, bw, bh);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(L.c, 0, 0, bw, bh);
+}
+// Particles in art pixels: {x, y, vx, vy, age, life, ...}; returns the live ones.
+function stepParticles(list, dt, gravity, drag) {
+  let n = 0;
+  for (const p of list) {
+    p.age += dt;
+    if (p.age >= p.life) continue;
+    if (p.age < 0) { list[n++] = p; continue; }     // delayed start
+    p.vy += gravity * dt;
+    if (drag) { const k = Math.exp(-drag * dt); p.vx *= k; p.vy *= k; }
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    list[n++] = p;
+  }
+  list.length = n;
+}
 
 // ═══ 1. AMOLED BAR ════════════════════════════════════════════════
 function renderAmoled(dt, t) {
@@ -623,7 +773,7 @@ function renderHalo(dt, t) {
 // 13 × 11 LED face at the Dot Matrix pitch. The mouth opens with your
 // voice, the eyes blink and now and then glance at the bubble; while
 // processing it looks up and "thinks" (bouncing dots), when done it grins.
-const BD = { C: 13, R: 11, P: 5.5, env: 0, peak: 0, mouth: 0, mouthAt: 0, talkUntil: 0, blinkAt: 0, glanceAt: 0, glanceEnd: 0 };
+const BD = { C: 13, R: 11, P: 5.5, mouth: 0, mouthAt: 0, blinkAt: 0, glanceAt: 0, glanceEnd: 0 };
 // Mouth frames for rows 6-9, columns 3-9: 1 = lip (white), 2 = inside (accent).
 const BD_MOUTH = [
   ['1000001', '0111110', '0000000', '0000000'],   // resting smile
@@ -678,16 +828,8 @@ function renderBuddy(dt, t) {
       if (!blink || r === 3) { bdDot(c0 + glance, r, 0.92); bdDot(c0 + 1 + glance, r, 0.92); }
     }
     if (S.command) for (const c0 of [3, 8]) { bdDot(c0 + glance, 0, 0.92); bdDot(c0 + 1 + glance, 0, 0.92); }
-    // Lip sync: a fast envelope of the raw input with auto-gain, so the
-    // mouth opens and closes per syllable at any mic level.
-    let raw = levelIn;
-    if (haveBands) { raw = 0; for (let i = 2; i < 14; i++) raw += bandsIn[i]; raw /= 12; }
-    if (S.state !== 'listening') raw = 0;
-    BD.env += (raw - BD.env) * (1 - Math.exp(-dt / (raw > BD.env ? 0.03 : 0.09)));
-    BD.peak = Math.max(BD.env, BD.peak * Math.exp(-dt / 1.5), 0.08);
-    const o = BD.env / BD.peak;
-    if (o > 0.3) BD.talkUntil = ms + 450;
-    const m = o > 0.82 ? 4 : o > 0.58 ? 3 : o > 0.32 ? 2 : ms < BD.talkUntil ? 1 : 0;
+    const o = LIP.o;
+    const m = o > 0.82 ? 4 : o > 0.58 ? 3 : o > 0.32 ? 2 : talking() ? 1 : 0;
     if (m !== BD.mouth && ms - BD.mouthAt > 70) { BD.mouth = m; BD.mouthAt = ms; }
     bdGlyph(BD_MOUTH[BD.mouth], 3, 6, 0.92);
   }
@@ -713,7 +855,377 @@ function renderBuddy(dt, t) {
   ctx.globalAlpha = 1;
 }
 
-const RENDER = { amoled: renderAmoled, matrix: renderMatrix, island: renderIsland, halo: renderHalo, buddy: renderBuddy };
+// ═══ 6. SLIME ════════════════════════════════════════════════════
+// A jelly blob drawn as a smooth curve. Squash and stretch run on an
+// underdamped spring and every syllable kicks a few surface wobble modes,
+// so it jiggles along with your voice. Processing: it hops while thinking.
+// Done: happy eyes, a big smile and a few sparkles.
+const SL = {
+  sy: 1, vs: 0, hop: 0, vh: 0, landAt: 0, lean: 0, mouth: 0,
+  modes: [{ k: 2, w: 13, a: 0, v: 0, ph: 0 }, { k: 3, w: 18, a: 0, v: 0, ph: 1.3 }, { k: 4, w: 24, a: 0, v: 0, ph: 2.1 }],
+  bubbles: [], sparks: [], recAt: -1, doneAt: -1, blink: blinker(),
+};
+const SL_INK = '#16101d';
+function slSparkle(ctx, x, y, s) {
+  ctx.beginPath();
+  ctx.moveTo(x, y - s);
+  ctx.quadraticCurveTo(x, y, x + s, y); ctx.quadraticCurveTo(x, y, x, y + s);
+  ctx.quadraticCurveTo(x, y, x - s, y); ctx.quadraticCurveTo(x, y, x, y - s);
+  ctx.fill();
+}
+function renderSlime(dt, t) {
+  const [ctx, W, H] = prep($('slCv'));
+  const acc = ACC(), a1 = acc.bar[0], ms = now();
+  if (S.recAt !== SL.recAt) {                       // entry: rises out of a puddle
+    SL.recAt = S.recAt; SL.sy = 0.14; SL.vs = 0; SL.hop = SL.vh = 0; SL.sparks.length = 0;
+  }
+  if (S.state === 'done' && SL.doneAt !== S.stateAt) {
+    SL.doneAt = S.stateAt; SL.vh = -170; SL.vs += 3;
+    for (let i = 0; i < 6; i++) {
+      const a = -Math.PI * (0.1 + 0.8 * (i / 5)) + (Math.random() - 0.5) * 0.3;
+      SL.sparks.push({ a, d: 44 + Math.random() * 10, age: -i * 0.05, life: 0.7 });
+    }
+  }
+  const voice = S.state === 'listening' ? LIP.o : 0;
+  if (LIP.onset) {
+    SL.vs += 1.4 + Math.random() * 0.8;
+    for (const m of SL.modes) m.v += (Math.random() < 0.5 ? -1 : 1) * m.w * (0.025 + Math.random() * 0.03);
+  }
+  // hops: thinking hops while processing, one jump of joy when done
+  if (S.state === 'processing' && SL.hop === 0 && SL.vh === 0 && ms - SL.landAt > 170) { SL.vh = -140; SL.vs += 2.5; }
+  if (SL.hop < 0 || SL.vh < 0) {
+    SL.vh += 900 * dt; SL.hop += SL.vh * dt;
+    if (SL.hop >= 0) { SL.vs -= Math.min(5, SL.vh * 0.028); SL.hop = SL.vh = 0; SL.landAt = ms; }
+  }
+  const target = S.leaving ? 0.14 : 1 + 0.1 * voice + (SL.vh < 0 ? 0.08 : 0);
+  SL.vs += (-180 * (SL.sy - target) - 7.5 * SL.vs) * dt;
+  SL.sy = Math.min(1.6, Math.max(0.08, SL.sy + SL.vs * dt));
+  for (const m of SL.modes) {
+    m.v += (-m.w * m.w * m.a - 2 * 0.12 * m.w * m.v) * dt;
+    m.a = Math.max(-0.1, Math.min(0.1, m.a + m.v * dt));
+  }
+  SL.lean += ((S.state === 'listening' ? 0.05 + 0.1 * voice : 0.02) - SL.lean) * (1 - Math.exp(-dt / 0.12));
+  SL.mouth += (voice - SL.mouth) * (1 - Math.exp(-dt / 0.04));
+
+  // body outline: superellipse, domed on top, flat where it sits
+  const sx = Math.min(1.45, Math.max(0.78, 1 / Math.sqrt(SL.sy)));
+  const gy = H - 9, cx = W / 2 - 3, w = 34 * sx, h = 48 * SL.sy, top = h * 0.68, bot = h * 0.32;
+  const base = gy + SL.hop, cy = base - bot, N = 60, pts = [];
+  for (let i = 0; i < N; i++) {
+    const th = (i / N) * Math.PI * 2, c = Math.cos(th), s = Math.sin(th), up = s < 0;
+    const n = up ? 2.1 : 4;
+    const ex = Math.sign(c) * Math.pow(Math.abs(c), 2 / n), ey = Math.sign(s) * Math.pow(Math.abs(s), 2 / n);
+    let wob = 0;
+    for (const m of SL.modes) wob += m.a * Math.sin(m.k * th + m.ph + t * 0.7);
+    const r = 1 + wob * (up ? 1 : 0.25);
+    const taper = up ? 1 - 0.16 * ey * ey : 1 + 0.06 * ey;   // narrower crown, a foot that spreads
+    pts.push([cx + w * ex * r * taper + (up ? SL.lean * top * ey * ey : 0), Math.min(base, cy + (up ? top : bot) * ey * r)]);
+  }
+  const body = () => {
+    ctx.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const p = pts[i % N], q = pts[(i + 1) % N], mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
+      if (i === 0) ctx.moveTo(mx, my); else ctx.quadraticCurveTo(p[0], p[1], mx, my);
+    }
+    ctx.closePath();
+  };
+
+  // ground shadow, smaller while airborne
+  const air = clamp01(-SL.hop / 30);
+  ctx.fillStyle = `rgba(0,0,0,${(0.3 * (1 - air * 0.6)).toFixed(3)})`;
+  ctx.beginPath(); ctx.ellipse(cx, gy + 1.5, w * (0.92 - air * 0.3), 3.2, 0, 0, Math.PI * 2); ctx.fill();
+
+  // jelly: lit from the upper left, slightly see-through
+  body();
+  const g = ctx.createRadialGradient(cx - w * 0.32, cy - top * 0.5, 2, cx, cy, w * 1.55);
+  g.addColorStop(0, mixHex(a1, '#ffffff', 0.62));
+  g.addColorStop(0.38, a1);
+  g.addColorStop(1, mixHex(a1, '#000000', 0.5));
+  ctx.globalAlpha = 0.93; ctx.fillStyle = g; ctx.fill(); ctx.globalAlpha = 1;
+  ctx.save();
+  ctx.clip();
+  // bubbles drifting up inside, faster while it thinks
+  const want = S.state === 'processing' ? 7 : 4;
+  if (SL.bubbles.length < want && Math.random() < dt * 6) {
+    SL.bubbles.push({ x: (Math.random() - 0.5) * 1.1, y: 0, r: 1.2 + Math.random() * 1.8, sp: 0.12 + Math.random() * 0.12 });
+  }
+  const rise = S.state === 'processing' ? 3.5 : 1;
+  SL.bubbles = SL.bubbles.filter((b) => (b.y += b.sp * rise * dt) < 1);
+  ctx.strokeStyle = 'rgba(255,255,255,0.32)'; ctx.lineWidth = 1;
+  for (const b of SL.bubbles) {
+    ctx.beginPath(); ctx.arc(cx + b.x * w * 0.62, base - 4 - b.y * h * 0.9, b.r, 0, Math.PI * 2); ctx.stroke();
+  }
+  // glossy highlight
+  const lx = cx - w * 0.44 + SL.lean * top * 0.4, ly = cy - top * 0.5;
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.beginPath(); ctx.ellipse(lx, ly, w * 0.17, top * 0.11 + 1, -0.75, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.beginPath(); ctx.arc(lx + w * 0.2, ly - top * 0.2, 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  body();
+  ctx.lineWidth = 2; ctx.strokeStyle = mixHex(a1, '#000000', 0.62); ctx.stroke();
+
+  // face, fading in once it has risen out of the puddle
+  const fa = clamp01((SL.sy - 0.45) / 0.3);
+  if (fa > 0) {
+    ctx.globalAlpha = fa;
+    const fx = cx + 3 + SL.lean * top * 0.35, fy = cy - top * 0.12, ex = w * 0.32;
+    const think = S.state === 'processing', done = S.state === 'done';
+    ctx.fillStyle = `rgba(255,84,140,${done ? 0.55 : 0.4})`;           // blush
+    for (const d of [-1, 1]) { ctx.beginPath(); ctx.ellipse(fx + d * ex * 1.32, fy + 7, 4.2, 2.3, 0, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = SL_INK; ctx.strokeStyle = SL_INK; ctx.lineCap = 'round';
+    if (done) {
+      ctx.lineWidth = 2.4;
+      for (const d of [-1, 1]) { ctx.beginPath(); ctx.arc(fx + d * ex, fy + 1.5, 4, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); }
+    } else {
+      const blink = SL.blink(), oy = think ? -2.5 : 0;
+      for (const d of [-1, 1]) {
+        const x0 = fx + d * ex, y0 = fy + oy;
+        ctx.fillStyle = SL_INK;
+        ctx.beginPath(); ctx.ellipse(x0, y0, 4.4, blink ? 0.9 : 5.8, 0, 0, Math.PI * 2); ctx.fill();
+        if (!blink) {
+          ctx.fillStyle = '#ffffff';
+          ctx.beginPath(); ctx.arc(x0 - 1.3, y0 - (think ? 3 : 2.1), 1.7, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(x0 + 1.5, y0 + 1.8, 0.8, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+    // mouth
+    const mx = fx, my = fy + 10;
+    ctx.fillStyle = SL_INK;
+    if (done) {
+      ctx.beginPath(); ctx.moveTo(mx - 6.5, my - 1.5); ctx.ellipse(mx, my - 1.5, 6.5, 6, 0, 0, Math.PI); ctx.closePath(); ctx.fill();
+      ctx.save(); ctx.clip();
+      ctx.fillStyle = '#ff6f8f'; ctx.beginPath(); ctx.ellipse(mx, my + 4.5, 4.2, 3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    } else if (think) {
+      ctx.beginPath(); ctx.ellipse(mx + 1, my - 0.5, 1.9, 2.3, 0, 0, Math.PI * 2); ctx.fill();
+    } else if (SL.mouth > 0.12) {
+      const rx = 2.6 + 3.6 * SL.mouth, ry = 1.6 + 5 * SL.mouth;
+      ctx.beginPath(); ctx.ellipse(mx, my, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.save(); ctx.clip();
+      ctx.fillStyle = '#ff6f8f'; ctx.beginPath(); ctx.ellipse(mx, my + ry * 0.75, rx * 0.75, ry * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(mx, my - 3.2, 3.8, Math.PI * 0.22, Math.PI * 0.78); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // sparkles when done: accent star with a white core, readable on any desktop
+  SL.sparks = SL.sparks.filter((s) => (s.age += dt) < s.life);
+  for (const s of SL.sparks) {
+    if (s.age < 0) continue;
+    const f = s.age / s.life, sc = Math.sin(f * Math.PI);
+    const px = cx + Math.cos(s.a) * s.d * (0.8 + 0.3 * f), py = cy - 4 + Math.sin(s.a) * s.d * 0.75 * (0.8 + 0.3 * f);
+    ctx.globalAlpha = sc;
+    ctx.fillStyle = a1; slSparkle(ctx, px, py, 5 * sc);
+    ctx.fillStyle = '#ffffff'; slSparkle(ctx, px, py, 2.4 * sc);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ═══ 7. DRAGON ═══════════════════════════════════════════════════
+// Pixel dragon (sprites.js). It breathes fire while you speak: how far and
+// how dense the flames go follows your voice, so the fire is the
+// visualizer. Processing: mouth shut, smoke curls from its nostril while it
+// looks up. Done: happy eyes, wings beat, a burst of sparks.
+const DR = { L: pixLayer(34, 20), fire: [], spawn: 0, open: 0, openAt: 0, flap: 0, smokeAt: 0, recAt: -1, blink: blinker() };
+function drFlame(x, y, e) {
+  const a = (Math.random() - 0.5) * 0.7, sp = 22 + 26 * e + Math.random() * 8;
+  DR.fire.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 1.5, age: 0,
+    life: 0.34 + 0.24 * e + Math.random() * 0.22, big: Math.random() < 0.55, smoke: false });
+}
+// Pixel circle outline (midpoint algorithm), for the smoke ring.
+function pixRing(L, cx, cy, r, color) {
+  let x = r, y = 0, err = 1 - r;
+  L.x.fillStyle = color;
+  while (x >= y) {
+    for (const [dx, dy] of [[x, y], [y, x], [-y, x], [-x, y], [-x, -y], [-y, -x], [y, -x], [x, -y]]) L.x.fillRect(cx + dx, cy + dy, 1, 1);
+    y++;
+    if (err < 0) err += 2 * y + 1; else { x--; err += 2 * (y - x) + 1; }
+  }
+}
+function renderDragon(dt, t) {
+  const SP = NoTypeSprites.dragon, L = DR.L, ms = now(), acc = ACC(), bar = acc.bar;
+  const pal = pixPalette(L, S.accent, () => ({
+    K: mixHex(bar[0], '#07070c', 0.76), B: bar[0], D: mixHex(bar[0], '#000000', 0.3),
+    L: mixHex(bar[0], '#fff3d6', 0.62), H: '#fff1cf', W: mixHex(bar[1], '#000000', 0.16),
+    E: '#0b0b12', Q: '#ffffff', N: mixHex(bar[0], '#000000', 0.62),
+  }));
+  if (S.recAt !== DR.recAt) { DR.recAt = S.recAt; DR.fire.length = 0; DR.open = 0; }
+  const st = S.state, since = sinceState();
+  const bob = st === 'listening' && talking() ? 0 : Math.sin(t * 2.4) > 0.55 ? 1 : 0;
+  const mouth = { x: SP.mouth.x, y: SP.mouth.y + bob };
+
+  let m = 0;
+  if (st === 'listening') m = LIP.o > 0.72 ? 2 : LIP.o > 0.3 ? 1 : 0;
+  else if (st === 'done' && since < 0.3) m = 1;
+  if (m !== DR.open && ms - DR.openAt > 70) { DR.open = m; DR.openAt = ms; }
+  const o = DR.open;
+
+  // fire while speaking, a spark burst when done, smoke while processing
+  if (st === 'listening' && talking()) {
+    const e = energy();
+    DR.spawn += dt * (30 + 150 * Math.pow(LIP.o, 1.3));
+    for (; DR.spawn >= 1; DR.spawn--) drFlame(mouth.x + Math.random(), mouth.y + o * 0.5 + (Math.random() - 0.5) * (1 + o), e);
+  }
+  const smoky = st === 'processing' || (st === 'listening' && !talking());
+  if (smoky && ms > DR.smokeAt) {
+    DR.smokeAt = ms + (st === 'processing' ? 260 : 1400 + Math.random() * 1600);
+    DR.fire.push({ x: SP.nostril.x + 0.5, y: SP.nostril.y + bob - 0.5, vx: 3 + Math.random() * 3, vy: -5 - Math.random() * 3,
+      age: 0, life: 0.9, big: true, smoke: true });
+  }
+  stepParticles(DR.fire, dt, -6, 0.8);
+
+  const rate = st === 'done' ? (since < 0.7 ? 5.5 : 1.2) : st === 'processing' ? 1.6 : 1 + energy() * 3;
+  DR.flap = (DR.flap + dt * rate) % 1;
+  const wing = SP.wing[DR.flap < 0.55 ? 0 : 1];
+
+  const x = L.x;
+  x.clearRect(0, 0, L.c.width, L.c.height);
+  pixDraw(L, wing.rows, wing.at[0], wing.at[1] + bob);
+  pixDraw(L, SP.tail.rows, SP.tail.at[0], SP.tail.at[1]);
+  pixDraw(L, SP.body.rows, SP.body.at[0], SP.body.at[1]);
+  const jy = SP.jaw.at[1] + bob;
+  if (o > 0) {
+    pixRect(L, 11, jy, 1, o, pal.K);
+    pixRect(L, 12, jy, 2, o, pal.D);
+    pixRect(L, SP.mouthSpan[0], jy, SP.mouthSpan[1] - SP.mouthSpan[0] + 1, o, '#2a0a12');
+    pixRect(L, 16, jy, 1, 1, '#ffffff'); pixRect(L, 19, jy, 1, 1, '#ffffff');
+    if (o > 1) pixRect(L, 14, jy + o - 1, 3, 1, '#ff5d7a');
+  }
+  pixDraw(L, SP.jaw.rows, SP.jaw.at[0], jy + o);
+  pixDraw(L, SP.head.rows, SP.head.at[0], SP.head.at[1] + bob);
+  const E = SP.eye;
+  if (st === 'done') {
+    pixRect(L, E.at[0], E.at[1] + bob, 2, 4, pal.B);
+    pixDraw(L, SP.happyEye.rows, SP.happyEye.at[0], SP.happyEye.at[1] + bob);
+  } else {
+    pixDraw(L, DR.blink() ? E.blink : st === 'processing' ? E.up : E.open, E.at[0], E.at[1] + bob);
+  }
+
+  // flames: white-hot core cooling through the accent colours
+  const ramp = ['#ffffff', acc.hi, bar[1], bar[0], (acc.ring[2] || bar[0])];
+  for (const p of DR.fire) {
+    const f = p.age / p.life;
+    if (p.smoke) {
+      x.globalAlpha = 0.5 * (1 - f);
+      x.fillStyle = '#a3a3ad';
+    } else {
+      // fade with age and toward the canvas edge (no hard cut over the bubble)
+      x.globalAlpha = (f < 0.65 ? 1 : 1 - (f - 0.65) / 0.35) * clamp01((L.c.width - 0.5 - p.x) / 6);
+      x.fillStyle = ramp[f < 0.1 ? 0 : f < 0.25 ? 1 : f < 0.5 ? 2 : f < 0.75 ? 3 : 4];
+    }
+    const sz = p.smoke ? (p.big && f < 0.6 ? 2 : 1) : f < 0.12 ? 1 : p.big && f < 0.7 ? (f > 0.25 && f < 0.5 ? 3 : 2) : 1;
+    x.fillRect(Math.round(p.x - sz / 2), Math.round(p.y - sz / 2), sz, sz);
+  }
+  // done: a smoke ring drifts off toward the text
+  if (st === 'done' && since < 1.1) {
+    const f = since / 1.1;
+    x.globalAlpha = f < 0.6 ? 1 : 1 - (f - 0.6) / 0.4;
+    pixRing(L, Math.round(mouth.x + 3 + f * 7), mouth.y - Math.round(f * 2), Math.round(1 + f * 3.2), f < 0.25 ? '#ffffff' : acc.hi);
+  }
+  x.globalAlpha = 1;
+  pixBlit($('drCv'), L);
+}
+
+// ═══ 8. MIMIC ════════════════════════════════════════════════════
+// A treasure chest that is secretly alive: the lid is its mouth and opens
+// with your voice, glowing eyes peek out of the gap. Processing: it chews.
+// Done: jaw wide, tongue out, a few gold coins hop out.
+const MM = { L: pixLayer(32, 24), gap: 0, gapAt: 0, oy: 0, vy: 0, coins: [], recAt: -1, doneAt: -1, blink: blinker() };
+const MM_PAL = { K: '#2a160c', w: '#b37b47', W: '#8a5a35', d: '#6b4226', G: '#e0a93a', g: '#9a6a1c', O: '#2a160c' };
+const MM_TOOTH = '#f5efe2', MM_MOUTH = '#16080d';
+function renderMimic(dt, t) {
+  const SP = NoTypeSprites.mimic, L = MM.L, ms = now(), acc = ACC();
+  pixPalette(L, 'wood', () => MM_PAL);
+  const st = S.state, since = sinceState(), x0 = 6;
+  if (S.recAt !== MM.recAt) { MM.recAt = S.recAt; MM.oy = -7; MM.vy = 0; MM.gap = 0; MM.coins.length = 0; }
+  // entry: drops in and bounces once
+  if (MM.oy < 0 || MM.vy < 0) {
+    MM.vy += 320 * dt; MM.oy += MM.vy * dt;
+    if (MM.oy >= 0) { MM.oy = 0; MM.vy = MM.vy > 45 ? -MM.vy * 0.3 : 0; }
+  }
+  const landed = MM.oy > -0.5 && MM.vy >= 0;
+
+  let g = 0;
+  if (!landed) g = 0;
+  else if (st === 'listening') g = talking() ? 1 + Math.round(LIP.o * 5) : 1;
+  else if (st === 'processing') g = Math.round(3 * (0.5 - 0.5 * Math.cos(since * Math.PI * 2 * 2.6)));
+  else if (st === 'done') g = Math.min(6, Math.round(since / 0.12 * 6));
+  if (g !== MM.gap && (ms - MM.gapAt > 60 || st !== 'listening')) { MM.gap = g; MM.gapAt = ms; }
+  g = MM.gap;
+
+  if (st === 'done' && MM.doneAt !== S.stateAt) {
+    MM.doneAt = S.stateAt;
+    for (let i = 0; i < 6; i++) {
+      const side = i % 2 ? 1 : -1;
+      MM.coins.push({ x: x0 + 9.5 + side * 3, y: 11, vx: side * (11 + Math.random() * 9), vy: -26 - Math.random() * 12,
+        age: -0.1 - i * 0.05, life: 0.9 });
+    }
+  }
+  stepParticles(MM.coins, dt, 150, 0);
+
+  // processing: the whole chest bobs up each time the jaw shuts
+  const chew = st === 'processing' && g === 0 ? -1 : 0;
+  const baseY = 15 + Math.round(MM.oy) + chew, y0 = baseY - g;
+  const x = L.x;
+  x.clearRect(0, 0, L.c.width, L.c.height);
+  if (g > 0) {
+    pixRect(L, x0 + 1, y0, 18, g, MM_MOUTH);
+    pixRect(L, x0, y0, 1, g, MM_PAL.K); pixRect(L, x0 + 19, y0, 1, g, MM_PAL.K);
+    const eyeH = g >= 3 ? 2 : 1, eye = acc.bar[0];
+    if (st === 'done') {
+      for (const ex of [4, 13]) {
+        pixRect(L, x0 + ex + 1, y0, 1, 1, eye);
+        pixRect(L, x0 + ex, y0 + 1, 1, 1, eye); pixRect(L, x0 + ex + 2, y0 + 1, 1, 1, eye);
+      }
+    } else if (!MM.blink()) {
+      for (const ex of SP.eyes) {
+        if (g >= 2) pixRect(L, x0 + ex - 1, y0, 4, eyeH + 1, mixHex(eye, MM_MOUTH, 0.72));
+        pixRect(L, x0 + ex, y0, 2, eyeH, eye);
+        if (eyeH > 1) pixRect(L, x0 + ex, y0, 1, 1, acc.hi);
+      }
+    }
+    // fangs at the corners and a pair in the middle hang from the lid
+    if (g >= 2) {
+      for (const tx of [1, 16]) {
+        pixRect(L, x0 + tx, y0, 3, 1, MM_TOOTH);
+        if (g >= 3) pixRect(L, x0 + tx + 1, y0 + 1, 1, 1, MM_TOOTH);
+      }
+      pixRect(L, x0 + 9, y0, 2, 1, MM_TOOTH);
+    }
+    if (g >= 4) {
+      for (const tx of SP.teethBottom) {
+        pixRect(L, x0 + tx, baseY - 1, 3, 1, MM_TOOTH);
+        if (g >= 5) pixRect(L, x0 + tx + 1, baseY - 2, 1, 1, MM_TOOTH);
+      }
+      pixRect(L, x0 + 8, baseY - 1, 4, 1, '#ff5d7a');
+    }
+  }
+  pixDraw(L, SP.lid, x0, y0 - SP.lid.length);
+  pixDraw(L, SP.base, x0, baseY);
+  if (st === 'done' && g >= 6) {                    // tongue out, beside the lock
+    pixRect(L, x0 + 12, baseY - 1, 2, 3, '#ff5d7a');
+    pixRect(L, x0 + 12, baseY + 2, 2, 1, '#c43a57');
+  }
+  for (const c of MM.coins) {
+    if (c.age < 0) continue;
+    x.globalAlpha = c.age / c.life < 0.7 ? 1 : 1 - (c.age / c.life - 0.7) / 0.3;
+    const cx = Math.round(c.x), cy = Math.min(22, Math.round(c.y));
+    pixRect(L, cx, cy, 2, 2, MM_PAL.G);
+    pixRect(L, cx, cy, 1, 1, '#ffe08a');
+    if ((ms / 90 | 0) % 2) pixRect(L, cx + 1, cy + 1, 1, 1, MM_PAL.g);
+  }
+  x.globalAlpha = 1;
+  pixBlit($('mmCv'), L);
+}
+
+const RENDER = {
+  amoled: renderAmoled, matrix: renderMatrix, island: renderIsland, halo: renderHalo, buddy: renderBuddy,
+  slime: renderSlime, dragon: renderDragon, mimic: renderMimic,
+};
 
 // ── Text + timer ──────────────────────────────────────────────────
 // kind: 'live' (transcript), 'final' (inserted text), 'status' (placeholder)
@@ -864,6 +1376,7 @@ function frame(ts) {
   lastTs = ts; T += dt;
   if (DEMO) { if (D.paused) return; demoTick(dt); }
   stepAudio(dt, T);
+  stepLip(dt);
   stepMix(dt);
   tickTimer();
   const r = RENDER[S.style];

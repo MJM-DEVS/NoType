@@ -395,7 +395,7 @@
     color: rgba(255, 255, 255, 0.55);
   }
 
-  .style-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+  .style-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
   .style-card {
     display: flex; flex-direction: column; gap: 8px; padding: 8px 8px 10px;
     border: 1px solid var(--input-border); border-radius: 12px;
@@ -405,7 +405,7 @@
   .style-card:hover { border-color: var(--input-border-hover); }
   .style-card.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .style-card .thumb {
-    height: 52px; border-radius: 8px; overflow: hidden;
+    width: 100%; height: 60px; border-radius: 8px; overflow: hidden;
     background: linear-gradient(160deg, #222b3c, #352d3d);
   }
   .style-card .thumb svg { display: block; width: 100%; height: 100%; }
@@ -457,6 +457,16 @@
             <option value="de">Deutsch</option>
             <option value="en">English</option>
           </select>
+        </div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="general.autostart">Mit Windows starten</div>
+            <div class="field-desc" data-i18n="general.autostart.desc">NoType läuft nach der Anmeldung im Tray, der Hotkey ist sofort da</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="autostartToggle">
+            <span class="slider"></span>
+          </label>
         </div>
         <div class="field">
           <div>
@@ -838,6 +848,7 @@
 </div>
 
 <script src="model-catalog.js"></script>
+<script src="sprites.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
 
@@ -849,6 +860,7 @@
       'general.app': 'App', 'general.applang': 'App-Sprache',
       'general.applang.desc': 'Sprache der Benutzeroberfläche',
       'general.toast': 'Erfolgs-Popup nach Diktat', 'general.toast.desc': 'Fehler werden immer angezeigt',
+      'general.autostart': 'Mit Windows starten', 'general.autostart.desc': 'NoType läuft nach der Anmeldung im Tray, der Hotkey ist sofort da',
       'general.hotkey': 'Hotkey', 'general.combo': 'Tastenkombination',
       'general.combo.desc': 'Drücke „Ändern" und dann deine gewünschte Kombination',
       'general.change': 'Ändern', 'general.waiting': 'Warte auf Eingabe...',
@@ -918,10 +930,13 @@
       'overlay.live.desc': 'Zeigt den erkannten Text schon während der Aufnahme',
       'overlay.sounds': 'Töne', 'overlay.sounds.desc': 'Kurzer Klang bei Start und Ende der Aufnahme',
       'ovl.amoled': 'AMOLED Bar', 'ovl.amoled.desc': 'Spektrum, Live-Text und Timer in einer Pille',
-      'ovl.matrix': 'Dot Matrix', 'ovl.matrix.desc': 'LED-Punkte mit Pixel-Timer – im Nothing-Stil',
+      'ovl.matrix': 'Dot Matrix', 'ovl.matrix.desc': 'LED-Punkte mit Pixel-Timer im Nothing-Stil',
       'ovl.island': 'Island', 'ovl.island.desc': 'Kompakte Kapsel, die mit dem Text mitwächst',
       'ovl.halo': 'Halo', 'ovl.halo.desc': 'Leuchtender Farbrand, der auf deine Stimme reagiert',
       'ovl.buddy': 'Buddy', 'ovl.buddy.desc': 'Pixel-Gesicht, das mitredet, mitdenkt und grinst',
+      'ovl.slime': 'Schleim', 'ovl.slime.desc': 'Wackelt bei jeder Silbe und hüpft, während er nachdenkt',
+      'ovl.dragon': 'Drache', 'ovl.dragon.desc': 'Pixel-Drache, dessen Feueratem deiner Stimme folgt',
+      'ovl.mimic': 'Mimic', 'ovl.mimic.desc': 'Lebendige Schatztruhe: Der Deckel redet mit, am Ende fliegt Gold',
       'acc.mint': 'Mint', 'acc.mono': 'Mono', 'acc.aurora': 'Aurora', 'acc.blue': 'Blau',
       'acc.violet': 'Violett', 'acc.red': 'Rot', 'acc.amber': 'Bernstein',
       'system.audio': 'Audio', 'system.mic': 'Mikrofon', 'system.mic.desc': 'Audioeingangsgerät auswählen',
@@ -940,6 +955,7 @@
       'general.app': 'App', 'general.applang': 'App language',
       'general.applang.desc': 'Language of the user interface',
       'general.toast': 'Success popup after dictation', 'general.toast.desc': 'Errors are always shown',
+      'general.autostart': 'Start with Windows', 'general.autostart.desc': 'NoType waits in the tray after you sign in, the hotkey works right away',
       'general.hotkey': 'Hotkey', 'general.combo': 'Key combination',
       'general.combo.desc': 'Press "Change", then your desired combination',
       'general.change': 'Change', 'general.waiting': 'Waiting for input...',
@@ -1009,10 +1025,13 @@
       'overlay.live.desc': 'Shows recognized text while you are still speaking',
       'overlay.sounds': 'Sounds', 'overlay.sounds.desc': 'Short chime when recording starts and stops',
       'ovl.amoled': 'AMOLED Bar', 'ovl.amoled.desc': 'Spectrum, live text and timer in one pill',
-      'ovl.matrix': 'Dot Matrix', 'ovl.matrix.desc': 'LED dots with a pixel timer – Nothing style',
+      'ovl.matrix': 'Dot Matrix', 'ovl.matrix.desc': 'LED dots with a pixel timer, Nothing style',
       'ovl.island': 'Island', 'ovl.island.desc': 'Compact capsule that grows with your text',
       'ovl.halo': 'Halo', 'ovl.halo.desc': 'Glowing color rim that reacts to your voice',
       'ovl.buddy': 'Buddy', 'ovl.buddy.desc': 'Pixel face that talks along, thinks and grins',
+      'ovl.slime': 'Slime', 'ovl.slime.desc': 'Jiggles with every syllable and hops while it thinks',
+      'ovl.dragon': 'Dragon', 'ovl.dragon.desc': 'Pixel dragon whose fire breath follows your voice',
+      'ovl.mimic': 'Mimic', 'ovl.mimic.desc': 'A living treasure chest: the lid talks along, gold flies at the end',
       'acc.mint': 'Mint', 'acc.mono': 'Mono', 'acc.aurora': 'Aurora', 'acc.blue': 'Blue',
       'acc.violet': 'Violet', 'acc.red': 'Red', 'acc.amber': 'Amber',
       'system.audio': 'Audio', 'system.mic': 'Microphone', 'system.mic.desc': 'Select the audio input device',
@@ -1566,7 +1585,7 @@
   };
 
   // ── Overlay: style cards, accent swatches, live preview ──
-  const OVL_STYLES = ['amoled', 'matrix', 'island', 'halo', 'buddy'];
+  const OVL_STYLES = ['amoled', 'matrix', 'island', 'halo', 'buddy', 'slime', 'dragon', 'mimic'];
   // Retired style ids → successor (mirrors main.js LEGACY_OVERLAY_STYLES).
   const OVL_LEGACY = {
     amoled_top: 'amoled', amoled_bottom: 'amoled', amoled_center: 'amoled', amoled_card: 'amoled',
@@ -1590,6 +1609,34 @@
     `<stop offset="0" style="stop-color:var(--g1)"/><stop offset=".5" style="stop-color:var(--g2)"/>` +
     `<stop offset="1" style="stop-color:var(--g3)"/></linearGradient>`;
   const RIM = 'stroke="rgba(255,255,255,.16)" stroke-width=".8"';
+  // Speech bubble for the character thumbs, its tail at x = tail.
+  const thumbBubble = (tail) => {
+    const x = tail + 13.2;
+    return `<path d="M${x} 16h${103 - x}a10 10 0 0 1 0 20h-${103 - x}a10 10 0 0 1-10-7.2l-3.2-2.8 3.2-2.8a10 10 0 0 1 10-7.2z" fill="#000" ${RIM}/>
+      <path d="M${x + 1} 26h${Math.round((95 - x) * 0.72)}" stroke="rgba(255,255,255,.75)" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M95 26h8" stroke="rgba(255,255,255,.35)" stroke-width="2.2" stroke-linecap="round"/>`;
+  };
+  // Pixel sprites (sprites.js) → SVG rects, one per horizontal run of a colour.
+  function pixelThumb(w, h, parts, fills, px, ox, oy) {
+    const g = Array.from({ length: h }, () => Array(w).fill('.'));
+    for (const [rows, x0, y0] of parts) rows.forEach((row, r) => [...row].forEach((ch, c) => {
+      if (ch !== '.' && g[y0 + r] && x0 + c < w) g[y0 + r][x0 + c] = ch;
+    }));
+    let out = '';
+    g.forEach((row, r) => {
+      for (let c = 0; c < w;) {
+        const ch = row[c];
+        let n = 1;
+        while (c + n < w && row[c + n] === ch) n++;
+        if (fills[ch]) {
+          out += `<rect x="${(ox + c * px).toFixed(2)}" y="${(oy + r * px).toFixed(2)}" width="${(n * px + 0.05).toFixed(2)}" height="${(px + 0.05).toFixed(2)}" style="fill:${fills[ch]}"/>`;
+        }
+        c += n;
+      }
+    });
+    return out;
+  }
+  const tint = (pct, other) => `color-mix(in srgb, var(--g1) ${pct}%, ${other})`;
   const OVL_THUMBS = {
     amoled: (() => {
       const hs = [3, 5, 8, 11, 14, 11, 8, 5, 3];
@@ -1637,6 +1684,44 @@
         <path d="M54 16h49a10 10 0 0 1 0 20h-49a10 10 0 0 1-10-7.2l-3.2-2.8 3.2-2.8a10 10 0 0 1 10-7.2z" fill="#000" ${RIM}/>
         <path d="M55 26h33" stroke="rgba(255,255,255,.75)" stroke-width="2.2" stroke-linecap="round"/>
         <path d="M95 26h8" stroke="rgba(255,255,255,.35)" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+    })(),
+    slime: `<svg viewBox="0 0 120 52"><defs>
+        <radialGradient id="tgSl" cx="12" cy="20" r="34" gradientUnits="userSpaceOnUse">
+          <stop offset="0" style="stop-color:${tint(40, '#fff')}"/><stop offset=".38" style="stop-color:var(--g1)"/>
+          <stop offset="1" style="stop-color:${tint(50, '#000')}"/></radialGradient></defs>
+        <ellipse cx="24" cy="42.6" rx="16" ry="1.6" fill="rgba(0,0,0,.3)"/>
+        <path d="M7.5 42c-1-8 2-17 8-21.5 5-3.8 12-3.8 17 0 6 4.5 9 13.5 8 21.5z" fill="url(#tgSl)" style="stroke:${tint(38, '#000')}" stroke-width="1"/>
+        <ellipse cx="14.5" cy="25" rx="3.2" ry="1.8" transform="rotate(-40 14.5 25)" fill="rgba(255,255,255,.55)"/>
+        <ellipse cx="20" cy="32" rx="1.7" ry="2.3" fill="#16101d"/><ellipse cx="30" cy="32" rx="1.7" ry="2.3" fill="#16101d"/>
+        <circle cx="19.5" cy="31.2" r=".6" fill="#fff"/><circle cx="29.5" cy="31.2" r=".6" fill="#fff"/>
+        <path d="M23.4 36.2q1.6 1.4 3.2 0" fill="none" stroke="#16101d" stroke-width="1" stroke-linecap="round"/>
+        ${thumbBubble(48)}</svg>`,
+    dragon: (() => {
+      const D = window.NoTypeSprites.dragon;
+      const k = tint(24, '#07070c');
+      const art = pixelThumb(22, 21, [
+        [D.wing[0].rows, ...D.wing[0].at], [D.tail.rows, ...D.tail.at], [D.body.rows, ...D.body.at],
+        [['KDDMMTMMT'], 11, 10], [D.jaw.rows, D.jaw.at[0], D.jaw.at[1] + 1], [D.head.rows, ...D.head.at], [D.eye.open, ...D.eye.at],
+      ], {
+        K: k, N: k, B: 'var(--g1)', D: tint(70, '#000'), L: tint(38, '#fff3d6'), H: '#fff1cf',
+        W: 'color-mix(in srgb, var(--g2) 84%, #000)', E: '#0b0b12', Q: '#fff', M: '#2a0a12', T: '#fff',
+      }, 1.55, 5, 10);
+      // a few flame pixels licking into the bubble
+      const fire = [[0, 0, '#fff'], [1.55, -1.55, 'var(--g2)'], [1.55, 0, '#fff'], [3.1, 0, 'var(--g2)'], [3.1, 1.55, 'var(--g1)'],
+        [4.65, -1.55, 'var(--g1)'], [6.2, 0, 'var(--g3)'], [4.65, 0, 'var(--g2)']]
+        .map(([dx, dy, f]) => `<rect x="${(39.2 + dx).toFixed(2)}" y="${(25.5 + dy).toFixed(2)}" width="1.6" height="1.6" style="fill:${f}"/>`).join('');
+      return `<svg viewBox="0 0 120 52"><path d="M52 16h51a10 10 0 0 1 0 20h-51a10 10 0 0 1 0-20z" fill="#000" ${RIM}/>
+        <path d="M54 26h33" stroke="rgba(255,255,255,.75)" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M95 26h8" stroke="rgba(255,255,255,.35)" stroke-width="2.2" stroke-linecap="round"/>${art}${fire}</svg>`;
+    })(),
+    mimic: (() => {
+      const M = window.NoTypeSprites.mimic;
+      const mouth = ['KTTTMEEMMTTMMEEMTTTK', 'KMTMMEEMMMMMMEEMMTMK', 'KMMMMMMMMMMMMMMMMMMK', 'KMMMTTTMRRRRMTTTMMMK'];
+      const art = pixelThumb(20, 21, [[M.lid, 0, 0], [mouth, 0, 8], [M.base, 0, 12]], {
+        K: '#2a160c', w: '#b37b47', W: '#8a5a35', d: '#6b4226', G: '#e0a93a', g: '#9a6a1c', O: '#2a160c',
+        M: '#16080d', T: '#f5efe2', R: '#ff5d7a', E: 'var(--g1)',
+      }, 1.55, 8, 10.5);
+      return `<svg viewBox="0 0 120 52">${art}${thumbBubble(48)}</svg>`;
     })(),
   };
   let ovlStyle = 'amoled', ovlAccent = 'mint';
@@ -1753,6 +1838,7 @@
     }
     $('livePreviewToggle').checked = cfg.live_preview_enabled !== false;
     $('successToastToggle').checked = cfg.success_toast === true;
+    $('autostartToggle').checked = cfg.autostart === true;
     $('insertMethodSelect').value = cfg.insert_method || 'auto';
 
     // Performance
@@ -1803,6 +1889,7 @@
       llm_model: $('llmModelSelect').value,
       live_preview_enabled: $('livePreviewToggle').checked,
       success_toast: $('successToastToggle').checked,
+      autostart: $('autostartToggle').checked,
       insert_method: $('insertMethodSelect').value,
       mic_device_index: micVal === '' ? null : parseInt(micVal),
       beam_size: $('beamSelect').value,

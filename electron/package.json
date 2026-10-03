@@ -30,6 +30,7 @@
       "main.js",
       "preload.js",
       "model-catalog.js",
+      "sprites.js",
       "*.html",
       "assets/**",
       "!node_modules/electron-builder/**",
@@ -72,6 +73,7 @@
       "shortcutName": "NoType",
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": true,
+      "include": "installer.nsh",
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico"
     }
