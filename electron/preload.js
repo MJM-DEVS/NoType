@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('notype', {
   onHistory: (callback) => ipcRenderer.on('history', (_, list) => callback(list)),
   onSuggestData: (callback) => ipcRenderer.on('suggest-data', (_, data) => callback(data)),
   onDictionary: (callback) => ipcRenderer.on('dictionary', (_, entries) => callback(entries)),
+  onUpdateData: (callback) => ipcRenderer.on('update-data', (_, data) => callback(data)),
+  onUpdateStatus: (callback) => ipcRenderer.on('update-status', (_, status) => callback(status)),
 
   // Send messages to main process
   saveConfig: (config) => ipcRenderer.send('save-config', config),
@@ -44,6 +46,9 @@ contextBridge.exposeInMainWorld('notype', {
   // Correction suggestion: learn the shown pairs, or dismiss (false).
   suggestAnswer: (learn) => ipcRenderer.send('suggest-answer', !!learn),
   suggestHover: (hovering) => ipcRenderer.send('suggest-hover', !!hovering),
+  // Updates: 'check' | 'install' | 'dismiss' | 'status'
+  updateAction: (action) => ipcRenderer.send('update-action', String(action)),
+  updateHover: (hovering) => ipcRenderer.send('update-hover', !!hovering),
   registerHotkey: (key) => ipcRenderer.send('register-hotkey', key),
   ollamaStatus: () => ipcRenderer.send('ollama-status'),
   ollamaSetup: () => ipcRenderer.send('ollama-setup'),

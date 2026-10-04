@@ -54,6 +54,8 @@ Screenshots, a live preview of every overlay style and a guide to the speech mod
 
 **→ [Get both from the latest release](https://github.com/MJM-DEVS/NoType/releases/latest)**
 
+From version 2.9.0 on, the installed version keeps itself up to date: when a new version is out, NoType asks once and installs it with one click. Coming from an older version, run the new installer once by hand; your settings and dictionary stay.
+
 **What you need**
 
 - Windows 11, 64-bit.
@@ -154,6 +156,7 @@ The AI engine ([Ollama](https://ollama.com/)) is installed **from inside NoType 
 
 - **History and stats:** your last dictations and daily word counts are one click away in the system tray.
 - **Starts with Windows if you want:** NoType then waits in the tray after you sign in. Switch it on or off under **Settings → General** or right in the tray menu.
+- **Updates with one click:** when a new version is out, a small notice offers it. Click **Update now** and NoType downloads it in the background, installs it and starts again, with your settings and dictionary as they were. It never restarts in the middle of a dictation. The portable ZIP links you to the download page instead.
 - **No invented words:** background noise does not turn into imaginary sentences. Repetitive and low-confidence output is dropped before it reaches your screen.
 - **Works in stubborn apps:** if pasting is blocked (some terminals, remote desktops), NoType types the text key by key instead.
 - **English or German interface:** switch any time under **Settings → General**.
@@ -194,11 +197,10 @@ Canary 1B (v2 and Flash) was slower and less accurate in our tests and has the s
 
 Dictation, AI cleanup and command mode are **fully offline**. There is no telemetry of any kind.
 
-NoType goes online only for downloads you start yourself:
+NoType goes online for two things only:
 
-- the speech model you choose,
-- the optional AI engine, and
-- AI engine updates when you click **Update**.
+- **The update check.** When it starts and every 6 hours, NoType asks GitHub whether a newer version is out. The request carries no personal data; like any website, GitHub sees your IP address. Switch it off under **Settings → General**; the tray menu still lets you check by hand.
+- **Downloads you start yourself:** the speech model you choose, the optional AI engine and its updates, and a new NoType version once you click **Update now**.
 
 Everything else stays in `%APPDATA%\NoType\` on your PC:
 
@@ -209,7 +211,7 @@ Everything else stays in `%APPDATA%\NoType\` on your PC:
 | Diagnostic log | `notype.log`, rotating; timings and errors only, never your dictated text |
 | AI engine & model | the `ollama\` subfolder |
 
-**Uninstalling removes this whole folder** and NoType's autostart entry (updates keep both). The speech models are the exception: they live in the shared Hugging Face cache at `%USERPROFILE%\.cache\huggingface\hub\`, which other apps may use too, so the uninstaller leaves it alone. To free the space, delete the folders of the models you downloaded in NoType there; their names contain `whisper`, for example `models--mobiuslabsgmbh--faster-whisper-large-v3-turbo`. The portable version has no uninstaller: delete its folder and `%APPDATA%\NoType\` by hand.
+**Uninstalling removes this whole folder**, NoType's autostart entry and its update cache in `%LOCALAPPDATA%\notype-updater\` (updates keep all three). The speech models are the exception: they live in the shared Hugging Face cache at `%USERPROFILE%\.cache\huggingface\hub\`, which other apps may use too, so the uninstaller leaves it alone. To free the space, delete the folders of the models you downloaded in NoType there; their names contain `whisper`, for example `models--mobiuslabsgmbh--faster-whisper-large-v3-turbo`. The portable version has no uninstaller: delete its folder and `%APPDATA%\NoType\` by hand.
 
 NoType pastes through the clipboard, so the dictated text stays there afterwards and you can paste it again. If you use Windows clipboard history or sync across devices, it ends up there too. To keep the clipboard out of it, choose **Always type** under **Settings → System**.
 
@@ -251,7 +253,7 @@ Not at the moment. NoType is built for Windows 11.
 
 <br/>
 
-Only once, to download the speech model (and the AI engine, if you want it). After that NoType works fully offline.
+Only once, to download the speech model (and the AI engine, if you want it). After that NoType works fully offline. When you are online it also looks for updates; without a connection it simply skips the check.
 
 </details>
 
@@ -408,9 +410,10 @@ NoType/
     ├── settings.html     # settings window
     ├── onboarding.html   # first-run setup guide
     ├── suggest.html      # "learn this correction?" prompt
+    ├── update.html       # "new version available" prompt
     ├── toast.html        # notification toast
-    ├── installer.nsh     # uninstaller step that removes the autostart entry
-    └── package.json      # electron-builder (NSIS installer)
+    ├── installer.nsh     # uninstaller step: autostart entry and update cache
+    └── package.json      # electron-builder (NSIS installer, GitHub update feed)
 ```
 
 ### Reliability engineering

@@ -57,6 +57,7 @@ DEFAULT_CONFIG = {
     "hotkey": "ctrl+shift+space",
     "mode": "hold_to_speak",  # "hold_to_speak" or "press_to_speak"
     "autostart": False,
+    "update_check": True,            # ask GitHub for a newer release (Electron side)
     "auto_language_detect": True,
     "overlay_enabled": True,
     "overlay_style": "amoled",       # amoled | matrix | island | halo | buddy | slime | dragon | mimic (retired ids are migrated by the Electron app)

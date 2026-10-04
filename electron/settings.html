@@ -552,6 +552,27 @@
         </div>
         <div class="field-desc cmd-note" data-i18n="cmd.note">Nutzt die lokale KI aus „Text-Bereinigung“ – auch wenn die Bereinigung selbst aus ist.</div>
       </div>
+
+      <div class="card">
+        <div class="card-title" data-i18n="update.title">Updates</div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="update.auto">Automatisch nach Updates suchen</div>
+            <div class="field-desc" data-i18n="update.auto.desc">Fragt beim Start und alle 6 Stunden bei GitHub nach. Geladen wird erst, wenn du zustimmst.</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="updateCheckToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="field">
+          <div>
+            <div class="field-label" id="updateVersion">NoType</div>
+            <div class="field-desc" id="updateDesc"></div>
+          </div>
+          <button class="btn-sm" id="updateBtn">Jetzt suchen</button>
+        </div>
+      </div>
     </section>
 
     <!-- ═══ Pane: Sprache & Modell ═══ -->
@@ -882,6 +903,19 @@
       'general.setup': 'Einrichtungsassistent',
       'general.setup.desc': 'Schritt für Schritt: Mikrofon, Hotkey, Modell, Probediktat',
       'general.setup.btn': 'Starten',
+      'update.title': 'Updates', 'update.auto': 'Automatisch nach Updates suchen',
+      'update.auto.desc': 'Fragt beim Start und alle 6 Stunden bei GitHub nach. Geladen wird erst, wenn du zustimmst.',
+      'update.check': 'Jetzt suchen', 'update.checking.btn': 'Sucht …',
+      'update.loading.btn': 'Lädt …', 'update.installing.btn': 'Startet neu …',
+      'update.install': 'Jetzt aktualisieren', 'update.page': 'Herunterladen',
+      'update.idle': 'Noch nicht geprüft', 'update.checking': 'Frage bei GitHub nach …',
+      'update.current': 'Aktuell, zuletzt geprüft um {time}',
+      'update.available': 'Version {v} ist verfügbar',
+      'update.available.page': 'Version {v} ist verfügbar. Die ZIP-Version tauschst du von Hand aus.',
+      'update.loading': 'Wird geladen: {p} %. Danach startet NoType neu.',
+      'update.installing': 'Wird installiert, NoType startet gleich neu',
+      'update.error': 'GitHub war nicht erreichbar. Später noch einmal versuchen.',
+      'update.dev': 'Updates gibt es nur in der installierten App',
       'speech.status': 'Modell-Status', 'speech.status.loading': 'Laden...',
       'speech.perf': 'Performance', 'speech.beam.desc': 'Auto = dynamisch je nach Länge',
       'speech.beam.auto': 'Auto (Empfohlen)', 'speech.beam.1': '1 – Schnellste',
@@ -977,6 +1011,19 @@
       'general.setup': 'Setup assistant',
       'general.setup.desc': 'Step by step: microphone, hotkey, model, test dictation',
       'general.setup.btn': 'Start',
+      'update.title': 'Updates', 'update.auto': 'Check for updates automatically',
+      'update.auto.desc': 'Asks GitHub at startup and every 6 hours. Nothing downloads until you say so.',
+      'update.check': 'Check now', 'update.checking.btn': 'Checking …',
+      'update.loading.btn': 'Downloading …', 'update.installing.btn': 'Restarting …',
+      'update.install': 'Update now', 'update.page': 'Download',
+      'update.idle': 'Not checked yet', 'update.checking': 'Asking GitHub …',
+      'update.current': 'Up to date, last checked at {time}',
+      'update.available': 'Version {v} is available',
+      'update.available.page': 'Version {v} is available. Replace the ZIP version by hand.',
+      'update.loading': 'Downloading: {p} %. NoType restarts afterwards.',
+      'update.installing': 'Installing, NoType restarts in a moment',
+      'update.error': 'Could not reach GitHub. Try again later.',
+      'update.dev': 'Updates only work in the installed app',
       'speech.status': 'Model status', 'speech.status.loading': 'Loading...',
       'speech.perf': 'Performance', 'speech.beam.desc': 'Auto = scales with clip length',
       'speech.beam.auto': 'Auto (recommended)', 'speech.beam.1': '1 – fastest',
@@ -1061,6 +1108,7 @@
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
       el.placeholder = t(el.dataset.i18nPlaceholder);
     });
+    renderUpdate();
   }
 
   // ── Sidebar navigation ──
@@ -1839,6 +1887,7 @@
     $('livePreviewToggle').checked = cfg.live_preview_enabled !== false;
     $('successToastToggle').checked = cfg.success_toast === true;
     $('autostartToggle').checked = cfg.autostart === true;
+    $('updateCheckToggle').checked = cfg.update_check !== false;
     $('insertMethodSelect').value = cfg.insert_method || 'auto';
 
     // Performance
@@ -1890,6 +1939,7 @@
       live_preview_enabled: $('livePreviewToggle').checked,
       success_toast: $('successToastToggle').checked,
       autostart: $('autostartToggle').checked,
+      update_check: $('updateCheckToggle').checked,
       insert_method: $('insertMethodSelect').value,
       mic_device_index: micVal === '' ? null : parseInt(micVal),
       beam_size: $('beamSelect').value,
@@ -1921,9 +1971,47 @@
     });
   }
 
+  // ── Updates ──
+  // The main process owns the updater; this row mirrors its state.
+  let updStatus = null;
+  function renderUpdate() {
+    const s = updStatus;
+    if (!s) return;
+    const btn = $('updateBtn');
+    $('updateVersion').textContent = 'NoType ' + s.current;
+    if (!s.supported) {
+      $('updateDesc').textContent = t('update.dev');
+      btn.style.display = 'none';
+      return;
+    }
+    const time = (ts) => new Date(ts).toLocaleTimeString(uiLang, { hour: '2-digit', minute: '2-digit' });
+    let desc = t('update.idle'), label = t('update.check');
+    if (s.state === 'checking') { desc = t('update.checking'); label = t('update.checking.btn'); }
+    else if (s.state === 'current') desc = t('update.current').replace('{time}', time(s.checkedAt));
+    else if (s.state === 'available') {
+      desc = t(s.canInstall ? 'update.available' : 'update.available.page').replace('{v}', s.version);
+      label = t(s.canInstall ? 'update.install' : 'update.page');
+    }
+    else if (s.state === 'downloading') { desc = t('update.loading').replace('{p}', s.percent); label = t('update.loading.btn'); }
+    else if (s.state === 'ready') { desc = t('update.installing'); label = t('update.installing.btn'); }
+    else if (s.state === 'error') desc = t('update.error');
+    $('updateDesc').textContent = desc;
+    btn.textContent = label;
+    btn.style.display = '';
+    btn.disabled = ['checking', 'downloading', 'ready'].includes(s.state);
+    btn.classList.toggle('primary', s.state === 'available');
+  }
+  $('updateBtn').onclick = () => {
+    window.notype.updateAction(updStatus && updStatus.state === 'available' ? 'install' : 'check');
+  };
+
   // ── Listen for config ──
   if (window.notype) {
     window.notype.onConfig(applyConfig);
+    if (window.notype.onUpdateStatus) {
+      window.notype.onUpdateStatus((st) => { updStatus = st; renderUpdate(); });
+      window.notype.updateAction('status');
+    }
     if (window.notype.onHistory) {
       window.notype.onHistory(setHistory);
       window.notype.getHistory();

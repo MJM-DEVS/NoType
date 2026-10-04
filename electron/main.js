@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, nativeImage, screen, nativeTheme } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, nativeImage, screen, nativeTheme, shell } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -214,6 +214,7 @@ function loadConfig() {
     hotkey: 'CmdOrCtrl+Shift+Space',
     mode: 'press_to_speak',
     autostart: false,
+    update_check: true,
     auto_language_detect: true,
     overlay_enabled: true,
     overlay_style: 'amoled',
@@ -546,7 +547,9 @@ function handlePythonMessage(line) {
         } else if (!bootReadyToastShown) {
           // Once per launch – answers "is it ready yet?" on slower machines.
           const dev = String(data.device || '').split(' (')[0];
-          showToast(trayT().bootReady.replace('{model}', modelLabel(data.model)).replace('{device}', dev), 'success');
+          showToast(JUST_UPDATED
+            ? trayT().bootUpdated.replace('{v}', app.getVersion())
+            : trayT().bootReady.replace('{model}', modelLabel(data.model)).replace('{device}', dev), 'success');
         }
         bootReadyToastShown = true;
         if (settingsWin && !settingsWin.isDestroyed()) {
@@ -1087,7 +1090,8 @@ function updateTray(status) {
   try {
     tray.setImage(createTrayImage(colors[status] || '#00d4aa', status === 'recording'));
     const hotkeyLabel = config.hotkey || 'Ctrl+Shift+Space';
-    tray.setToolTip(`NoType – ${labels[status] || T.ready} (${hotkeyLabel})`);
+    const upd = update.state === 'downloading' ? ` · ${T.updLoading.replace('{p}', update.percent)}` : '';
+    tray.setToolTip(`NoType – ${labels[status] || T.ready} (${hotkeyLabel})${upd}`);
     tray.setContextMenu(buildTrayMenu(status));
   } catch (e) {
     console.error('Tray update error:', e);
@@ -1111,6 +1115,11 @@ function trayT() {
     bootReady: 'NoType bereit · {model} · {device}',
     commandNoLlm: 'Befehlsmodus braucht die lokale KI – Einstellungen → Text-Bereinigung',
     commandFailed: 'Befehl fehlgeschlagen – die KI hat nicht rechtzeitig geantwortet',
+    bootUpdated: 'Auf {v} aktualisiert, NoType ist bereit',
+    updCheck: 'Nach Updates suchen', updChecking: 'Suche nach Updates …',
+    updInstall: '↑  Auf {v} aktualisieren', updDownload: '↑  NoType {v} herunterladen',
+    updLoading: 'Update wird geladen: {p} %', updInstalling: 'Update wird installiert …',
+    updCurrent: 'NoType {v} ist aktuell', updFailed: 'Keine Verbindung zu GitHub, später noch einmal versuchen',
     locale: 'de-DE',
   };
   const en = {
@@ -1128,6 +1137,11 @@ function trayT() {
     bootReady: 'NoType ready · {model} · {device}',
     commandNoLlm: 'Command mode needs the local AI – Settings → Text Cleanup',
     commandFailed: 'Command failed – the AI did not answer in time',
+    bootUpdated: 'Updated to {v}, NoType is ready',
+    updCheck: 'Check for updates', updChecking: 'Checking for updates …',
+    updInstall: '↑  Update to {v}', updDownload: '↑  Download NoType {v}',
+    updLoading: 'Downloading update: {p} %', updInstalling: 'Installing update …',
+    updCurrent: 'NoType {v} is up to date', updFailed: 'Could not reach GitHub, try again later',
     locale: 'en-US',
   };
   return config.app_language === 'en' ? en : de;
@@ -1215,6 +1229,7 @@ function buildTrayMenu(status = 'ready') {
         pushConfigToSettings();
       },
     },
+    ...(autoUpdater ? [updateMenuItem(T)] : []),
     { type: 'separator' },
     { label: T.quit, click: () => quitApp() },
   );
@@ -1567,6 +1582,265 @@ function showToast(text, type = 'success', stats = null) {
   win.on('closed', () => { if (toastWin === win) toastWin = null; });
 }
 
+// ── Updates ──
+// electron-updater reads latest.yml from the newest GitHub release: 20 s after
+// start, then every 6 hours (unless switched off in settings), and whenever the
+// user asks from the tray or settings. Nothing downloads before a click. Only
+// the NSIS install can replace itself; the portable ZIP and an unpacked build
+// get a link to the release page instead.
+const RELEASES_URL = 'https://github.com/MJM-DEVS/NoType/releases/latest';
+const UPDATE_FIRST_CHECK_MS = 20_000;
+const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const CAN_SELF_UPDATE = IS_PACKAGED &&
+  fs.existsSync(path.join(path.dirname(process.execPath), 'Uninstall NoType.exe'));
+// The NSIS installer relaunches the app with --updated after an update.
+const JUST_UPDATED = process.argv.includes('--updated');
+let autoUpdater = null;          // electron-updater, only in a packaged build
+// state: idle | checking | current | available | downloading | ready | error
+let update = { state: 'idle', version: null, size: 0, percent: 0, checkedAt: 0 };
+let updateManual = false;        // the running check was asked for → report the result
+let updateOffered = null;        // version whose pill was shown this session
+let updateOfferPending = false;
+let updateWin = null;            // "NoType x.y.z ist da" pill
+let updateWinTimer = null;
+
+function initUpdater() {
+  if (!IS_PACKAGED) return;      // a dev run has no app-update.yml
+  try {
+    ({ autoUpdater } = require('electron-updater'));
+  } catch (e) {
+    console.error('Updater unavailable:', e.message);
+    return;
+  }
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = false;
+  autoUpdater.logger = {
+    info: (m) => console.log('[update]', m),
+    warn: (m) => console.warn('[update]', m),
+    error: (m) => console.error('[update]', m),
+    debug: () => {},
+  };
+
+  autoUpdater.on('update-available', (info) => {
+    const size = (info.files && info.files[0] && info.files[0].size) || 0;
+    setUpdate({ state: 'available', version: info.version, size }, true);
+    offerUpdate(updateManual);
+  });
+  autoUpdater.on('update-not-available', () => {
+    setUpdate({ state: 'current', version: null }, true);
+    if (updateManual) showToast(trayT().updCurrent.replace('{v}', app.getVersion()), 'success');
+  });
+  autoUpdater.on('download-progress', (p) => {
+    const percent = Math.min(99, Math.floor(p.percent || 0));
+    if (percent !== update.percent) setUpdate({ percent });
+  });
+  autoUpdater.on('update-downloaded', () => {
+    setUpdate({ state: 'ready', percent: 100 });
+    installWhenIdle();
+  });
+  autoUpdater.on('error', (err) => {
+    console.error('[update] failed:', err && err.message);
+    if (update.state === 'downloading') {
+      setUpdate({ state: 'available', percent: 0 });   // the offer stays, retry works
+      showUpdatePill('error');
+    } else if (update.state === 'checking') {
+      setUpdate({ state: 'error' });
+      if (updateManual) showToast(trayT().updFailed, 'error');
+    }
+  });
+
+  if (CAN_SELF_UPDATE) setTimeout(clearPendingUpdate, UPDATE_FIRST_CHECK_MS / 2);
+  setTimeout(() => checkForUpdate(false), UPDATE_FIRST_CHECK_MS);
+  setInterval(() => checkForUpdate(false), UPDATE_INTERVAL_MS);
+}
+
+// electron-updater keeps the installer it ran (about 1 GB) in
+// notype-updater\pending until the next download. By now that installer has
+// exited, so the copy can go; a later update downloads only what changed.
+function clearPendingUpdate() {
+  if (['downloading', 'ready'].includes(update.state)) return;
+  const local = process.env.LOCALAPPDATA || path.join(app.getPath('home'), 'AppData', 'Local');
+  const dir = path.join(local, 'notype-updater', 'pending');
+  fs.rm(dir, { recursive: true, force: true }, (err) => {
+    if (err) console.warn('[update] could not clear', dir, err.message);
+  });
+}
+
+function setUpdate(patch, checked = false) {
+  update = { ...update, ...patch };
+  if (checked) update.checkedAt = Date.now();
+  updateTray(trayStatus);
+  pushUpdateStatus();
+}
+
+function pushUpdateStatus() {
+  if (!settingsWin || settingsWin.isDestroyed()) return;
+  settingsWin.webContents.send('update-status', {
+    supported: !!autoUpdater,
+    canInstall: CAN_SELF_UPDATE,
+    current: app.getVersion(),
+    ...update,
+  });
+}
+
+function checkForUpdate(manual) {
+  if (!autoUpdater) return;
+  if (!manual && config.update_check === false) return;
+  if (['checking', 'downloading', 'ready'].includes(update.state)) return;
+  if (manual && update.state === 'available') { offerUpdate(true); return; }
+  updateManual = manual;
+  setUpdate({ state: 'checking' });
+  autoUpdater.checkForUpdates().catch(() => {});   // failures arrive as 'error'
+}
+
+function updateMenuItem(T) {
+  switch (update.state) {
+    case 'checking': return { label: T.updChecking, enabled: false };
+    case 'available': return {
+      label: (CAN_SELF_UPDATE ? T.updInstall : T.updDownload).replace('{v}', update.version),
+      click: () => startUpdate(),
+    };
+    case 'downloading': return { label: T.updLoading.replace('{p}', update.percent), enabled: false };
+    case 'ready': return { label: T.updInstalling, enabled: false };
+    default: return { label: T.updCheck, click: () => checkForUpdate(true) };
+  }
+}
+
+// The user said yes: download (installed app) or open the release page.
+function startUpdate() {
+  if (!autoUpdater || update.state !== 'available') return;
+  if (!CAN_SELF_UPDATE) {
+    shell.openExternal(RELEASES_URL);
+    closeUpdatePill();
+    return;
+  }
+  setUpdate({ state: 'downloading', percent: 0 });
+  autoUpdater.downloadUpdate().catch(() => {});    // failures arrive as 'error'
+}
+
+const updateBusy = () => isRecording || isTranscribing;
+
+function offerUpdate(force = false) {
+  if (update.state !== 'available' || updateOfferPending) return;
+  if (!force && updateOffered === update.version) return;
+  // Not over a running dictation or a correction suggestion.
+  if (updateBusy() || (suggestWin && !suggestWin.isDestroyed())) {
+    updateOfferPending = true;
+    setTimeout(() => { updateOfferPending = false; offerUpdate(force); }, 5000);
+    return;
+  }
+  updateOffered = update.version;
+  showUpdatePill('offer');
+}
+
+// Downloaded. Never pull the app away mid-dictation: wait for the hotkey to
+// be idle, say what happens, then install.
+function installWhenIdle() {
+  if (updateBusy()) { setTimeout(installWhenIdle, 3000); return; }
+  showUpdatePill('installing');
+  setTimeout(() => {
+    if (updateBusy()) { closeUpdatePill(); setTimeout(installWhenIdle, 3000); return; }
+    installUpdate();
+  }, 2500);
+}
+
+function installUpdate() {
+  // Like quitApp(), but the backend has to be gone before the installer
+  // starts: NSIS only closes NoType.exe and would find backend.exe still
+  // holding its files.
+  quitRequested = true;
+  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
+  saveHistory();
+  globalShortcut.unregisterAll();
+  let started = false;
+  const run = () => {
+    if (started) return;
+    started = true;
+    for (const w of [overlayWin, settingsWin, onboardingWin, suggestWin, toastWin, updateWin]) {
+      if (w && !w.isDestroyed()) try { w.destroy(); } catch (_) {}
+    }
+    if (tray) try { tray.destroy(); } catch (_) {}
+    autoUpdater.quitAndInstall(true, true);   // silent installer, NoType starts again afterwards
+  };
+  const proc = pythonProcess;
+  if (!proc) { run(); return; }
+  proc.once('close', run);
+  sendToPython('quit');
+  setTimeout(() => { try { proc.kill(); } catch (_) {} }, 4000);
+  setTimeout(run, 6000);
+}
+
+function closeUpdatePill() {
+  if (updateWinTimer) { clearTimeout(updateWinTimer); updateWinTimer = null; }
+  if (updateWin && !updateWin.isDestroyed()) updateWin.close();
+  updateWin = null;
+}
+
+function armUpdatePillTimer(ms) {
+  if (updateWinTimer) clearTimeout(updateWinTimer);
+  updateWinTimer = setTimeout(closeUpdatePill, ms);
+}
+
+// kind: offer | error | installing (same pill as the correction suggestion)
+function showUpdatePill(kind) {
+  closeUpdatePill();
+  const win = new BrowserWindow({
+    width: 620,
+    height: 96,          // room for the pill's soft shadow
+    show: false,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: false,
+    hasShadow: false,
+    type: 'toolbar',
+    webPreferences: {
+      preload: PRELOAD,
+      contextIsolation: true,
+      nodeIntegration: false,
+      backgroundThrottling: false,
+    },
+  });
+  updateWin = win;
+  win.setIgnoreMouseEvents(true, { forward: true });
+  win.loadFile(path.join(__dirname, 'update.html'));
+  win.once('ready-to-show', () => {
+    if (win.isDestroyed()) return;
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const { x, y, width, height } = display.workArea;
+    const b = win.getBounds();
+    win.setPosition(x + Math.round((width - b.width) / 2), y + height - b.height - 32);
+    win.webContents.send('set-theme', currentTheme());
+    win.webContents.send('update-data', {
+      kind, version: update.version, size: update.size, canInstall: CAN_SELF_UPDATE,
+      lang: config.app_language === 'en' ? 'en' : 'de',
+    });
+    win.showInactive();
+  });
+  armUpdatePillTimer(kind === 'installing' ? 10_000 : 15_000);
+  win.on('closed', () => { if (updateWin === win) closeUpdatePill(); });
+}
+
+ipcMain.on('update-hover', (_, hovering) => {
+  if (!updateWin || updateWin.isDestroyed()) return;
+  updateWin.setIgnoreMouseEvents(!hovering, { forward: true });
+  if (hovering) { if (updateWinTimer) clearTimeout(updateWinTimer); updateWinTimer = null; }
+  else armUpdatePillTimer(5000);
+});
+
+ipcMain.on('update-action', (_, action) => {
+  if (action === 'check') checkForUpdate(true);
+  else if (action === 'status') pushUpdateStatus();
+  else if (action === 'dismiss') closeUpdatePill();
+  else if (action === 'install') {
+    startUpdate();
+    // The pill confirms the download, then gets out of the way.
+    if (updateWin && !updateWin.isDestroyed()) armUpdatePillTimer(3000);
+  }
+});
+
 // ── App Lifecycle ──
 function quitApp() {
   quitRequested = true;  // suppress backend auto-restart
@@ -1592,6 +1866,7 @@ app.whenReady().then(() => {
   createTrayWithRetry();
   startPython();
   startBackendWatchdog();
+  initUpdater();
   // Register hotkeys immediately – globalShortcut doesn't depend on the Python backend.
   // The backend may later push an updated config that re-registers via `config_saved`.
   registerHotkeys();

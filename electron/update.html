@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>NoType Update</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: rgba(255, 255, 255, 0.94);
+    --fg: #1a1a1a;
+    --sub: rgba(0, 0, 0, 0.5);
+    --shadow: rgba(0, 0, 0, 0.18);
+    --border: rgba(0, 0, 0, 0.06);
+    --accent: #00b894;
+    --on-accent: #fff;
+    --warn: #d97706;
+    --ghost-hover: rgba(0, 0, 0, 0.06);
+  }
+  [data-theme="dark"] {
+    --bg: rgba(28, 28, 30, 0.94);
+    --fg: #f5f5f5;
+    --sub: rgba(255, 255, 255, 0.55);
+    --shadow: rgba(0, 0, 0, 0.5);
+    --border: rgba(255, 255, 255, 0.08);
+    --accent: #00d4aa;
+    --on-accent: #06251e;
+    --warn: #f59e0b;
+    --ghost-hover: rgba(255, 255, 255, 0.08);
+  }
+
+  html, body { background: transparent; }
+  body {
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+
+  .pill {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg);
+    color: var(--fg);
+    backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 8px 8px 8px 14px;
+    box-shadow: 0 6px 24px var(--shadow);
+    max-width: 580px;
+    animation: pillIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .pill.leaving { animation: pillOut 0.25s ease-in forwards; }
+  @keyframes pillIn {
+    from { opacity: 0; transform: translateY(12px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  @keyframes pillOut {
+    to { opacity: 0; transform: translateY(-8px); }
+  }
+
+  .icon {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.2s, color 0.2s;
+  }
+  .icon svg { width: 13px; height: 13px; }
+  .busy .icon { background: var(--accent); color: var(--on-accent); }
+  .error .icon { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+
+  .body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .title {
+    font-size: 12.5px; font-weight: 600; line-height: 1.25;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .sub {
+    font-size: 11px; color: var(--sub); font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-left: 4px; }
+  button {
+    font: inherit; border: none; cursor: pointer; border-radius: 999px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .go {
+    font-size: 12px; font-weight: 600; padding: 7px 14px;
+    background: var(--accent); color: var(--on-accent);
+    transition: filter 0.15s, transform 0.1s;
+  }
+  .go:hover { filter: brightness(1.08); }
+  .go:active { transform: scale(0.97); }
+  .dismiss {
+    width: 28px; height: 28px; background: transparent; color: var(--sub);
+    transition: background 0.15s, color 0.15s;
+  }
+  .dismiss:hover { background: var(--ghost-hover); color: var(--fg); }
+  .dismiss svg { width: 10px; height: 10px; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .busy .actions { display: none; }
+  .busy { padding-right: 18px; }
+</style>
+</head>
+<body>
+
+<div class="pill" id="pill">
+  <div class="icon">
+    <svg viewBox="0 0 14 14" fill="none" id="iconSvg"></svg>
+  </div>
+  <div class="body">
+    <div class="title" id="title"></div>
+    <div class="sub" id="sub"></div>
+  </div>
+  <div class="actions">
+    <button class="go" id="go"></button>
+    <button class="dismiss" id="dismiss">
+      <svg viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+  const ICONS = {
+    // Arrow into a tray: a new version to fetch.
+    download: '<path d="M7 2v6.5M4.2 5.8 7 8.6l2.8-2.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.5 9.5v1A1.5 1.5 0 0 0 4 12h6a1.5 1.5 0 0 0 1.5-1.5v-1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+    // Circular arrow: installing, NoType restarts.
+    restart: '<path d="M11.2 7a4.2 4.2 0 1 1-1.3-3.05" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M10.3 1.6v2.6H7.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>',
+    warn: '<path d="M7 3.6v4.1M7 10.2v.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>',
+  };
+  const I18N = {
+    de: {
+      offer: 'NoType {v} ist da',
+      offerSub: '{size}lädt im Hintergrund, danach startet NoType neu',
+      offerSubPage: 'Die neue Version liegt auf GitHub bereit',
+      install: 'Jetzt aktualisieren', page: 'Herunterladen',
+      loading: 'Update wird geladen',
+      loadingSub: 'Läuft im Hintergrund, den Fortschritt zeigt das Tray-Menü',
+      installing: 'NoType wird aktualisiert',
+      installingSub: 'Startet in ein paar Sekunden neu',
+      error: 'Update fehlgeschlagen',
+      errorSub: 'Der Download wurde abgebrochen. Prüfe die Internetverbindung.',
+      retry: 'Erneut versuchen', later: 'Später', dec: ',',
+    },
+    en: {
+      offer: 'NoType {v} is here',
+      offerSub: '{size}downloads in the background, then NoType restarts',
+      offerSubPage: 'The new version is ready on GitHub',
+      install: 'Update now', page: 'Download',
+      loading: 'Downloading the update',
+      loadingSub: 'Runs in the background, the tray menu shows the progress',
+      installing: 'Updating NoType',
+      installingSub: 'Restarts in a few seconds',
+      error: 'Update failed',
+      errorSub: 'The download stopped. Check your internet connection.',
+      retry: 'Try again', later: 'Later', dec: '.',
+    },
+  };
+  const $ = (id) => document.getElementById(id);
+  let L = I18N.de;
+
+  const sizeLabel = (bytes) => {
+    if (!bytes) return '';
+    const mb = bytes / 1048576;
+    const s = mb >= 1000 ? (mb / 1024).toFixed(1) + ' GB' : Math.round(mb) + ' MB';
+    return s.replace('.', L.dec) + ' · ';
+  };
+
+  function render(kind, data) {
+    const pill = $('pill');
+    pill.className = 'pill' + (kind === 'loading' || kind === 'installing' ? ' busy' : kind === 'error' ? ' error' : '');
+    $('iconSvg').innerHTML = kind === 'installing' ? ICONS.restart : kind === 'error' ? ICONS.warn : ICONS.download;
+    if (kind === 'offer') {
+      $('title').textContent = L.offer.replace('{v}', data.version);
+      $('sub').textContent = data.canInstall ? L.offerSub.replace('{size}', sizeLabel(data.size)) : L.offerSubPage;
+      $('go').textContent = data.canInstall ? L.install : L.page;
+    } else if (kind === 'error') {
+      $('title').textContent = L.error;
+      $('sub').textContent = L.errorSub;
+      $('go').textContent = L.retry;
+    } else {
+      $('title').textContent = L[kind];
+      $('sub').textContent = L[kind + 'Sub'];
+    }
+    // Starts with the size ("1,0 GB · lädt …") or, without one, a capital.
+    const sub = $('sub').textContent;
+    $('sub').textContent = sub.charAt(0).toUpperCase() + sub.slice(1);
+    $('dismiss').title = L.later;
+    $('dismiss').setAttribute('aria-label', L.later);
+  }
+
+  if (window.notype) {
+    window.notype.onSetTheme((theme) => {
+      document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : '';
+    });
+    let data = {};
+    window.notype.onUpdateData((d) => {
+      data = d || {};
+      L = I18N[data.lang] || I18N.de;
+      render(data.kind, data);
+    });
+    $('pill').addEventListener('mouseenter', () => window.notype.updateHover(true));
+    $('pill').addEventListener('mouseleave', () => window.notype.updateHover(false));
+    $('go').onclick = () => {
+      window.notype.updateAction('install');
+      if (!data.canInstall) { $('pill').classList.add('leaving'); return; }
+      render('loading', data);
+      setTimeout(() => $('pill').classList.add('leaving'), 2600);
+    };
+    $('dismiss').onclick = () => {
+      $('pill').classList.add('leaving');
+      setTimeout(() => window.notype.updateAction('dismiss'), 220);
+    };
+  }
+</script>
+</body>
+</html>

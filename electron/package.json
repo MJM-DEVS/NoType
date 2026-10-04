@@ -52,6 +52,14 @@
       }
     ],
     "asar": false,
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "MJM-DEVS",
+        "repo": "NoType",
+        "releaseType": "release"
+      }
+    ],
     "win": {
       "target": [
         {
@@ -77,5 +85,8 @@
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico"
     }
+  },
+  "dependencies": {
+    "electron-updater": "6.8.9"
   }
 }
