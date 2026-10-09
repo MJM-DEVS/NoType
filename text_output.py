@@ -166,6 +166,19 @@ _k32.GlobalLock.restype = ctypes.c_void_p
 _k32.GlobalUnlock.argtypes = [ctypes.wintypes.HGLOBAL]
 _k32.GlobalSize.argtypes = [ctypes.wintypes.HGLOBAL]
 _k32.GlobalSize.restype = ctypes.c_size_t
+_u32.SetClipboardData.argtypes = [ctypes.wintypes.UINT, ctypes.wintypes.HANDLE]
+_u32.SetClipboardData.restype = ctypes.wintypes.HANDLE
+_k32.GlobalAlloc.argtypes = [ctypes.wintypes.UINT, ctypes.c_size_t]
+_k32.GlobalAlloc.restype = ctypes.wintypes.HGLOBAL
+_k32.GlobalFree.argtypes = [ctypes.wintypes.HGLOBAL]
+_k32.GlobalFree.restype = ctypes.wintypes.HGLOBAL
+_u32.CreateWindowExW.argtypes = [ctypes.wintypes.DWORD, ctypes.wintypes.LPCWSTR, ctypes.wintypes.LPCWSTR,
+                                 ctypes.wintypes.DWORD, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                 ctypes.wintypes.HWND, ctypes.wintypes.HMENU, ctypes.wintypes.HINSTANCE,
+                                 ctypes.wintypes.LPVOID]
+_u32.CreateWindowExW.restype = ctypes.wintypes.HWND
+_u32.DestroyWindow.argtypes = [ctypes.wintypes.HWND]
+GMEM_MOVEABLE = 0x0002
 
 
 def _clipboard_raw(format_name: str) -> bytes | None:
@@ -190,6 +203,57 @@ def _clipboard_raw(format_name: str) -> bytes | None:
             _k32.GlobalUnlock(h)
     finally:
         _u32.CloseClipboard()
+
+
+def _set_clipboard(formats: dict) -> bool:
+    """Replace the clipboard with raw formats ({format id: bytes})."""
+    # SetClipboardData fails when the clipboard was opened without a window.
+    hwnd = _u32.CreateWindowExW(0, "STATIC", None, 0, 0, 0, 0, 0, None, None, None, None)
+    for _ in range(20):
+        if _u32.OpenClipboard(hwnd):
+            break
+        time.sleep(0.01)
+    else:
+        if hwnd:
+            _u32.DestroyWindow(hwnd)
+        return False
+    try:
+        _u32.EmptyClipboard()
+        placed = 0
+        for fmt, data in formats.items():
+            h = _k32.GlobalAlloc(GMEM_MOVEABLE, len(data))
+            ptr = _k32.GlobalLock(h) if h else None
+            if not ptr:
+                if h:
+                    _k32.GlobalFree(h)
+                continue
+            ctypes.memmove(ptr, data, len(data))
+            _k32.GlobalUnlock(h)
+            if _u32.SetClipboardData(fmt, h):
+                placed += 1  # the clipboard owns the memory now
+            else:
+                _k32.GlobalFree(h)
+        return placed > 0
+    finally:
+        _u32.CloseClipboard()
+        if hwnd:
+            _u32.DestroyWindow(hwnd)
+
+
+def paste_formats(formats: dict, settle: float = 0.4) -> bool:
+    """Paste raw clipboard formats (an image as PNG + DIB) with Ctrl+V.
+
+    Browsers and Electron apps read a pasted image asynchronously, so this
+    waits `settle` seconds before anyone may change the clipboard again –
+    otherwise the app could read the next paste's text instead."""
+    _wait_modifiers_released()
+    seq = user32.GetClipboardSequenceNumber()
+    if not _set_clipboard(formats) or not _wait_clipboard_updated(seq):
+        return False
+    if not _send_ctrl_v():
+        return False
+    time.sleep(settle)
+    return True
 
 
 def _copied_from_empty_selection() -> bool:

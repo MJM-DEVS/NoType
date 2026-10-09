@@ -159,6 +159,8 @@ let holdReleaseViaBackend = true;// backend reports real key-up (optimistic; see
 let onboardingWin = null;        // first-run wizard (also reachable from settings/tray)
 let lastBusyTs = 0;              // throttle for the "still processing" nudge
 let commandActive = false;       // current recording is a command-mode instruction
+let hotkeyQuietUntil = 0;        // hold mode: ignore the still-held hotkey after an Esc cancel
+let attachments = [];            // AI context chips of the current dictation (replayed into a fresh overlay)
 let config = {};
 let clipboardHistory = [];  // Last 10 transcriptions
 const MAX_HISTORY = 10;
@@ -465,6 +467,28 @@ function handlePythonMessage(line) {
         if (isRecording && (config.mode || 'press_to_speak') === 'hold_to_speak') stopRecording();
         break;
 
+      case 'escape_pressed':
+        // Esc (swallowed by the backend's keyboard hook) during a dictation.
+        if (isRecording) cancelRecording();
+        else if (isTranscribing) {
+          // The backend skips the insertion and answers with a cancelled
+          // transcription_done; the overlay can go right away.
+          if (overlayWin && !overlayWin.isDestroyed()) overlayWin.webContents.send('recording-cancelled');
+          hideOverlay();
+        }
+        break;
+
+      case 'attachment_added':
+        // A copy that goes along with the dictation (AI context) → overlay chip.
+        if (!data || !(isRecording || isTranscribing)) break;
+        attachments.push(data);
+        if (overlayReady && overlayWin && !overlayWin.isDestroyed()) overlayWin.webContents.send('attachment', data);
+        break;
+
+      case 'mic_fallback':
+        showToast(trayT().micFallback.replace('{name}', (data && data.name) || ''), 'warning');
+        break;
+
       case 'amplitude':
         if (overlayWin && !overlayWin.isDestroyed()) {
           overlayWin.webContents.send('amplitude', data.value, data.bands || null);
@@ -651,6 +675,9 @@ const OVERLAY_STYLES = {
 };
 const DEFAULT_OVERLAY_STYLE = 'amoled';
 const OVERLAY_POSITIONS = ['bottom', 'top', 'center'];
+// Room for the AI context chips: above the shape, below it when the overlay
+// sits at the top. The shape itself keeps its place on screen.
+const CHIP_STRIP = 40;
 const OVERLAY_ACCENTS = ['mint', 'mono', 'aurora', 'blue', 'violet', 'red', 'amber'];
 // Retired style ids → [successor, position]. Pre-2.6 the AMOLED placement was
 // baked into the id; 2.7 replaced the classic visualizers (and dropped the Orb).
@@ -706,25 +733,30 @@ function applyOverlayBounds() {
   const cursor = screen.getCursorScreenPoint();
   const display = screen.getDisplayNearestPoint(cursor);
   const { x, y, width, height } = display.workArea;
+  const strip = chipStrip();
 
-  overlayWin.setBounds({ width: s.w, height: s.h, x: 0, y: 0 });
+  overlayWin.setBounds({ width: s.w, height: s.h + strip, x: 0, y: 0 });
 
   const posX = x + Math.round((width - s.w) / 2);
   let posY;
   switch (config.overlay_position) {
     case 'top':    posY = y + s.top; break;
-    case 'center': posY = y + Math.round((height - s.h) / 2); break;
+    case 'center': posY = y + Math.round((height - s.h) / 2) - strip; break;
     case 'bottom':
-    default:       posY = y + height - s.h - s.bottom; break;
+    default:       posY = y + height - s.h - strip - s.bottom; break;
   }
   overlayWin.setPosition(posX, posY);
+}
+
+function chipStrip() {
+  return config.ai_context !== false ? CHIP_STRIP : 0;
 }
 
 function createOverlay() {
   const initial = getStyleConfig(config.overlay_style);
   overlayWin = new BrowserWindow({
     width: initial.w,
-    height: initial.h,
+    height: initial.h + chipStrip(),
     show: false,
     frame: false,
     transparent: true,
@@ -767,9 +799,12 @@ function pushOverlayState() {
       accent: config.overlay_accent || 'mint',
       position: config.overlay_position || 'bottom',
       sounds: config.overlay_sounds !== false,
+      strip: chipStrip() > 0,
     });
     overlayWin.webContents.send('set-theme', currentTheme());
     overlayWin.webContents.send('recording-started', { command: commandActive });
+    // Copies that came in before the window had loaded (look-back at start).
+    for (const a of attachments) overlayWin.webContents.send('attachment', a);
   };
   if (overlayReady) send();
   else overlayWin.webContents.once('did-finish-load', send);
@@ -840,6 +875,13 @@ function onHotkey(command) {
   const mode = config.mode || 'press_to_speak';
   const keys = command ? config.command_hotkey : config.hotkey;
   if (mode === 'hold_to_speak') {
+    // Cancelled with Esc while the hotkey is still held: its key repeats
+    // must not start a new recording. Every repeat extends the quiet time,
+    // so it ends shortly after the keys are let go.
+    if (Date.now() < hotkeyQuietUntil) {
+      hotkeyQuietUntil = Date.now() + 700;
+      return;
+    }
     // Hold-to-speak: globalShortcut fires repeatedly while held.
     // Start recording on first fire, reset release-detection timer each fire.
     if (!isRecording && !isTranscribing) {
@@ -932,11 +974,13 @@ function startRecording({ command = false } = {}) {
   }
   isRecording = true;
   commandActive = !!command;
+  attachments = [];
   closeSuggestion();  // a new dictation supersedes it (and the overlay sits there)
   sendToOnboarding('recording-started');
   isPaused = false;
   showOverlay();
-  sendToPython('start_recording');
+  // Command mode works on the selection; the AI context stays out of it.
+  sendToPython('start_recording', commandActive ? { command: true } : undefined);
   updateTray('recording');
 }
 
@@ -968,6 +1012,21 @@ function stopRecording() {
       showToast(trayT().transcribeStuck, 'error');
     }
   }, commandActive ? 45_000 : 30_000);
+}
+
+// Esc while recording: the take is dropped, nothing is transcribed or inserted.
+function cancelRecording() {
+  if (!isRecording) return;
+  isRecording = false;
+  isPaused = false;
+  if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+  if ((config.mode || 'press_to_speak') === 'hold_to_speak') hotkeyQuietUntil = Date.now() + 700;
+  sendToPython('cancel_recording');
+  if (overlayWin && !overlayWin.isDestroyed()) overlayWin.webContents.send('recording-cancelled');
+  sendToOnboarding('transcription-done', { text: '', empty: true, cancelled: true });
+  hideOverlay();
+  registerHotkeys();
+  updateTray('ready');
 }
 
 // Single place to reset post-recording state. Called from `transcription_done`,
@@ -1116,6 +1175,7 @@ function trayT() {
     commandNoLlm: 'Befehlsmodus braucht die lokale KI – Einstellungen → Text-Bereinigung',
     commandFailed: 'Befehl fehlgeschlagen – die KI hat nicht rechtzeitig geantwortet',
     bootUpdated: 'Auf {v} aktualisiert, NoType ist bereit',
+    micFallback: 'Mikrofon „{name}“ nicht gefunden. NoType nimmt mit dem Standardmikrofon auf.',
     updCheck: 'Nach Updates suchen', updChecking: 'Suche nach Updates …',
     updInstall: '↑  Auf {v} aktualisieren', updDownload: '↑  NoType {v} herunterladen',
     updLoading: 'Update wird geladen: {p} %', updInstalling: 'Update wird installiert …',
@@ -1138,6 +1198,7 @@ function trayT() {
     commandNoLlm: 'Command mode needs the local AI – Settings → Text Cleanup',
     commandFailed: 'Command failed – the AI did not answer in time',
     bootUpdated: 'Updated to {v}, NoType is ready',
+    micFallback: 'Microphone "{name}" not found. NoType is recording with the default microphone.',
     updCheck: 'Check for updates', updChecking: 'Checking for updates …',
     updInstall: '↑  Update to {v}', updDownload: '↑  Download NoType {v}',
     updLoading: 'Downloading update: {p} %', updInstalling: 'Installing update …',

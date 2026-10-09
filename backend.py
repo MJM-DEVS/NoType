@@ -46,7 +46,8 @@ import numpy as np
 # Ensure our directory is in the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from audio_recorder import AudioRecorder
+from audio_recorder import (AudioRecorder, refresh_devices, input_devices,
+                            find_input_device, input_device_name)
 from transcriber import Transcriber
 from text_output import insert_text, copy_selection
 from config import load_config, save_config, CONFIG_DIR
@@ -55,6 +56,9 @@ from postprocess import (clean_transcript, warm_up, reset_availability_cache,
 import dictionary
 import ollama_manager
 from correction_watch import CorrectionWatcher
+from escape_hook import EscapeHook
+from context_capture import ContextCapture, classify_foreground, insert_with_context
+from output_mute import OutputMuter
 
 # Log to file only (stdout is for IPC). Rotate so the log file never grows unbounded.
 # CONFIG_DIR is %APPDATA%/NoType — same directory the frontend uses, survives rebuilds.
@@ -108,6 +112,36 @@ class Backend:
         self.corrections = CorrectionWatcher(
             lambda items: self.send("dictionary_suggestions", {
                 "items": [{"from": heard, "to": meant} for heard, meant in items]}))
+        # Esc drops the running dictation (recording or still processing).
+        self._cancel_requested = False
+        self.esc_hook = EscapeHook(self._on_escape)
+        # Optional: speakers muted while recording.
+        self.muter = OutputMuter(os.path.join(CONFIG_DIR, ".muted-by-notype"))
+        # AI context: copies made around a dictation into an AI app or a
+        # terminal go along with it (overlay chips via attachment_added).
+        self.context = ContextCapture(os.path.join(CONFIG_DIR, "attachments"),
+                                      lambda info: self.send("attachment_added", info))
+        self._context = None  # Session of the running dictation, if any
+        self._send_lock = threading.Lock()
+        self._mic_missing = None  # name of a chosen mic we last couldn't find
+        self._migrate_mic_setting()
+
+    def _migrate_mic_setting(self):
+        """Up to 2.9 the mic was saved as a PortAudio index, and an index
+        points at a different device as soon as one is plugged in or out.
+        Keep the name of the device the index means right now instead."""
+        index = self.config.get("mic_device_index")
+        if index is None or self.config.get("mic_device_name"):
+            return
+        try:
+            self.config["mic_device_name"] = input_device_name(int(index))
+        except Exception:
+            self.config["mic_device_name"] = None
+        self.config["mic_device_index"] = None
+        try:
+            save_config(self.config)
+        except Exception as e:
+            logger.warning(f"Saving the migrated mic setting failed: {e}")
 
     def send(self, msg_type, data=None):
         """Send a JSON message to Electron via stdout. No-op if stdout is None
@@ -119,8 +153,10 @@ class Backend:
             msg["data"] = data
         line = json.dumps(msg, ensure_ascii=False)
         try:
-            sys.stdout.write(line + "\n")
-            sys.stdout.flush()
+            # Several threads send (audio levels, preview, attachments).
+            with self._send_lock:
+                sys.stdout.write(line + "\n")
+                sys.stdout.flush()
         except Exception:
             pass
 
@@ -188,23 +224,90 @@ class Backend:
         """Called by AudioRecorder per block: level + spectrum for the overlay."""
         self.send("amplitude", {"value": round(amplitude, 4), "bands": bands or []})
 
-    def handle_start_recording(self):
-        """Start audio recording."""
+    def handle_start_recording(self, command: bool = False):
+        """Start audio recording. `command`: the command hotkey started it."""
         logger.info("Recording START")
         self.corrections.cancel()
-        device_index = self.config.get("mic_device_index", None)
-        self.recorder = AudioRecorder(
-            on_amplitude=self._on_amplitude,
-            device_index=device_index,
-        )
-        self.recorder.start()
+        if self.recorder and self.recorder.is_recording:
+            self.recorder.stop()  # stray take – the rescan needs every stream closed
+        self._cancel_requested = False
+        self.recorder = self._open_recorder()
         self._record_start_time = time.time()
         self.send("recording_started")
+        # After recording_started, so an Esc can never reach Electron first.
+        self.esc_hook.arm()
+        if self.config.get("mute_while_dictating", False):
+            # Let the start chime finish before the speakers go quiet.
+            self.muter.mute(delay=0.5 if self.config.get("overlay_sounds", True) else 0.0)
+        self._end_context()  # a stray session (stop without a recorder)
+        if not command and self.config.get("ai_context", True):
+            target = classify_foreground()
+            if target:
+                logger.info(f"AI context: {target.kind} ({target.app})")
+                self._context = self.context.begin(target)
 
         if (self.config.get("live_preview_enabled", True)
                 and self.transcriber and self.transcriber.is_loaded):
             threading.Thread(target=self._preview_loop,
                              args=(self.recorder,), daemon=True).start()
+
+    def _open_recorder(self):
+        """A started recorder on the chosen mic, else on the system default.
+
+        Rescans first (~35 ms): PortAudio only enumerates devices when it
+        starts, so without it a headset plugged in later, or a new Windows
+        default mic, would stay invisible until NoType restarts."""
+        refresh_devices()
+        name = self.config.get("mic_device_name")
+        if name:
+            index = find_input_device(name)
+            if index is not None:
+                rec = AudioRecorder(on_amplitude=self._on_amplitude, device_index=index)
+                try:
+                    rec.start()
+                    self._mic_missing = None
+                    return rec
+                except Exception as e:
+                    logger.warning(f"Opening the chosen mic failed: {e}")
+            logger.warning("Chosen mic not available, recording from the system default")
+            if self._mic_missing != name:  # tell once, not on every dictation
+                self._mic_missing = name
+                self.send("mic_fallback", {"name": name})
+        rec = AudioRecorder(on_amplitude=self._on_amplitude)
+        rec.start()
+        return rec
+
+    def _on_escape(self):
+        """Esc during a dictation (runs on the hook thread, keep it short).
+        The flag stops a dictation that is already being processed before
+        anything gets inserted; Electron cancels a running recording."""
+        self._cancel_requested = True
+        self.send("escape_pressed")
+
+    def handle_cancel_recording(self):
+        """Drop the running recording: nothing is transcribed or inserted."""
+        self._cancel_requested = True
+        self.esc_hook.disarm()
+        self.muter.restore()
+        self._end_context()
+        if self.recorder and self.recorder.is_recording:
+            self.recorder.stop()
+            logger.info("Recording CANCELLED")
+
+    def _end_context(self):
+        """Stop collecting copies; returns the session (None if there was none)."""
+        session, self._context = self._context, None
+        if session:
+            self.context.close(session)
+        return session
+
+    def _cancelled(self, done: dict) -> bool:
+        """Esc came in while processing: report and skip the rest."""
+        if not self._cancel_requested:
+            return False
+        logger.info("Dictation cancelled before insertion")
+        self.send("transcription_done", {"text": "", "empty": True, "cancelled": True, **done})
+        return True
 
     def _preview_loop(self, recorder):
         """Live preview: while recording, transcribe a rolling window of the
@@ -337,13 +440,24 @@ class Backend:
     def handle_stop_recording(self, command: bool = False):
         """Stop recording and transcribe. `command`: the recording is a spoken
         instruction for the selected text (command mode) instead of dictation."""
+        try:
+            self._stop_and_transcribe(command)
+        finally:
+            self.esc_hook.disarm()
+
+    def _stop_and_transcribe(self, command: bool):
         if not self.recorder:
             self.send("error", {"message": "Not recording"})
             return
 
         logger.info("Recording STOP" + (" (command)" if command else ""))
         audio = self.recorder.stop()
+        self.muter.restore()
+        context = self._end_context()
         done = {"command": True} if command else {}
+
+        if self._cancelled(done):
+            return
 
         if len(audio) == 0:
             logger.warning("No audio captured")
@@ -362,7 +476,10 @@ class Backend:
 
             # Command mode: grab the selection right away, while the target
             # app still has focus and nothing has moved.
-            selection = copy_selection() if command else ""
+            selection = ""
+            if command:
+                with self.context.own_writes():
+                    selection = copy_selection()
 
             language = self.config.get("language", "de")
             auto_detect = self.config.get("auto_language_detect", True)
@@ -398,6 +515,9 @@ class Backend:
                 save_config(self.config)
                 logger.info(f"Persisted compute_type fallback: {result['compute_type']}")
 
+            if self._cancelled({**done, **stats}):
+                return
+
             if command:
                 self._run_command(text, selection, entries, stats)
                 return
@@ -419,10 +539,25 @@ class Backend:
                 stats["cleanup"] = cleaned["engine"]
                 stats["cleanup_ms"] = cleaned["ms"]
 
+            if self._cancelled(stats):
+                return
+            self.esc_hook.disarm()  # from here on Esc belongs to the app again
+
             if text:
                 logger.info(f"Transcribed: {len(text)} chars")
-                if insert_text(text, method=self.config.get("insert_method", "auto")) \
-                        and self.config.get("learn_corrections", True):
+                method = self.config.get("insert_method", "auto")
+                items = self.context.finish(context) if context else []
+                with self.context.own_writes():
+                    if items:
+                        inserted = insert_with_context(text, items, context.target, method)
+                    else:
+                        inserted = insert_text(text, method=method)
+                if items:
+                    logger.info(f"Inserted with {len(items)} attachment(s) into {context.target.kind}")
+                    if inserted:
+                        self.context.consume(items)
+                    stats["attachments"] = len(items)
+                if inserted and self.config.get("learn_corrections", True):
                     self.corrections.watch(
                         text, known={(e.get("from"), e.get("to")) for e in entries})
                 self.send("transcription_done", {"text": text, **stats})
@@ -457,7 +592,11 @@ class Backend:
             self.send("transcription_done", {"text": "", "empty": True, "command": True,
                                              "reason": reason, **stats})
             return
-        insert_text(result, method=self.config.get("insert_method", "auto"))
+        if self._cancelled({"command": True, **stats}):
+            return
+        self.esc_hook.disarm()
+        with self.context.own_writes():
+            insert_text(result, method=self.config.get("insert_method", "auto"))
         self.send("transcription_done", {"text": result, "command": True,
                                          "instruction": instruction,
                                          "replaced": bool(selection.strip()),
@@ -664,11 +803,14 @@ class Backend:
                 cmd = msg.get("command")
 
                 if cmd == "start_recording":
-                    self.handle_start_recording()
+                    self.handle_start_recording(
+                        command=bool((msg.get("data") or {}).get("command")))
                 elif cmd == "stop_recording":
                     self.handle_stop_recording()
                 elif cmd == "stop_command":
                     self.handle_stop_recording(command=True)
+                elif cmd == "cancel_recording":
+                    self.handle_cancel_recording()
                 elif cmd == "pause_recording":
                     if self.recorder and self.recorder.is_recording:
                         self.recorder.pause()
@@ -679,30 +821,11 @@ class Backend:
                         self.send("recording_resumed")
                 elif cmd == "list_devices":
                     try:
-                        import sounddevice as sd
-                        devices = sd.query_devices()
-                        input_devices = []
-                        seen_names = set()
-                        default_input = sd.default.device[0]
-                        for i, d in enumerate(devices):
-                            if d['max_input_channels'] > 0:
-                                # Sanitize device name (fix encoding issues)
-                                name = d['name']
-                                try:
-                                    name = name.encode('utf-8', errors='replace').decode('utf-8')
-                                except Exception:
-                                    name = name.encode('ascii', errors='replace').decode('ascii')
-                                # Deduplicate by name
-                                if name in seen_names:
-                                    continue
-                                seen_names.add(name)
-                                input_devices.append({
-                                    "index": i,
-                                    "name": name,
-                                    "channels": d['max_input_channels'],
-                                    "default": i == default_input,
-                                })
-                        self.send("devices", {"devices": input_devices})
+                        # Rescan so a mic plugged in since the start shows up
+                        # (never while a stream is open).
+                        if not (self.recorder and self.recorder.is_recording):
+                            refresh_devices()
+                        self.send("devices", {"devices": input_devices()})
                     except Exception as e:
                         self.send("error", {"message": f"Device listing failed: {e}"})
                 elif cmd == "save_config":
@@ -724,6 +847,8 @@ class Backend:
                 elif cmd == "quit":
                     logger.info("Quit command received")
                     self._running = False
+                    self.esc_hook.disarm()
+                    self.muter.shutdown()
                     ollama_manager.stop()  # don't orphan our serve child
                     break
                 else:
@@ -736,7 +861,9 @@ class Backend:
                 self.send("error", {"message": str(e)})
 
         # Also reached when Electron dies and stdin closes – never orphan
-        # the portable ollama serve child.
+        # the portable ollama serve child, never leave the speakers muted.
+        self.esc_hook.disarm()
+        self.muter.shutdown()
         ollama_manager.stop()
         logger.info("Backend stopped.")
 

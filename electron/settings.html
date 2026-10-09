@@ -11,7 +11,7 @@
     --bg: #ffffff;
     --fg: #1a1a1a;
     --fg-muted: #333;
-    --fg-dim: #999;
+    --fg-dim: #6b6b6b;
     --accent: #00b894;
     --card-bg: #fafafa;
     --card-border: #f0f0f0;
@@ -209,21 +209,26 @@
   /* ── Hotkey ── */
   .hotkey-display { display: flex; align-items: center; gap: 8px; flex-shrink: 1; min-width: 0; }
   .hotkey-value {
-    font-family: 'Consolas', 'SF Mono', monospace;
-    font-size: 12px;
-    background: var(--input-bg);
-    border: 1px solid var(--input-border);
-    border-radius: 8px;
-    padding: 8px 14px;
-    min-width: 100px; max-width: 180px;
-    text-align: center; color: var(--fg);
-    letter-spacing: 0.5px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+    min-height: 34px; padding: 0 2px; min-width: 0;
+    border: 1px solid transparent; border-radius: 8px;
+    font-size: 12px; color: var(--fg-dim);
+    white-space: nowrap; overflow: hidden;
   }
   .hotkey-value.recording {
-    border-color: #ef4444; color: #ef4444;
+    border-color: #ef4444; color: #ef4444; padding: 0 10px;
     animation: hotkey-pulse 1s infinite;
   }
+  kbd {
+    display: inline-block; min-width: 26px; padding: 5px 8px;
+    font-family: inherit; font-size: 12px; font-weight: 600; line-height: 1;
+    text-align: center; color: var(--fg-muted);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border); border-radius: 6px;
+    box-shadow: inset 0 -1px 0 var(--input-border);
+  }
+  .keys { display: inline-flex; gap: 3px; vertical-align: baseline; }
+  .field-desc kbd { min-width: 0; padding: 2px 5px; font-size: 11px; border-radius: 5px; }
   .field-desc.warn { color: #ef4444; }
   .learn-auto { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--card-border); }
   @keyframes hotkey-pulse {
@@ -369,7 +374,7 @@
     font-weight: 600; letter-spacing: 0.5px; flex-shrink: 0;
   }
   .status-badge.ok { background: #e6f9f0; color: #059669; }
-  .status-badge.loading { background: #fff3e0; color: #d97706; }
+  .status-badge.loading { background: #fff3e0; color: #a84d06; }
   [data-theme="dark"] .status-badge.ok { background: rgba(34, 197, 94, 0.18); color: #34d399; }
   [data-theme="dark"] .status-badge.loading { background: rgba(217, 119, 6, 0.20); color: #fbbf24; }
 
@@ -505,14 +510,14 @@
             <div class="field-desc" data-i18n="general.combo.desc">Drücke „Ändern" und dann deine gewünschte Kombination</div>
           </div>
           <div class="hotkey-display">
-            <div class="hotkey-value" id="hotkeyValue">Ctrl+Shift+Space</div>
+            <div class="hotkey-value" id="hotkeyValue" data-hotkey="ctrl+shift+space"></div>
             <button class="btn-sm" id="hotkeyBtn" data-i18n="general.change">Ändern</button>
           </div>
         </div>
         <div class="field">
           <div>
             <div class="field-label" data-i18n="general.mode">Modus</div>
-            <div class="field-desc" data-i18n="general.mode.desc">Wie die Aufnahme gesteuert wird</div>
+            <div class="field-desc" data-i18n="general.mode.desc">Wie die Aufnahme gesteuert wird. {esc} bricht ein Diktat ab.</div>
           </div>
           <select id="modeSelect">
             <option value="hold_to_speak" data-i18n="general.mode.hold">Halten zum Sprechen</option>
@@ -539,7 +544,7 @@
             <div class="field-desc" data-i18n="cmd.hotkey.desc">Gleicher Modus wie beim Diktieren (halten oder drücken)</div>
           </div>
           <div class="hotkey-display">
-            <div class="hotkey-value" id="cmdHotkeyValue">ctrl+alt+space</div>
+            <div class="hotkey-value" id="cmdHotkeyValue" data-hotkey="ctrl+alt+space"></div>
             <button class="btn-sm" id="cmdHotkeyBtn" data-i18n="general.change">Ändern</button>
           </div>
         </div>
@@ -551,6 +556,21 @@
           <span data-i18n="cmd.ex.5">Ohne Markierung: „Schreib eine kurze Absage für morgen“</span>
         </div>
         <div class="field-desc cmd-note" data-i18n="cmd.note">Nutzt die lokale KI aus „Text-Bereinigung“ – auch wenn die Bereinigung selbst aus ist.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title" data-i18n="ctx.title">KI-Kontext</div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="ctx.enable">Kopiertes mitschicken</div>
+            <div class="field-desc" data-i18n="ctx.enable.desc">Was du während des Diktats kopierst, kommt mit, wenn du in eine KI-App, ein Terminal oder den Browser sprichst. Einen Screenshot machst du mit {snip}.</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="ctxToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="field-desc cmd-note" data-i18n="ctx.note">ChatGPT, Claude und Gemini bekommen Bilder direkt eingefügt und Text als Zitat unter deinem Satz. Im Terminal (Claude Code, Codex) steht der Dateipfad vor dem Satz. Bei KI-Apps und Terminals zählt auch, was du bis zu einer Minute vor dem Start kopiert hast.</div>
       </div>
 
       <div class="card">
@@ -830,6 +850,16 @@
             <div id="micTestBar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #22c55e, #4ade80); border-radius: 6px; transition: width 0.08s ease-out;"></div>
           </div>
         </div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="system.mute">Andere Wiedergabe stummschalten</div>
+            <div class="field-desc" data-i18n="system.mute.desc">Musik und Videos sind still, solange du sprichst. Danach ist der Ton sofort wieder da.</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="muteToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
       </div>
 
       <div class="card">
@@ -870,6 +900,7 @@
 
 <script src="model-catalog.js"></script>
 <script src="sprites.js"></script>
+<script src="keycaps.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
 
@@ -885,7 +916,7 @@
       'general.hotkey': 'Hotkey', 'general.combo': 'Tastenkombination',
       'general.combo.desc': 'Drücke „Ändern" und dann deine gewünschte Kombination',
       'general.change': 'Ändern', 'general.waiting': 'Warte auf Eingabe...',
-      'general.mode': 'Modus', 'general.mode.desc': 'Wie die Aufnahme gesteuert wird',
+      'general.mode': 'Modus', 'general.mode.desc': 'Wie die Aufnahme gesteuert wird. {esc} bricht ein Diktat ab.',
       'general.mode.hold': 'Halten zum Sprechen', 'general.mode.press': 'Drücken für Start/Stopp',
       'cmd.title': 'Befehlsmodus', 'cmd.enable': 'Text per Sprache umschreiben',
       'cmd.enable.desc': 'Text markieren, Befehls-Hotkey drücken und sagen, was damit passieren soll',
@@ -895,6 +926,9 @@
       'cmd.ex.5': 'Ohne Markierung: „Schreib eine kurze Absage für morgen“',
       'cmd.note': 'Nutzt die lokale KI aus „Text-Bereinigung“ – auch wenn die Bereinigung selbst aus ist.',
       'cmd.same': 'Muss sich vom Diktier-Hotkey unterscheiden',
+      'ctx.title': 'KI-Kontext', 'ctx.enable': 'Kopiertes mitschicken',
+      'ctx.enable.desc': 'Was du während des Diktats kopierst, kommt mit, wenn du in eine KI-App, ein Terminal oder den Browser sprichst. Einen Screenshot machst du mit {snip}.',
+      'ctx.note': 'ChatGPT, Claude und Gemini bekommen Bilder direkt eingefügt und Text als Zitat unter deinem Satz. Im Terminal (Claude Code, Codex) steht der Dateipfad vor dem Satz. Bei KI-Apps und Terminals zählt auch, was du bis zu einer Minute vor dem Start kopiert hast.',
       'speech.title': 'Sprache', 'speech.lang': 'Sprache', 'speech.lang.desc': '99 Sprachen verfügbar',
       'speech.autodetect': 'Automatische Spracherkennung',
       'speech.autodetect.desc': 'Erkennt die gesprochene Sprache automatisch',
@@ -975,7 +1009,10 @@
       'acc.violet': 'Violett', 'acc.red': 'Rot', 'acc.amber': 'Bernstein',
       'system.audio': 'Audio', 'system.mic': 'Mikrofon', 'system.mic.desc': 'Audioeingangsgerät auswählen',
       'system.mic.default': 'Standard (System)', 'system.mic.defaulttag': ' (Standard)',
+      'system.mic.missing': ' (nicht verbunden)',
       'system.mictest': 'Mikrofon-Test', 'system.mictest.desc': 'Prüfe ob dein Mikrofon funktioniert',
+      'system.mute': 'Andere Wiedergabe stummschalten',
+      'system.mute.desc': 'Musik und Videos sind still, solange du sprichst. Danach ist der Ton sofort wieder da.',
       'system.insert': 'Texteingabe', 'system.method': 'Einfügemethode',
       'system.method.desc': '„Tippen" für Terminals/Apps, die Strg+V ignorieren',
       'system.method.auto': 'Automatisch (Strg+V, Fallback Tippen)', 'system.method.type': 'Immer tippen',
@@ -993,7 +1030,7 @@
       'general.hotkey': 'Hotkey', 'general.combo': 'Key combination',
       'general.combo.desc': 'Press "Change", then your desired combination',
       'general.change': 'Change', 'general.waiting': 'Waiting for input...',
-      'general.mode': 'Mode', 'general.mode.desc': 'How recording is controlled',
+      'general.mode': 'Mode', 'general.mode.desc': 'How recording is controlled. {esc} cancels a dictation.',
       'general.mode.hold': 'Hold to speak', 'general.mode.press': 'Press to start/stop',
       'cmd.title': 'Command mode', 'cmd.enable': 'Rewrite text by voice',
       'cmd.enable.desc': 'Select text, press the command hotkey and say what should happen to it',
@@ -1003,6 +1040,9 @@
       'cmd.ex.5': 'Nothing selected: “Write a short decline for tomorrow”',
       'cmd.note': 'Uses the local AI from “Text Cleanup” – even when cleanup itself is off.',
       'cmd.same': 'Must differ from the dictation hotkey',
+      'ctx.title': 'AI context', 'ctx.enable': 'Send copied content along',
+      'ctx.enable.desc': 'When you dictate into an AI app, a terminal or the browser, whatever you copy meanwhile goes along. Take a screenshot with {snip}.',
+      'ctx.note': 'ChatGPT, Claude and Gemini get images pasted in and text quoted below your sentence. In a terminal (Claude Code, Codex) the file path goes before the sentence. For AI apps and terminals, anything copied up to a minute before you start counts too.',
       'speech.title': 'Language', 'speech.lang': 'Language', 'speech.lang.desc': '99 languages available',
       'speech.autodetect': 'Automatic language detection',
       'speech.autodetect.desc': 'Detects the spoken language automatically',
@@ -1083,7 +1123,10 @@
       'acc.violet': 'Violet', 'acc.red': 'Red', 'acc.amber': 'Amber',
       'system.audio': 'Audio', 'system.mic': 'Microphone', 'system.mic.desc': 'Select the audio input device',
       'system.mic.default': 'Default (system)', 'system.mic.defaulttag': ' (default)',
+      'system.mic.missing': ' (not connected)',
       'system.mictest': 'Microphone test', 'system.mictest.desc': 'Check that your microphone works',
+      'system.mute': 'Mute other audio while dictating',
+      'system.mute.desc': 'Music and videos go quiet while you speak and come back right after.',
       'system.insert': 'Text insertion', 'system.method': 'Insert method',
       'system.method.desc': '"Type" for terminals/apps that ignore Ctrl+V',
       'system.method.auto': 'Automatic (Ctrl+V, typing fallback)', 'system.method.type': 'Always type',
@@ -1096,11 +1139,17 @@
   let uiLang = 'de';
   const t = (key) => (I18N[uiLang] && I18N[uiLang][key]) || I18N.de[key] || key;
 
+  // Key placeholders in the copy, shown as keycaps.
+  const KEY_SLOTS = { '{esc}': 'escape', '{snip}': 'win+shift+s' };
+
   function applyI18n(lang) {
     uiLang = I18N[lang] ? lang : 'de';
     document.documentElement.lang = uiLang;
     document.querySelectorAll('[data-i18n]').forEach(el => {
-      el.textContent = t(el.dataset.i18n);
+      const text = t(el.dataset.i18n);
+      const slots = Object.fromEntries(Object.entries(KEY_SLOTS).filter(([k]) => text.includes(k)));
+      if (Object.keys(slots).length) window.NoTypeKeys.fill(el, text, slots, uiLang);
+      else el.textContent = text;
     });
     document.querySelectorAll('[data-i18n-label]').forEach(el => {
       el.label = t(el.dataset.i18nLabel);
@@ -1108,6 +1157,9 @@
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
       el.placeholder = t(el.dataset.i18nPlaceholder);
     });
+    // Key names are translated too (Strg / Ctrl).
+    if (recordingHotkey !== 'hotkey') showHotkey('hotkey', hotkeyOf('hotkey'));
+    if (recordingHotkey !== 'cmdHotkey') showHotkey('cmdHotkey', hotkeyOf('cmdHotkey'));
     renderUpdate();
   }
 
@@ -1170,10 +1222,19 @@
   // `recordingHotkey` is the id prefix of the recorder in use ('hotkey' for
   // dictation, 'cmdHotkey' for command mode) – or false.
   let hotkeyBefore = '';
+  // The combo itself ("ctrl+shift+space") lives in data-hotkey; the box shows
+  // it as keycaps.
+  function hotkeyOf(which) { return $(which + 'Value').dataset.hotkey || ''; }
+  function showHotkey(which, hotkey) {
+    $(which + 'Value').dataset.hotkey = hotkey;
+    window.NoTypeKeys.render($(which + 'Value'), hotkey, uiLang);
+  }
+  showHotkey('hotkey', hotkeyOf('hotkey'));
+  showHotkey('cmdHotkey', hotkeyOf('cmdHotkey'));
   function startHotkeyCapture(which) {
     if (recordingHotkey) return;
     recordingHotkey = which;
-    hotkeyBefore = $(which + 'Value').textContent;
+    hotkeyBefore = hotkeyOf(which);
     // Park the global shortcut so pressing the new combo can't start a dictation.
     if (window.notype.setHotkeyCapture) window.notype.setHotkeyCapture(true);
     hotkeyParts.clear();
@@ -1186,6 +1247,9 @@
   const renderCmdCard = () =>
     $('cmdToggle').closest('.card').classList.toggle('off', !$('cmdToggle').checked);
   $('cmdToggle').addEventListener('change', renderCmdCard);
+  const renderCtxCard = () =>
+    $('ctxToggle').closest('.card').classList.toggle('off', !$('ctxToggle').checked);
+  $('ctxToggle').addEventListener('change', renderCtxCard);
 
   document.addEventListener('keydown', (e) => {
     if (!recordingHotkey) return;
@@ -1201,7 +1265,7 @@
 
     const mapped = map[key] || (e.code.startsWith('Key') ? e.code.slice(3).toLowerCase() : key);
     hotkeyParts.add(mapped);
-    $(recordingHotkey + 'Value').textContent = Array.from(hotkeyParts).join('+');
+    window.NoTypeKeys.render($(recordingHotkey + 'Value'), Array.from(hotkeyParts).join('+'), uiLang);
   });
 
   document.addEventListener('keyup', (e) => {
@@ -1214,7 +1278,7 @@
       $(which + 'Btn').textContent = t('general.change');
       let combo = Array.from(hotkeyParts).join('+');
       // Both hotkeys on one combo can't work – keep the previous one.
-      const other = $(which === 'hotkey' ? 'cmdHotkeyValue' : 'hotkeyValue').textContent.trim();
+      const other = hotkeyOf(which === 'hotkey' ? 'cmdHotkey' : 'hotkey');
       if (combo.toLowerCase() === other.toLowerCase()) {
         combo = hotkeyBefore;
         // Say why inline – the row's description turns into the reason.
@@ -1231,7 +1295,7 @@
       } else {
         markDirty();
       }
-      $(which + 'Value').textContent = combo;
+      showHotkey(which, combo);
     }
   });
 
@@ -1844,12 +1908,14 @@
     currentConfig = cfg;
     applyI18n(cfg.app_language || 'de');
     $('appLangSelect').value = I18N[cfg.app_language] ? cfg.app_language : 'de';
-    $('hotkeyValue').textContent = cfg.hotkey || 'ctrl+shift+space';
+    showHotkey('hotkey', cfg.hotkey || 'ctrl+shift+space');
     $('modeSelect').value = cfg.mode || 'hold_to_speak';
     $('cmdToggle').checked = cfg.command_enabled !== false;
     $('learnToggle').checked = cfg.learn_corrections !== false;
-    $('cmdHotkeyValue').textContent = cfg.command_hotkey || 'ctrl+alt+space';
+    showHotkey('cmdHotkey', cfg.command_hotkey || 'ctrl+alt+space');
     renderCmdCard();
+    $('ctxToggle').checked = cfg.ai_context !== false;
+    renderCtxCard();
     $('langSelect').value = cfg.language || 'de';
     $('autoLangToggle').checked = cfg.auto_language_detect !== false;
     selectedModel = cfg.model_size || 'small';
@@ -1889,6 +1955,7 @@
     $('autostartToggle').checked = cfg.autostart === true;
     $('updateCheckToggle').checked = cfg.update_check !== false;
     $('insertMethodSelect').value = cfg.insert_method || 'auto';
+    $('muteToggle').checked = cfg.mute_while_dictating === true;
 
     // Performance
     $('beamSelect').value = cfg.beam_size || 'auto';
@@ -1918,11 +1985,12 @@
     const micVal = $('micSelect').value;
     const newConfig = {
       app_language: $('appLangSelect').value,
-      hotkey: $('hotkeyValue').textContent.trim(),
+      hotkey: hotkeyOf('hotkey'),
       mode: $('modeSelect').value,
       command_enabled: $('cmdToggle').checked,
       learn_corrections: $('learnToggle').checked,
-      command_hotkey: $('cmdHotkeyValue').textContent.trim(),
+      command_hotkey: hotkeyOf('cmdHotkey'),
+      ai_context: $('ctxToggle').checked,
       language: $('langSelect').value,
       auto_language_detect: $('autoLangToggle').checked,
       model_size: selectedModel,
@@ -1941,7 +2009,11 @@
       autostart: $('autostartToggle').checked,
       update_check: $('updateCheckToggle').checked,
       insert_method: $('insertMethodSelect').value,
-      mic_device_index: micVal === '' ? null : parseInt(micVal),
+      // By name: a PortAudio index points at another device once one is
+      // plugged in or out. The backend looks the name up per dictation.
+      mic_device_name: micVal === '' ? null : micVal,
+      mic_device_index: null,
+      mute_while_dictating: $('muteToggle').checked,
       beam_size: $('beamSelect').value,
       compute_type: $('computeSelect').value,
       vad_sensitivity: parseInt($('vadSlider').value),
@@ -2038,18 +2110,31 @@
     }
     window.notype.onDevices((devices) => {
       const sel = $('micSelect');
+      // Keep the choice the user is editing across a re-list.
+      const picked = dirty ? sel.value : null;
       // Keep "Standard" option, remove rest
       while (sel.options.length > 1) sel.remove(1);
       devices.forEach(d => {
         const opt = document.createElement('option');
-        opt.value = d.index;
+        opt.value = d.name;
         opt.textContent = d.name + (d.default ? t('system.mic.defaulttag') : '');
         sel.appendChild(opt);
       });
-      // Set current value
-      if (currentConfig.mic_device_index != null) {
-        sel.value = currentConfig.mic_device_index;
+      // Stored by name; older settings files still carry an index.
+      let want = picked != null ? picked : currentConfig.mic_device_name || '';
+      if (!want && picked == null && currentConfig.mic_device_index != null) {
+        const legacy = devices.find(d => d.index === currentConfig.mic_device_index);
+        if (legacy) want = legacy.name;
       }
+      // The chosen mic is unplugged right now: keep it listed, so opening
+      // and saving the settings doesn't quietly switch to the default.
+      if (want && !devices.some(d => d.name === want)) {
+        const opt = document.createElement('option');
+        opt.value = want;
+        opt.textContent = want + t('system.mic.missing');
+        sel.appendChild(opt);
+      }
+      sel.value = want;
     });
     let lastOllamaMsg = '';
     window.notype.onOllamaProgress((p) => {
@@ -2078,6 +2163,29 @@
   }
 
   // ── Mic Test ──
+  // The backend names devices the way PortAudio does, the browser has its
+  // own ids and labels. Match by name so the test hears the chosen mic:
+  // ignore case, punctuation and the "4- " port number Windows puts in
+  // front of USB devices, and compare only the start (MME cuts names off
+  // at 31 characters).
+  const micKey = (s) => String(s || '').toLowerCase()
+    .replace(/\(\d+- /, '(').replace(/[^a-z0-9äöüß]+/g, '');
+  async function openMicStream(name) {
+    let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (!name) return stream;
+    try {
+      const want = micKey(name).slice(0, 24);
+      const list = await navigator.mediaDevices.enumerateDevices();
+      const match = list.find(d => d.kind === 'audioinput' && d.label &&
+        d.deviceId !== 'default' && d.deviceId !== 'communications' &&
+        micKey(d.label).startsWith(want));
+      if (match) {
+        stream.getTracks().forEach(tr => tr.stop());
+        stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: match.deviceId } } });
+      }
+    } catch (_) { /* keep the default stream */ }
+    return stream;
+  }
   let micTestStream = null;
   let micTestContext = null;
   let micTestAnimId = null;
@@ -2090,7 +2198,7 @@
     }
 
     try {
-      micTestStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micTestStream = await openMicStream($('micSelect').value);
       micTestContext = new AudioContext();
       const source = micTestContext.createMediaStreamSource(micTestStream);
       const analyser = micTestContext.createAnalyser();
@@ -2137,6 +2245,12 @@
 
   // Cleanup on close
   window.addEventListener('beforeunload', stopMicTest);
+  // Another mic picked mid-test: listen to that one.
+  $('micSelect').addEventListener('change', () => {
+    if (!micTestStream) return;
+    stopMicTest();
+    $('micTestBtn').click();
+  });
 </script>
 </body>
 </html>

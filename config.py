@@ -73,6 +73,9 @@ DEFAULT_CONFIG = {
     "llm_model": "qwen3:4b-instruct",  # Ollama model for cleanup_mode="ai"
     "llm_min_words": 8,              # below this, "ai" mode uses rules only (latency)
     "insert_method": "auto",         # auto (Ctrl+V, fallback typing) | type
+    "mic_device_name": None,         # input device by name, None = system default (replaces mic_device_index)
+    "mute_while_dictating": False,   # mute the speakers while recording
+    "ai_context": True,              # copies around a dictation into an AI app/terminal go along
     "live_preview_enabled": True,    # rolling transcript in the overlay while recording
     "success_toast": False,          # popup after successful dictation (errors always show)
     "gpu_safe_mode": False,          # disable HW acceleration (flaky-driver escape hatch)

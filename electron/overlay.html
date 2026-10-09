@@ -55,6 +55,10 @@
   .shape { will-change: transform, opacity; }
   body.leaving .shape { animation: leaveOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards !important; }
   @keyframes leaveOut { to { opacity: 0; transform: scale(0.94); } }
+  /* Esc: the take is thrown away. The shape folds shut instead of the usual
+     fade, so a cancel never reads like a finished dictation. */
+  body.leaving.cancelled .shape { animation: cancelOut 0.2s cubic-bezier(0.55, 0, 0.8, 0.2) forwards !important; }
+  @keyframes cancelOut { to { opacity: 0; transform: scale(0.72, 0.18); filter: blur(2px); } }
   /* On the section, not the shape – swapping the shape's animation would
      replay its entry once the nudge ends. */
   body.busy .style { animation: nudge 0.3s ease; }
@@ -232,9 +236,63 @@
   .s-mimic .ch-row { gap: 8px; }
   #mmCv { width: 128px; height: 96px; }
   .s-mimic .bubble { margin-bottom: 22px; }
+
+  /* ═══ AI CONTEXT CHIPS ════════════════════════════════════════════
+     What goes along with the dictation (screenshot, image, copied text).
+     main.js makes the window 40 px taller for them: the strip sits above
+     the shape, below it when the overlay is at the top of the screen. The
+     settings preview (demo) has no strip. */
+  body.strip:not([data-pos="top"]) .style { top: 40px; }
+  body.strip[data-pos="top"] .style { bottom: 40px; }
+  .chips {
+    position: fixed; left: 0; right: 0; top: 0; height: 40px; z-index: 2;
+    display: none; align-items: flex-end; justify-content: center; gap: 6px;
+    padding: 0 24px 2px;
+    /* --chip-pull: how far the chips move toward the shape, so they sit
+       about 10 px from its edge whatever empty margin the style has
+       (the Island sets it per frame while it grows). */
+    transform: translateY(var(--chip-pull, 0px));
+  }
+  body[data-style="amoled"], body[data-style="matrix"], body[data-style="buddy"] { --chip-pull: 6px; }
+  body[data-style="halo"] { --chip-pull: 18px; }   /* the rim glow needs a little room */
+  body[data-style="slime"], body[data-style="dragon"], body[data-style="mimic"] { --chip-pull: 2px; }
+  body.strip .chips { display: flex; }
+  body[data-pos="top"] .chips {
+    top: auto; bottom: 0; align-items: flex-start; padding: 2px 24px 0;
+    transform: translateY(calc(-1 * var(--chip-pull, 0px)));
+  }
+  .chip {
+    flex: 0 1 auto; min-width: 0; max-width: 210px; height: 30px; border-radius: 15px;
+    display: flex; align-items: center; gap: 7px; padding: 0 13px 0 4px;
+    background: #000; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.11);
+    font-size: 12.5px; line-height: 1; white-space: nowrap; color: rgba(255, 255, 255, 0.9);
+    transform-origin: 50% 100%;
+    animation: popIn 0.42s cubic-bezier(0.2, 1.25, 0.35, 1) both;
+  }
+  body[data-pos="top"] .chip { transform-origin: 50% 0; }
+  /* image chips keep their label; long text previews give way first */
+  .chip.img { flex-shrink: 0; }
+  /* a small card, not a stadium: fully rounded it read like a switch */
+  .chip-thumb {
+    height: 22px; width: auto; max-width: 36px; min-width: 22px; flex: 0 0 auto;
+    border-radius: 6px; object-fit: cover;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14);
+  }
+  .chip-ico {
+    width: 22px; height: 22px; border-radius: 11px; flex: 0 0 auto;
+    display: grid; place-items: center; background: rgba(var(--glow), 0.16);
+  }
+  .chip-ico svg { width: 12px; height: 12px; fill: none; stroke: var(--a1); stroke-width: 1.6; stroke-linecap: round; }
+  .chip-lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .chip-sub { flex: 0 0 auto; color: rgba(255, 255, 255, 0.5); font-variant-numeric: tabular-nums; }
+  body.leaving .chip { animation: leaveOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards !important; }
+  body.leaving.cancelled .chip { animation: cancelOut 0.2s cubic-bezier(0.55, 0, 0.8, 0.2) forwards !important; }
 </style>
 </head>
 <body data-style="amoled" data-accent="mint" data-pos="bottom" data-state="idle">
+
+  <!-- AI context: what goes along with the dictation -->
+  <div class="chips" id="chips"></div>
 
   <!-- 1. AMOLED BAR -->
   <section class="style s-amoled">
@@ -687,6 +745,10 @@ function renderIsland(dt, t) {
   shape.style.width = IS.w.toFixed(1) + 'px';
   shape.style.height = IS.h.toFixed(1) + 'px';
   shape.style.borderRadius = Math.min(IS.h / 2, 26).toFixed(1) + 'px';
+  // Chips ride along ~10 px from the shape's edge (section: 116 px, 18 px padding).
+  const free = S.pos === 'center' ? (116 - IS.h) / 2 : 116 - 18 - IS.h;
+  const pull = Math.max(0, free - 8).toFixed(1) + 'px';
+  if (pull !== IS.pull) { IS.pull = pull; document.body.style.setProperty('--chip-pull', pull); }
   const open = clamp01((IS.w - IS.COMPACT_W - 30) / 90);
   const isText = $('isText');
   isText.style.opacity = (S.hasText ? open : 0).toFixed(3);
@@ -1279,11 +1341,12 @@ function replayEntry() {
 }
 function recordingStarted(opts) {
   S.command = !!(opts && opts.command);
-  document.body.classList.remove('leaving', 'busy');
+  document.body.classList.remove('leaving', 'busy', 'cancelled');
   S.leaving = false;
   S.recAt = now(); S.recEnd = 0;
   bandsIn.fill(0); bandsSm.fill(0); levelIn = levelSm = 0;
   IS.w = IS.h = 40; IS.vw = IS.vh = 0;
+  $('chips').replaceChildren();
   setState('listening');
   setText(L().listen, 'status');
   replayEntry();
@@ -1301,6 +1364,12 @@ function transcriptionDone(data) {
   if (data.text) setText(String(data.text), 'final');
   else setText(L().done, 'status');
 }
+// Esc: main.js hides the window right after; this picks the exit and sound.
+function recordingCancelled() {
+  if (!S.recEnd) S.recEnd = now();
+  document.body.classList.add('cancelled');
+  if (S.sounds && !DEMO) chime('cancel');
+}
 function leaving() {
   S.leaving = true;
   document.body.classList.add('leaving');
@@ -1316,10 +1385,12 @@ function applyStyle(style, opts) {
   style = LEGACY_STYLES[style] || style;
   S.style = STYLES.includes(style) ? style : 'amoled';
   document.body.dataset.style = S.style;
+  if (S.style !== 'island') { document.body.style.removeProperty('--chip-pull'); IS.pull = ''; }
   if (opts) {
     if (opts.accent) S.accent = ACCENTS[opts.accent] ? opts.accent : 'mint';
     if (opts.position) S.pos = ['top', 'bottom', 'center'].includes(opts.position) ? opts.position : 'bottom';
     if (typeof opts.sounds === 'boolean') S.sounds = opts.sounds;
+    if (typeof opts.strip === 'boolean') document.body.classList.toggle('strip', opts.strip && !DEMO);
   }
   document.body.dataset.accent = S.accent;
   document.body.dataset.pos = S.pos;
@@ -1333,6 +1404,58 @@ function applyLang(lang) {
     const st = S.state === 'processing' ? L().proc : S.state === 'done' ? L().done : L().listen;
     setText(st, 'status');
   }
+}
+
+// ── AI context chips ─────────────────────────────────────────────
+// One chip per copy that goes along: the screenshot's thumbnail, or the
+// start of the copied text. Copied text is user content: textContent only.
+const CHIP_TXT = {
+  de: { screenshot: 'Screenshot', image: 'Bild', lines: 'Zeilen', quote: ['„', '“'] },
+  en: { screenshot: 'Screenshot', image: 'Image', lines: 'lines', quote: ['“', '”'] },
+};
+const SVG_NS = 'http://www.w3.org/2000/svg';
+function textGlyph() {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 12 12');
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', 'M2 3h8M2 6h8M2 9h5');
+  svg.append(path);
+  const ico = document.createElement('span');
+  ico.className = 'chip-ico';
+  ico.append(svg);
+  return ico;
+}
+function addAttachment(a) {
+  if (!a || (a.kind !== 'image' && a.kind !== 'text')) return;
+  const t = CHIP_TXT[S.lang] || CHIP_TXT.de;
+  const chip = document.createElement('div');
+  const lbl = document.createElement('span');
+  chip.className = 'chip';
+  lbl.className = 'chip-lbl';
+  if (a.kind === 'image') {
+    chip.classList.add('img');
+    if (typeof a.thumb === 'string' && a.thumb.startsWith('data:image/png;base64,')) {
+      const img = document.createElement('img');
+      img.className = 'chip-thumb';
+      img.alt = '';
+      img.src = a.thumb;
+      chip.append(img);
+    } else {
+      chip.append(textGlyph());
+    }
+    lbl.textContent = a.source === 'screenshot' ? t.screenshot : t.image;
+    chip.append(lbl);
+  } else {
+    lbl.textContent = t.quote[0] + String(a.preview || '') + t.quote[1];
+    chip.append(textGlyph(), lbl);
+    if (a.lines > 1) {
+      const sub = document.createElement('span');
+      sub.className = 'chip-sub';
+      sub.textContent = `${a.lines} ${t.lines}`;
+      chip.append(sub);
+    }
+  }
+  $('chips').append(chip);
 }
 
 // ── Sounds (Web Audio) – short glassy two-note chimes ─────────────
@@ -1353,6 +1476,11 @@ function tone(ctx, freq, t0, peak, dur, type) {
 function chime(type) {
   try {
     const ctx = getAudioCtx(), t = ctx.currentTime;
+    if (type === 'cancel') {
+      // Lower and shorter than the stop chime: dropped, not done.
+      [440, 329.63].forEach((f, i) => tone(ctx, f, t + i * 0.07, 0.08, 0.24));
+      return;
+    }
     const notes = type === 'start' ? [659.25, 987.77] : [987.77, 659.25];
     const peak = type === 'start' ? 0.12 : 0.1;
     notes.forEach((f, i) => {
@@ -1392,8 +1520,10 @@ if (!DEMO) {
   nt.onRecordingStopped(recordingStopped);
   if (nt.onTranscriptionDone) nt.onTranscriptionDone(transcriptionDone);
   if (nt.onOverlayLeaving) nt.onOverlayLeaving(leaving);
+  if (nt.onRecordingCancelled) nt.onRecordingCancelled(recordingCancelled);
   if (nt.onBusy) nt.onBusy(busy);
   if (nt.onSetStyle) nt.onSetStyle(applyStyle);
+  if (nt.onAttachment) nt.onAttachment(addAttachment);
   if (nt.onPreviewEnabled) nt.onPreviewEnabled((on) => { S.preview = !!on; });
   if (nt.onAppLang) nt.onAppLang(applyLang);
   if (nt.onPreviewText) {

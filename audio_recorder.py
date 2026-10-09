@@ -6,6 +6,7 @@ Supports pause/resume and device selection.
 """
 
 import logging
+import re
 import threading
 import numpy as np
 import sounddevice as sd
@@ -211,3 +212,94 @@ class AudioRecorder:
     def list_devices():
         """List available audio input devices."""
         return sd.query_devices()
+
+
+# ── Input devices ────────────────────────────────────────────────────
+# PortAudio numbers devices in the order it found them when it started, so an
+# index stops meaning the same mic as soon as a USB headset or a Bluetooth
+# device comes or goes. The settings store the mic by NAME and it is looked
+# up again for every dictation.
+
+def refresh_devices():
+    """Rescan devices. PortAudio only enumerates at init, so a mic plugged in
+    after the backend started is invisible until this runs. Never call it
+    while a stream is open."""
+    try:
+        sd._terminate()
+        sd._initialize()
+    except Exception as e:
+        logger.warning(f"Device rescan failed: {e}")
+
+
+def _clean_name(name: str) -> str:
+    try:
+        return name.encode("utf-8", errors="replace").decode("utf-8")
+    except Exception:
+        return name.encode("ascii", errors="replace").decode("ascii")
+
+
+def input_devices() -> list[dict]:
+    """Input devices as the UI lists them: one entry per name, the first
+    PortAudio entry wins (the same rule `find_input_device` resolves with)."""
+    devices = sd.query_devices()
+    try:
+        default_input = sd.default.device[0]
+        if default_input is None or default_input < 0:
+            default_input = sd.query_hostapis(0)["default_input_device"]
+    except Exception:
+        default_input = -1
+    out, seen = [], set()
+    for i, d in enumerate(devices):
+        if d["max_input_channels"] <= 0:
+            continue
+        name = _clean_name(d["name"])
+        if name in seen:
+            continue
+        seen.add(name)
+        out.append({
+            "index": i,
+            "name": name,
+            "channels": d["max_input_channels"],
+            "default": i == default_input,
+        })
+    return out
+
+
+_PORT_PREFIX = re.compile(r"\(\d+- ")
+
+
+def _name_key(name: str) -> str:
+    # Windows numbers same-model USB devices per port ("Mikrofon (4- Auna
+    # Mic CM900)"), and the number changes when the device is replugged.
+    return _PORT_PREFIX.sub("(", name).strip().lower()
+
+
+def find_input_device(name: str):
+    """PortAudio index of the input device called `name`, or None."""
+    if not name:
+        return None
+    devices = input_devices()
+    for d in devices:
+        if d["name"] == name:
+            return d["index"]
+    key = _name_key(name)
+    for d in devices:
+        if _name_key(d["name"]) == key:
+            return d["index"]
+    # MME cuts names off at 31 characters: match a cut name against a full one.
+    for d in devices:
+        short, full = sorted((_name_key(d["name"]), key), key=len)
+        if len(short) >= 20 and full.startswith(short):
+            return d["index"]
+    return None
+
+
+def input_device_name(index) -> str | None:
+    """Name of the input device at `index` (migrating index-based settings)."""
+    try:
+        d = sd.query_devices(index)
+        if d["max_input_channels"] > 0:
+            return _clean_name(d["name"])
+    except Exception:
+        pass
+    return None

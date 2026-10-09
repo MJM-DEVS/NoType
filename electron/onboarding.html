@@ -11,7 +11,7 @@
     --bg: #ffffff;
     --fg: #1a1a1a;
     --fg-muted: #333;
-    --fg-dim: #999;
+    --fg-dim: #6b6b6b;
     --accent: #00b894;
     --card-bg: #fafafa;
     --card-border: #f0f0f0;
@@ -149,12 +149,13 @@
   /* ── Hotkey ── */
   .hotkey-display { display: flex; align-items: center; gap: 8px; flex-shrink: 1; min-width: 0; }
   .hotkey-value {
-    font-family: 'Consolas', 'SF Mono', monospace; font-size: 12px;
-    background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 8px;
-    padding: 8px 14px; min-width: 120px; max-width: 220px; text-align: center; color: var(--fg);
-    letter-spacing: 0.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    display: flex; align-items: center; justify-content: flex-end; gap: 4px;
+    min-height: 34px; padding: 0 2px; min-width: 0;
+    border: 1px solid transparent; border-radius: 8px;
+    font-size: 12px; color: var(--fg-dim);
+    white-space: nowrap; overflow: hidden;
   }
-  .hotkey-value.recording { border-color: #ef4444; color: #ef4444; animation: hotkey-pulse 1s infinite; }
+  .hotkey-value.recording { border-color: #ef4444; color: #ef4444; padding: 0 10px; animation: hotkey-pulse 1s infinite; }
   @keyframes hotkey-pulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.2); }
     50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1); }
@@ -196,9 +197,17 @@
   }
   textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   kbd {
-    font-family: 'Consolas', 'SF Mono', monospace; font-size: 12px; color: var(--fg);
-    background: var(--hover-bg); border: 1px solid var(--input-border); border-radius: 6px; padding: 2px 7px;
+    display: inline-block; min-width: 26px; padding: 5px 8px;
+    font-family: inherit; font-size: 12px; font-weight: 600; line-height: 1;
+    text-align: center; color: var(--fg-muted);
+    background: var(--input-bg);
+    border: 1px solid var(--input-border); border-radius: 6px;
+    box-shadow: inset 0 -1px 0 var(--input-border);
   }
+  .keys { display: inline-flex; gap: 3px; vertical-align: baseline; }
+  .lead kbd { padding: 3px 7px; }
+  .summary kbd { padding: 3px 7px; }
+  #sumHotkey { display: inline-flex; gap: 3px; }
   .success-box { display: none; gap: 10px; align-items: center; font-size: 13px; color: #059669; font-weight: 500; }
   [data-theme="dark"] .success-box { color: #34d399; }
   .success-box.show { display: flex; animation: stepIn 0.3s ease; }
@@ -288,7 +297,7 @@
           <div class="field-desc" data-i18n="h.combo.desc">„Ändern" drücken, dann die gewünschte Kombination.</div>
         </div>
         <div class="hotkey-display">
-          <div class="hotkey-value" id="hotkeyValue">Ctrl+Shift+Space</div>
+          <div class="hotkey-value" id="hotkeyValue"></div>
           <button class="btn-sm" id="hotkeyBtn" data-i18n="h.change">Ändern</button>
         </div>
       </div>
@@ -368,6 +377,7 @@
 </div>
 
 <script src="model-catalog.js"></script>
+<script src="keycaps.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
 
@@ -382,6 +392,7 @@
       'm.lead': 'Wähle das Mikrofon, mit dem du diktieren willst, und sprich kurz – der Balken sollte ausschlagen.',
       'm.device': 'Eingabegerät', 'm.device.desc': 'Headset-Mikrofone liefern die beste Erkennung',
       'm.default': 'Standard (System)', 'm.defaulttag': ' (Standard)', 'm.level': 'Pegel',
+      'm.missing': ' (nicht verbunden)',
       'm.hint': 'Sag ein paar Worte …', 'm.ok': 'Klingt gut – dein Mikrofon funktioniert.',
       'm.error': 'Kein Zugriff auf das Mikrofon. Prüfe die Windows-Datenschutzeinstellungen für Mikrofone.',
       'h.title': 'Hotkey & Modus',
@@ -396,8 +407,8 @@
       'mo.lead': 'Das Erkennungsmodell bestimmt Tempo und Genauigkeit. Für deine Hardware ist eines vorausgewählt.',
       'mo.note': 'Das Modell wird beim ersten Laden einmalig heruntergeladen – danach läuft alles offline.',
       't.title': 'Probediktat',
-      't.lead.hold': 'Klick in das Feld, halte {hotkey} gedrückt und sprich einen Satz. Beim Loslassen erscheint der Text.',
-      't.lead.press': 'Klick in das Feld, drücke {hotkey}, sprich einen Satz und drücke die Kombination erneut.',
+      't.lead.hold': 'Klick in das Feld, halte {hotkey} gedrückt und sprich einen Satz. Beim Loslassen erscheint der Text. {esc} bricht ab.',
+      't.lead.press': 'Klick in das Feld, drücke {hotkey}, sprich einen Satz und drücke die Kombination erneut. {esc} bricht ab.',
       't.placeholder': 'Klick hier rein und sprich …',
       't.success': 'Perfekt! Genau so funktioniert NoType überall, wo du tippen kannst.',
       's.loading': 'Modell wird geladen', 's.ready': 'Bereit', 's.recording': 'Aufnahme läuft',
@@ -422,6 +433,7 @@
       'm.lead': 'Pick the microphone you want to dictate with and say a few words – the bar should move.',
       'm.device': 'Input device', 'm.device.desc': 'Headset microphones give the best recognition',
       'm.default': 'Default (system)', 'm.defaulttag': ' (default)', 'm.level': 'Level',
+      'm.missing': ' (not connected)',
       'm.hint': 'Say a few words …', 'm.ok': 'Sounds good – your microphone works.',
       'm.error': 'No access to the microphone. Check the Windows privacy settings for microphones.',
       'h.title': 'Hotkey & mode',
@@ -436,8 +448,8 @@
       'mo.lead': 'The recognition model sets speed and accuracy. One is preselected for your hardware.',
       'mo.note': 'The model is downloaded once on first load – after that everything runs offline.',
       't.title': 'Test dictation',
-      't.lead.hold': 'Click into the field, hold {hotkey} and say a sentence. The text appears when you release.',
-      't.lead.press': 'Click into the field, press {hotkey}, say a sentence and press the combination again.',
+      't.lead.hold': 'Click into the field, hold {hotkey} and say a sentence. The text appears when you release. {esc} cancels.',
+      't.lead.press': 'Click into the field, press {hotkey}, say a sentence and press the combination again. {esc} cancels.',
       't.placeholder': 'Click here and speak …',
       't.success': 'Perfect! This is how NoType works anywhere you can type.',
       's.loading': 'Loading model', 's.ready': 'Ready', 's.recording': 'Recording',
@@ -460,6 +472,7 @@
     document.documentElement.lang = uiLang;
     document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+    if (!recordingHotkey) renderHotkeyBox();
     renderTestLead();
     renderModels();
     renderDevices();
@@ -472,8 +485,9 @@
   let step = 0;
   let cfg = {};
   let configApplied = false;
-  const state = { app_language: 'de', mic_device_index: null, hotkey: 'ctrl+shift+space', mode: 'hold_to_speak', model_size: 'small' };
+  const state = { app_language: 'de', mic_device_name: null, hotkey: 'ctrl+shift+space', mode: 'hold_to_speak', model_size: 'small' };
   let devices = [];
+  let legacyMicIndex = null;   // older settings files store the mic by index
   let modelsInfo = null;
   let activeModel = null;
   let modelReady = false;
@@ -482,14 +496,8 @@
   let testState = 'loading';   // loading | ready | recording | processing | done
   let testDetail = '';
 
-  function prettyHotkey(hk) {
-    return String(hk || '').split('+').map(p => {
-      const k = p.trim().toLowerCase();
-      if (k === 'cmdorctrl' || k === 'commandorcontrol' || k === 'control') return 'Ctrl';
-      if (k === 'meta' || k === 'super') return 'Win';
-      return k.charAt(0).toUpperCase() + k.slice(1);
-    }).join('+');
-  }
+  const prettyHotkey = (hk) => window.NoTypeKeys.text(hk, uiLang);
+  const renderHotkeyBox = () => window.NoTypeKeys.render($('hotkeyValue'), state.hotkey, uiLang);
 
   function save(partial) {
     Object.assign(cfg, partial);
@@ -531,7 +539,7 @@
   function commitStep(n) {
     switch (n) {
       case 0: save({ app_language: state.app_language }); break;
-      case 1: save({ mic_device_index: state.mic_device_index }); break;
+      case 1: save({ mic_device_name: state.mic_device_name, mic_device_index: null }); break;
       case 2: save({ hotkey: state.hotkey, mode: state.mode }); break;
       case 3:
         if (state.model_size !== cfg.model_size) { modelReady = false; testState = 'loading'; }
@@ -573,18 +581,37 @@
     sel.options[0].textContent = t('m.default');
     for (const d of devices) {
       const opt = document.createElement('option');
-      opt.value = d.index;
+      opt.value = d.name;
       opt.textContent = d.name + (d.default ? t('m.defaulttag') : '');
       sel.appendChild(opt);
     }
-    sel.value = state.mic_device_index == null ? '' : String(state.mic_device_index);
-    if (sel.value === '' && state.mic_device_index != null) state.mic_device_index = null;
+    if (!state.mic_device_name && legacyMicIndex != null) {
+      const legacy = devices.find(d => d.index === legacyMicIndex);
+      if (legacy) state.mic_device_name = legacy.name;
+      legacyMicIndex = null;
+    }
+    // The chosen mic is unplugged right now: keep it listed instead of
+    // quietly switching to the default.
+    const want = state.mic_device_name;
+    if (want && !devices.some(d => d.name === want)) {
+      const opt = document.createElement('option');
+      opt.value = want;
+      opt.textContent = want + t('m.missing');
+      sel.appendChild(opt);
+    }
+    sel.value = want || '';
   }
   $('micSelect').onchange = () => {
-    const v = $('micSelect').value;
-    state.mic_device_index = v === '' ? null : parseInt(v, 10);
+    state.mic_device_name = $('micSelect').value || null;
     if (step === 1) startMeter();
   };
+
+  // The backend names devices the way PortAudio does, the browser has its
+  // own ids and labels. Match by name: ignore case, punctuation and the
+  // "4- " port number Windows puts in front of USB devices, and compare
+  // only the start (MME cuts names off at 31 characters).
+  const micKey = (s) => String(s || '').toLowerCase()
+    .replace(/\(\d+- /, '(').replace(/[^a-z0-9äöüß]+/g, '');
 
   let meterStream = null, meterCtx = null, meterAnim = null, meterPeak = 0;
   async function startMeter() {
@@ -593,14 +620,14 @@
     $('micMeterWrap').classList.remove('err');
     try {
       let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // The backend lists sounddevice devices; the browser has its own ids.
       // Match the chosen device by name so the meter shows THAT mic.
-      const wanted = devices.find(d => state.mic_device_index != null && d.index === state.mic_device_index);
-      if (wanted) {
+      if (state.mic_device_name) {
         try {
+          const want = micKey(state.mic_device_name).slice(0, 24);
           const list = await navigator.mediaDevices.enumerateDevices();
-          const prefix = wanted.name.slice(0, 20).toLowerCase();
-          const match = list.find(d => d.kind === 'audioinput' && d.label && d.label.toLowerCase().startsWith(prefix));
+          const match = list.find(d => d.kind === 'audioinput' && d.label &&
+            d.deviceId !== 'default' && d.deviceId !== 'communications' &&
+            micKey(d.label).startsWith(want));
           if (match) {
             stream.getTracks().forEach(tr => tr.stop());
             stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: match.deviceId } } });
@@ -664,7 +691,7 @@
     };
     const mapped = map[key] || (e.code.startsWith('Key') ? e.code.slice(3).toLowerCase() : key);
     hotkeyParts.add(mapped);
-    $('hotkeyValue').textContent = prettyHotkey(Array.from(hotkeyParts).join('+'));
+    window.NoTypeKeys.render($('hotkeyValue'), Array.from(hotkeyParts).join('+'), uiLang);
   });
   document.addEventListener('keyup', () => {
     if (!recordingHotkey || hotkeyParts.size === 0) return;
@@ -672,7 +699,7 @@
     if (window.notype.setHotkeyCapture) window.notype.setHotkeyCapture(false);
     state.hotkey = Array.from(hotkeyParts).join('+');
     $('hotkeyValue').classList.remove('recording');
-    $('hotkeyValue').textContent = prettyHotkey(state.hotkey);
+    renderHotkeyBox();
     $('hotkeyBtn').textContent = t('h.change');
     renderTestLead();
   });
@@ -708,12 +735,8 @@
     const el = $('testLead');
     el.innerHTML = '';
     const tpl = t(state.mode === 'press_to_speak' ? 't.lead.press' : 't.lead.hold');
-    const [before, after] = tpl.split('{hotkey}');
-    el.appendChild(document.createTextNode(before));
-    const kbd = document.createElement('kbd');
-    kbd.textContent = prettyHotkey(state.hotkey);
-    el.appendChild(kbd);
-    el.appendChild(document.createTextNode(after || ''));
+    // Keys render as chips: {hotkey} and {esc}.
+    window.NoTypeKeys.fill(el, tpl, { '{hotkey}': state.hotkey, '{esc}': 'escape' }, uiLang);
   }
   function refreshStatus() {
     const pill = $('statusPill');
@@ -731,9 +754,8 @@
 
   // ── 5 · Summary ──
   function fillSummary() {
-    const dev = devices.find(d => d.index === state.mic_device_index);
-    $('sumMic').textContent = dev ? dev.name : t('m.default');
-    $('sumHotkey').textContent = prettyHotkey(state.hotkey);
+    $('sumMic').textContent = state.mic_device_name || t('m.default');
+    window.NoTypeKeys.render($('sumHotkey'), state.hotkey, uiLang);
     $('sumMode').textContent = t(state.mode === 'press_to_speak' ? 'h.press' : 'h.hold');
     $('sumModel').textContent = window.NoTypeModels ? window.NoTypeModels.nameOf(state.model_size) : state.model_size;
   }
@@ -748,7 +770,8 @@
       configApplied = true;
       cfg = c || {};
       state.app_language = I18N[cfg.app_language] ? cfg.app_language : 'de';
-      state.mic_device_index = cfg.mic_device_index == null ? null : cfg.mic_device_index;
+      state.mic_device_name = cfg.mic_device_name || null;
+      legacyMicIndex = state.mic_device_name || cfg.mic_device_index == null ? null : cfg.mic_device_index;
       state.hotkey = cfg.hotkey || 'ctrl+shift+space';
       state.mode = cfg.mode === 'press_to_speak' ? 'press_to_speak' : 'hold_to_speak';
       state.model_size = cfg.model_size || 'small';
@@ -756,7 +779,7 @@
       $('autostartToggle').checked = cfg.first_run_complete ? cfg.autostart === true : true;
       uiLang = state.app_language;
       $('langSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.lang === uiLang));
-      $('hotkeyValue').textContent = prettyHotkey(state.hotkey);
+      renderHotkeyBox();
       document.querySelectorAll('.mode-card').forEach(c => c.classList.toggle('selected', c.dataset.mode === state.mode));
       applyI18n();
       window.notype.listDevices();

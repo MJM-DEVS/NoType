@@ -117,6 +117,18 @@ Select text in any app, hold <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>Space</kbd>
 
 The local AI rewrites your selection in place. With nothing selected, it writes new text at your cursor, for example *"Write a short note declining tomorrow's meeting"*.
 
+### Show AI apps what you are talking about
+
+Dictating a prompt into ChatGPT or Claude Code? Copy what you mean while you speak. Press <kbd>Win</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd> for a screenshot, or select an error message and press <kbd>Ctrl</kbd> + <kbd>C</kbd>. Each copy appears as a small chip above the overlay and goes along with your sentence:
+
+- **ChatGPT, Claude, Gemini and other AI apps and sites** get images pasted in and copied text quoted below your sentence.
+- **Terminals** such as Claude Code or Codex get the file path in front of your sentence, so the agent can open the screenshot itself. Code editors like VS Code or Cursor get file paths as well.
+- **Any other browser tab** gets images pasted in and text quoted, like an AI site.
+
+Anything you copied up to a minute before you started counts too, so with hold-to-talk you can take the screenshot first and then speak. In AI apps and terminals this goes for text and images, everywhere else for images only. Up to five copies go along per dictation, three of them images.
+
+Email, Word, WhatsApp and every other app are left alone. Command mode never takes anything along either. You can switch this off under **Settings → General**.
+
 ### AI cleanup that never slows you down
 
 Raw speech is messy: "uhm", false starts, missing punctuation. NoType cleans it up in two steps:
@@ -154,6 +166,9 @@ The AI engine ([Ollama](https://ollama.com/)) is installed **from inside NoType 
 
 **And also:**
 
+- **Changed your mind? Press <kbd>Esc</kbd>.** The dictation is dropped and nothing is typed.
+- **Your microphone stays put:** NoType remembers it by name, so plugging in a headset or a dock doesn't switch you to a different input. While it is unplugged, NoType tells you once and records from the Windows default.
+- **Quiet while you talk:** if you like, NoType mutes music and videos while you dictate and brings the sound back right after. Switch it on under **Settings → System**.
 - **History and stats:** your last dictations and daily word counts are one click away in the system tray.
 - **Starts with Windows if you want:** NoType then waits in the tray after you sign in. Switch it on or off under **Settings → General** or right in the tray menu.
 - **Updates with one click:** when a new version is out, a small notice offers it. Click **Update now** and NoType downloads it in the background, installs it and starts again, with your settings and dictionary as they were. It never restarts in the middle of a dictation. The portable ZIP links you to the download page instead.
@@ -210,10 +225,13 @@ Everything else stays in `%APPDATA%\NoType\` on your PC:
 | Dictation history & stats | `history.json`, the last 10 entries |
 | Diagnostic log | `notype.log`, rotating; timings and errors only, never your dictated text |
 | AI engine & model | the `ollama\` subfolder |
+| Screenshots and copied text for AI apps | the `attachments\` subfolder, each file deleted after 24 hours |
 
 **Uninstalling removes this whole folder**, NoType's autostart entry and its update cache in `%LOCALAPPDATA%\notype-updater\` (updates keep all three). The speech models are the exception: they live in the shared Hugging Face cache at `%USERPROFILE%\.cache\huggingface\hub\`, which other apps may use too, so the uninstaller leaves it alone. To free the space, delete the folders of the models you downloaded in NoType there; their names contain `whisper`, for example `models--mobiuslabsgmbh--faster-whisper-large-v3-turbo`. The portable version has no uninstaller: delete its folder and `%APPDATA%\NoType\` by hand.
 
 NoType pastes through the clipboard, so the dictated text stays there afterwards and you can paste it again. If you use Windows clipboard history or sync across devices, it ends up there too. To keep the clipboard out of it, choose **Always type** under **Settings → System**.
+
+To send screenshots and copied text along to AI apps ([see above](#show-ai-apps-what-you-are-talking-about)), NoType notes when something is copied. It reads the clipboard only while you dictate into an AI app, a terminal, a code editor or a browser, and only copies made from a minute before the start until your text is in. Terminals and editors need a file to open, so those copies are saved to `attachments\` and deleted after 24 hours. The log only notes whether an item was an image or text, never its content. You can switch this off under **Settings → General**.
 
 To suggest corrections, NoType reads the text field you dictated into for up to a minute afterwards and compares only the dictated part. It stops as soon as you switch fields or start a new dictation. It never reads password fields and keeps nothing unless you click **Learn**. You can switch this off under **Settings → Dictionary**.
 
@@ -398,6 +416,9 @@ NoType/
 ├── correction_watch.py   # spots fixes typed right after a dictation (UI Automation)
 ├── ollama_manager.py     # portable Ollama install, update, lifecycle (job object), model pull
 ├── text_output.py        # clipboard + SendInput paste/copy, Unicode typing fallback
+├── context_capture.py    # copies and screenshots that go along into AI apps and terminals
+├── escape_hook.py        # low-level keyboard hook: Esc cancels a dictation
+├── output_mute.py        # mutes the speakers while recording (Core Audio)
 ├── config.py             # atomic settings with rolling backups (%APPDATA%/NoType)
 ├── backend.spec          # PyInstaller build
 ├── docs/assets/          # screenshots and demo used in this README
