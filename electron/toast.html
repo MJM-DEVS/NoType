@@ -19,11 +19,14 @@
   }
 
   :root {
-    --toast-bg: rgba(255, 255, 255, 0.92);
-    --toast-fg: #1a1a1a;
-    --toast-sub: rgba(0, 0, 0, 0.5);
-    --toast-shadow: rgba(0, 0, 0, 0.18);
-    --toast-border: rgba(0, 0, 0, 0.06);
+    --toast-bg: rgba(245, 242, 233, 0.96);
+    --toast-fg: #2b3123;
+    --toast-sub: rgba(43, 49, 35, 0.64);
+    --toast-shadow: rgba(32, 36, 24, 0.22);
+    --toast-border: rgba(70, 82, 48, 0.16);
+    --ok: #5d7037;
+    --err: #b0563d;
+    --warn: #b5772a;
   }
   [data-theme="dark"] {
     --toast-bg: rgba(28, 28, 30, 0.92);
@@ -31,6 +34,9 @@
     --toast-sub: rgba(255, 255, 255, 0.55);
     --toast-shadow: rgba(0, 0, 0, 0.5);
     --toast-border: rgba(255, 255, 255, 0.08);
+    --ok: #22c55e;
+    --err: #ef4444;
+    --warn: #f59e0b;
   }
 
   .toast {
@@ -70,9 +76,9 @@
     flex-shrink: 0;
   }
 
-  .icon.success { background: #22c55e; }
-  .icon.error { background: #ef4444; }
-  .icon.warning { background: #f59e0b; }
+  .icon.success { background: var(--ok); }
+  .icon.error { background: var(--err); }
+  .icon.warning { background: var(--warn); }
 
   .icon svg { width: 12px; height: 12px; }
 

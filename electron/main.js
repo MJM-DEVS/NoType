@@ -171,10 +171,19 @@ let statsByDate = {};  // { "Mon May 14 2026": { count, words }, ... }
 
 // ── Theme ──
 // Returns 'dark' or 'light' based on Windows system setting (or explicit user override).
+// 'light' is the Salbei world: paper and olive in every window and overlay.
 function currentTheme() {
   const override = config.overlay_theme;  // 'dark' | 'light' | 'system' (or undefined)
   if (override === 'dark' || override === 'light') return override;
   return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+}
+
+// Mica (settings, setup) tints itself after Electron's theme, so pin that to
+// the user's choice: Dark on a light Windows must not get a pale backdrop.
+function syncThemeSource() {
+  const o = config.overlay_theme;
+  const src = o === 'dark' || o === 'light' ? o : 'system';
+  if (nativeTheme.themeSource !== src) nativeTheme.themeSource = src;
 }
 
 function broadcastTheme() {
@@ -672,7 +681,7 @@ const OVERLAY_STYLES = {
   slime:  { w: 640, h: 112, bottom: 8,  top: 0 },   // blob 104×92 + bubble 500×50
   dragon: { w: 612, h: 100, bottom: 8,  top: 0 },   // pixel dragon 136×80, bubble 476×50 tucked under its fire
   mimic:  { w: 666, h: 116, bottom: 8,  top: 0 },   // pixel chest 128×96 + bubble 500×50
-  sage:   { w: 700, h: 96,  bottom: 10, top: 0 },   // light pill 660×60 + its drop shadow
+  line:   { w: 700, h: 96,  bottom: 10, top: 0 },   // pill 660×60 + its drop shadow (Salbei)
 };
 const DEFAULT_OVERLAY_STYLE = 'amoled';
 const OVERLAY_POSITIONS = ['bottom', 'top', 'center'];
@@ -681,8 +690,10 @@ const OVERLAY_POSITIONS = ['bottom', 'top', 'center'];
 const CHIP_STRIP = 40;
 const OVERLAY_ACCENTS = ['mint', 'mono', 'aurora', 'blue', 'violet', 'red', 'amber'];
 // Retired style ids → [successor, position]. Pre-2.6 the AMOLED placement was
-// baked into the id; 2.7 replaced the classic visualizers (and dropped the Orb).
+// baked into the id; 2.7 replaced the classic visualizers (and dropped the Orb);
+// in 3.1 the light Sage style became Line, which exists in both worlds.
 const LEGACY_OVERLAY_STYLES = {
+  sage:          ['line', null],
   amoled_top:    ['amoled', 'top'],
   amoled_bottom: ['amoled', 'bottom'],
   amoled_center: ['amoled', 'center'],
@@ -1414,7 +1425,10 @@ ipcMain.on('save-config', (_, newConfig) => {
   const prevHotkey = config.hotkey, prevMode = config.mode;
   const prevCmd = `${config.command_enabled}|${config.command_hotkey}`;
   const autostartChanged = typeof newConfig.autostart === 'boolean' && newConfig.autostart !== autostartEnabled();
+  const prevTheme = currentTheme();
   config = { ...config, ...newConfig };
+  syncThemeSource();
+  if (currentTheme() !== prevTheme) broadcastTheme();
   if (autostartChanged) {
     setAutostart(newConfig.autostart);
     updateTray(trayStatus);   // the tray menu's checkbox
@@ -1922,6 +1936,7 @@ function quitApp() {
 app.whenReady().then(() => {
   initPaths();
   loadConfig();
+  syncThemeSource();
   loadHistory();
   // Overlay is created lazily on the first recording (showOverlay) so no
   // transparent always-on-top compositor surface exists until actually needed.

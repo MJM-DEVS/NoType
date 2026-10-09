@@ -6,7 +6,9 @@
 <title>NoType Overlay</title>
 <style>
   /* ═══════════════════════════════════════════════════════════════
-     NoType overlay – OLED styles on pure black, plus characters.
+     NoType overlay – nine styles in two worlds (body[data-world]):
+     Dark is OLED black in the user's accent color, Salbei is warm paper
+     with olive ink and its own palette (the accent doesn't apply).
        amoled  AMOLED Bar   pill: mirrored spectrum + live text + timer
        matrix  Dot Matrix   LED dot grid: dot-font timer + spectrum
        island  Island       spring-morphing capsule that grows with the text
@@ -15,7 +17,7 @@
        slime   Slime        jelly blob that wobbles with every syllable
        dragon  Dragon       pixel dragon; its fire breath is the visualizer
        mimic   Mimic        treasure chest whose lid talks along
-       sage    Sage         light paper pill, the voice as a calm olive line
+       line    Line         the voice as one calm line with an echo
      Everything that moves is drawn on small canvases or changes opacity/
      transform only: no CSS blur filters, no backdrop-filter, no per-frame
      box-shadow (transparent always-on-top windows make those expensive and
@@ -27,10 +29,16 @@
   body {
     background: transparent;
     overflow: hidden;
-    color: #fff;
+    color: rgb(var(--ink));
     font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     user-select: none;
+    /* world tokens, Dark (mirrored in WORLDS for the canvases) */
+    --surf: #000; --ink: 255, 255, 255;
+    --t1: rgba(255, 255, 255, 0.95); --t2: rgba(255, 255, 255, 0.46); --t3: rgba(255, 255, 255, 0.42);
+    --t-busy: rgba(255, 255, 255, 0.55); --shim: 0.34;
+    --hair: rgba(255, 255, 255, 0.085); --sep: rgba(255, 255, 255, 0.08); --edge: rgba(255, 255, 255, 0.05);
+    --lift: 0 0 transparent;
     /* accent tokens (mirrored in ACCENTS for the canvases) */
     --a1: #00d4aa; --a2: #2ee9c6; --a3: #4dd0ff; --glow: 0, 212, 170; --rec: #00d4aa;
   }
@@ -40,6 +48,17 @@
   body[data-accent="violet"] { --a1: #bf5af2; --a2: #a472ff; --a3: #7d7aff; --glow: 191, 90, 242; --rec: #bf5af2; }
   body[data-accent="red"]    { --a1: #ff453a; --a2: #ff5e6c; --a3: #ff8a80; --glow: 255, 69, 58; --rec: #ff453a; }
   body[data-accent="amber"]  { --a1: #ffb340; --a2: #ffa21a; --a3: #ffd60a; --glow: 255, 170, 40; --rec: #ff9f0a; }
+  /* Salbei: paper surfaces, olive ink and its own accents. After the accent
+     rules so it wins over them. The drop shadow (--lift) is static and stays
+     inside every window's 14 px margin. */
+  body[data-world="sage"] {
+    --surf: #f5f2e9; --ink: 43, 49, 35;
+    --t1: #2b3123; --t2: rgba(43, 49, 35, 0.64); --t3: #646b55;
+    --t-busy: rgba(43, 49, 35, 0.66); --shim: 0.46;
+    --hair: rgba(70, 82, 48, 0.16); --sep: rgba(70, 82, 48, 0.16); --edge: rgba(255, 255, 255, 0.7);
+    --lift: 0 5px 14px -6px rgba(32, 36, 24, 0.32), 0 1px 3px rgba(32, 36, 24, 0.1);
+    --a1: #56663a; --a2: #6b7f45; --a3: #93ab78; --glow: 93, 115, 64; --rec: #b0563d;
+  }
 
   .style { display: none; position: fixed; inset: 0; align-items: center; justify-content: center; }
   body[data-style="amoled"] .s-amoled,
@@ -50,7 +69,7 @@
   body[data-style="slime"]  .s-slime,
   body[data-style="dragon"] .s-dragon,
   body[data-style="mimic"]  .s-mimic,
-  body[data-style="sage"]   .s-sage { display: flex; }
+  body[data-style="line"]   .s-line { display: flex; }
 
   /* Every shape enters with a short spring and leaves with a quick fade;
      main.js sends 'overlay-leaving' ~220 ms before it hides the window. */
@@ -90,33 +109,32 @@
     direction: rtl; text-align: left;
     font-size: 14px; line-height: 1.3; letter-spacing: 0.005em;
   }
-  .txt > span { direction: ltr; unicode-bidi: embed; color: rgba(255, 255, 255, 0.95); }
+  .txt > span { direction: ltr; unicode-bidi: embed; color: var(--t1); }
   .txt.clip { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 40px); }
-  .txt > span.dim { color: rgba(255, 255, 255, 0.46); }
+  .txt > span.dim { color: var(--t2); }
   /* Status placeholder ("Ich höre zu…") gets a slow light sweep. */
   .txt > span.shimmer {
     color: transparent;
-    background: linear-gradient(90deg, rgba(255,255,255,0.34) 0%, rgba(255,255,255,0.34) 35%,
-                rgba(255,255,255,0.92) 50%, rgba(255,255,255,0.34) 65%, rgba(255,255,255,0.34) 100%);
+    background: linear-gradient(90deg, rgba(var(--ink), var(--shim)) 0%, rgba(var(--ink), var(--shim)) 35%,
+                rgba(var(--ink), 0.92) 50%, rgba(var(--ink), var(--shim)) 65%, rgba(var(--ink), var(--shim)) 100%);
     background-size: 300% 100%;
     -webkit-background-clip: text; background-clip: text;
     animation: shimmer 2.4s linear infinite;
   }
   @keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0% 0; } }
-  body.processing-dim .txt > span:not(.dim):not(.shimmer) { color: rgba(255, 255, 255, 0.55); transition: color 0.3s; }
+  body.processing-dim .txt > span:not(.dim):not(.shimmer) { color: var(--t-busy); transition: color 0.3s; }
 
   .time {
     font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em;
     font-variant-numeric: tabular-nums; white-space: nowrap;
-    color: rgba(255, 255, 255, 0.42);
+    color: var(--t3);
   }
 
   /* ═══ 1. AMOLED BAR  (window 708×92) ═══════════════════════════ */
   .am-pill {
     position: relative; width: 680px; height: 64px; border-radius: 32px;
-    background: #000;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.085),
-                inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    background: var(--surf);
+    box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 var(--edge), var(--lift);
     display: flex; align-items: center; gap: 16px; padding: 0 24px 0 20px;
     animation: springIn 0.46s cubic-bezier(0.2, 1.3, 0.35, 1) both;
   }
@@ -126,33 +144,36 @@
     will-change: opacity;
     box-shadow: 0 0 13px rgba(var(--glow), 0.38), inset 0 0 0 1px rgba(var(--glow), 0.6);
   }
+  /* on paper a glow reads as a smudge: the hairline carries it */
+  body[data-world="sage"] .am-glow { box-shadow: 0 0 8px rgba(var(--glow), 0.18), inset 0 0 0 1px rgba(var(--glow), 0.5); }
   .am-viz { width: 136px; height: 36px; flex: 0 0 auto; }
-  .am-sep { width: 1px; height: 26px; background: rgba(255, 255, 255, 0.08); flex: 0 0 auto; }
+  .am-sep { width: 1px; height: 26px; background: var(--sep); flex: 0 0 auto; }
   .am-pill .txt { flex: 1 1 auto; font-size: 14.5px; }
   .am-pill .time { flex: 0 0 auto; }
 
   /* ═══ 2. DOT MATRIX  (window 708×104) ══════════════════════════ */
   .mx-card {
     position: relative; width: 680px; height: 76px; border-radius: 24px;
-    background: #000;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.085);
+    background: var(--surf);
+    box-shadow: inset 0 0 0 1px var(--hair), var(--lift);
     display: flex; align-items: center; gap: 20px; padding: 0 26px 0 22px;
     animation: fadeUp 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   .mx-grid { width: 242px; height: 39px; flex: 0 0 auto; }
-  .mx-sep { width: 1px; height: 40px; background: rgba(255, 255, 255, 0.08); flex: 0 0 auto; }
+  .mx-sep { width: 1px; height: 40px; background: var(--sep); flex: 0 0 auto; }
   .mx-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
   .mx-head {
     display: flex; align-items: center; gap: 8px;
     font: 600 10.5px/1 'Cascadia Mono', 'Cascadia Code', Consolas, monospace;
-    letter-spacing: 0.18em; text-transform: uppercase; color: rgba(255, 255, 255, 0.5);
+    letter-spacing: 0.18em; text-transform: uppercase; color: rgba(var(--ink), 0.5);
   }
+  body[data-world="sage"] .mx-head { color: var(--t3); }
   .mx-rec {
     width: 7px; height: 7px; border-radius: 50%; background: var(--rec); flex: 0 0 auto;
     animation: recPulse 1.3s ease-in-out infinite;
   }
   @keyframes recPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.28; } }
-  body[data-state="processing"] .mx-rec { background: #fff; animation-duration: 0.5s; }
+  body[data-state="processing"] .mx-rec { background: rgb(var(--ink)); animation-duration: 0.5s; }
   body[data-state="done"] .mx-rec { background: var(--a1); animation: none; }
   .mx-body .txt { font-size: 14.5px; }
 
@@ -164,9 +185,11 @@
   body[data-pos="bottom"] .s-island { align-items: flex-end; }
   .is-shape {
     position: relative; width: 40px; height: 40px; border-radius: 20px;
-    background: #000; overflow: hidden;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.075);
+    background: var(--surf); overflow: hidden;
+    box-shadow: inset 0 0 0 1px var(--hair);
   }
+  /* it resizes every frame while it springs, so only a small, cheap shadow */
+  body[data-world="sage"] .is-shape { box-shadow: inset 0 0 0 1px var(--hair), 0 2px 5px -1px rgba(32, 36, 24, 0.22); }
   .is-glyph { position: absolute; left: 13px; top: 50%; width: 30px; height: 22px; transform: translateY(-50%); }
   .is-time {
     position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
@@ -176,13 +199,13 @@
     position: absolute; left: 56px; right: 68px; top: 50%; transform: translateY(-50%);
     max-height: 38px; overflow: hidden; opacity: 0;
     display: flex; flex-direction: column; justify-content: flex-end;
-    font-size: 14.5px; line-height: 19px; color: rgba(255, 255, 255, 0.95);
+    font-size: 14.5px; line-height: 19px; color: var(--t1);
   }
   .is-text.clip { -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 12px); }
   /* single-line target: don't re-wrap while the shape is still growing */
   .is-text.one { white-space: nowrap; }
-  .is-text > span.dim { color: rgba(255, 255, 255, 0.46); }
-  body.processing-dim .is-text > span:not(.dim) { color: rgba(255, 255, 255, 0.55); transition: color 0.3s; }
+  .is-text > span.dim { color: var(--t2); }
+  body.processing-dim .is-text > span:not(.dim) { color: var(--t-busy); transition: color 0.3s; }
 
   /* ═══ 4. HALO  (window 616×118) ═════════════════════════════════ */
   .ha-rim { position: absolute; left: 0; top: 0; width: 616px; height: 118px; }
@@ -200,7 +223,7 @@
   .s-buddy { gap: 14px; }
   .bd-face {
     width: 90px; height: 80px; border-radius: 26px; flex: 0 0 auto;
-    background: #000; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.085);
+    background: var(--surf); box-shadow: inset 0 0 0 1px var(--hair), var(--lift);
     display: flex; align-items: center; justify-content: center;
     animation: popIn 0.46s cubic-bezier(0.2, 1.25, 0.35, 1) both;
   }
@@ -208,15 +231,15 @@
   /* Speech bubble shared by every character style. */
   .bubble {
     position: relative; width: 500px; height: 50px; border-radius: 25px;
-    background: #000; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.085);
+    background: var(--surf); box-shadow: inset 0 0 0 1px var(--hair), var(--lift);
     display: flex; align-items: center; gap: 14px; padding: 0 20px 0 22px;
     animation: fadeUp 0.36s 0.08s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   /* tail: a rotated square whose two outer edges carry the hairline */
   .bubble::before {
     content: ''; position: absolute; left: -6px; top: 50%; width: 13px; height: 13px;
-    background: #000; transform: translateY(-50%) rotate(45deg);
-    box-shadow: inset 1px -1px 0 rgba(255, 255, 255, 0.085);
+    background: var(--surf); transform: translateY(-50%) rotate(45deg);
+    box-shadow: inset 1px -1px 0 var(--hair);
   }
   .bubble .txt { flex: 1 1 auto; font-size: 14.5px; }
   .bubble .time { flex: 0 0 auto; }
@@ -239,32 +262,20 @@
   #mmCv { width: 128px; height: 96px; }
   .s-mimic .bubble { margin-bottom: 22px; }
 
-  /* ═══ 9. SAGE  (window 700×96) ════════════════════════════════════
-     The one light style: warm paper instead of OLED black, the voice as a
-     calm olive line with a sage echo. It has its own palette, the accent
-     color doesn't apply. The drop shadow is static and stays inside the
-     window's 18 px margin. */
-  .s-sage { --sg-paper: #f5f2e9; --sg-ink: 43, 49, 35; --sg-muted: #646b55; }
-  .sg-pill {
+  /* ═══ 9. LINE  (window 700×96) ════════════════════════════════════
+     The voice as one calm line with a softer echo behind it: olive on
+     paper in Salbei, the accent on black in Dark. */
+  .ln-pill {
     position: relative; width: 660px; height: 60px; border-radius: 30px;
-    background: var(--sg-paper);
-    box-shadow: 0 0 0 1px rgba(70, 82, 48, 0.16),
-                0 6px 16px -6px rgba(32, 36, 24, 0.34), 0 1px 3px rgba(32, 36, 24, 0.12);
+    background: var(--surf);
+    box-shadow: inset 0 0 0 1px var(--hair), var(--lift);
     display: flex; align-items: center; gap: 14px; padding: 0 24px 0 20px;
     animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
-  .sg-line { width: 128px; height: 32px; flex: 0 0 auto; }
-  .sg-sep { width: 1px; height: 24px; background: rgba(70, 82, 48, 0.16); flex: 0 0 auto; }
-  .sg-pill .txt { flex: 1 1 auto; font-size: 14.5px; }
-  .sg-pill .txt > span { color: rgb(var(--sg-ink)); }
-  .sg-pill .txt > span.dim { color: rgba(var(--sg-ink), 0.5); }
-  .sg-pill .txt > span.shimmer {
-    color: transparent;
-    background-image: linear-gradient(90deg, rgba(var(--sg-ink), 0.4) 0%, rgba(var(--sg-ink), 0.4) 35%,
-                      rgba(var(--sg-ink), 0.9) 50%, rgba(var(--sg-ink), 0.4) 65%, rgba(var(--sg-ink), 0.4) 100%);
-  }
-  body.processing-dim .sg-pill .txt > span:not(.dim):not(.shimmer) { color: rgba(var(--sg-ink), 0.6); }
-  .sg-pill .time { flex: 0 0 auto; color: var(--sg-muted); }
+  .ln-wave { width: 128px; height: 32px; flex: 0 0 auto; }
+  .ln-sep { width: 1px; height: 24px; background: var(--sep); flex: 0 0 auto; }
+  .ln-pill .txt { flex: 1 1 auto; font-size: 14.5px; }
+  .ln-pill .time { flex: 0 0 auto; }
 
   /* ═══ AI CONTEXT CHIPS ════════════════════════════════════════════
      What goes along with the dictation (screenshot, image, copied text).
@@ -285,7 +296,7 @@
   body[data-style="amoled"], body[data-style="matrix"], body[data-style="buddy"] { --chip-pull: 6px; }
   body[data-style="halo"] { --chip-pull: 18px; }   /* the rim glow needs a little room */
   body[data-style="slime"], body[data-style="dragon"], body[data-style="mimic"] { --chip-pull: 2px; }
-  body[data-style="sage"] { --chip-pull: 10px; }
+  body[data-style="line"] { --chip-pull: 10px; }
   body.strip .chips { display: flex; }
   body[data-pos="top"] .chips {
     top: auto; bottom: 0; align-items: flex-start; padding: 2px 24px 0;
@@ -294,8 +305,8 @@
   .chip {
     flex: 0 1 auto; min-width: 0; max-width: 210px; height: 30px; border-radius: 15px;
     display: flex; align-items: center; gap: 7px; padding: 0 13px 0 4px;
-    background: #000; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.11);
-    font-size: 12.5px; line-height: 1; white-space: nowrap; color: rgba(255, 255, 255, 0.9);
+    background: var(--surf); box-shadow: inset 0 0 0 1px rgba(var(--ink), 0.11);
+    font-size: 12.5px; line-height: 1; white-space: nowrap; color: rgba(var(--ink), 0.9);
     transform-origin: 50% 100%;
     animation: popIn 0.42s cubic-bezier(0.2, 1.25, 0.35, 1) both;
   }
@@ -314,21 +325,20 @@
   }
   .chip-ico svg { width: 12px; height: 12px; fill: none; stroke: var(--a1); stroke-width: 1.6; stroke-linecap: round; }
   .chip-lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .chip-sub { flex: 0 0 auto; color: rgba(255, 255, 255, 0.5); font-variant-numeric: tabular-nums; }
-  /* Sage: paper chips to match the pill */
-  body[data-style="sage"] .chip {
-    background: #f5f2e9; color: #2b3123;
-    box-shadow: 0 0 0 1px rgba(70, 82, 48, 0.16), 0 3px 8px -3px rgba(32, 36, 24, 0.3);
+  .chip-sub { flex: 0 0 auto; color: rgba(var(--ink), 0.5); font-variant-numeric: tabular-nums; }
+  /* Salbei: paper chips with a small lift, like the shapes below them */
+  body[data-world="sage"] .chip {
+    color: var(--t1);
+    box-shadow: inset 0 0 0 1px var(--hair), 0 3px 8px -3px rgba(32, 36, 24, 0.3);
   }
-  body[data-style="sage"] .chip-thumb { box-shadow: 0 0 0 1px rgba(70, 82, 48, 0.2); }
-  body[data-style="sage"] .chip-ico { background: rgba(147, 171, 120, 0.3); }
-  body[data-style="sage"] .chip-ico svg { stroke: #56663a; }
-  body[data-style="sage"] .chip-sub { color: #646b55; }
+  body[data-world="sage"] .chip-thumb { box-shadow: 0 0 0 1px rgba(70, 82, 48, 0.2); }
+  body[data-world="sage"] .chip-ico { background: rgba(147, 171, 120, 0.3); }
+  body[data-world="sage"] .chip-sub { color: var(--t3); }
   body.leaving .chip { animation: leaveOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards !important; }
   body.leaving.cancelled .chip { animation: cancelOut 0.2s cubic-bezier(0.55, 0, 0.8, 0.2) forwards !important; }
 </style>
 </head>
-<body data-style="amoled" data-accent="mint" data-pos="bottom" data-state="idle">
+<body data-style="amoled" data-accent="mint" data-world="dark" data-pos="bottom" data-state="idle">
 
   <!-- AI context: what goes along with the dictation -->
   <div class="chips" id="chips"></div>
@@ -415,11 +425,11 @@
     </div>
   </section>
 
-  <!-- 9. SAGE -->
-  <section class="style s-sage">
-    <div class="sg-pill shape">
-      <canvas class="sg-line" id="sgLine"></canvas>
-      <div class="sg-sep"></div>
+  <!-- 9. LINE -->
+  <section class="style s-line">
+    <div class="ln-pill shape">
+      <canvas class="ln-wave" id="lnWave"></canvas>
+      <div class="ln-sep"></div>
       <div class="txt" data-line="1"><span class="shimmer">Ich höre zu…</span></div>
       <div class="time" data-timer="mss">0:00</div>
     </div>
@@ -434,11 +444,11 @@
 // overlay runs a self-contained loop with synthetic speech.
 const DEMO = !window.notype || new URLSearchParams(location.search).has('demo');
 const NB = 20;   // spectrum bands (matches audio_recorder.N_BANDS)
-const STYLES = ['amoled', 'matrix', 'island', 'halo', 'buddy', 'slime', 'dragon', 'mimic', 'sage'];
+const STYLES = ['amoled', 'matrix', 'island', 'halo', 'buddy', 'slime', 'dragon', 'mimic', 'line'];
 // Ids of styles that no longer exist → their closest successor.
 const LEGACY_STYLES = {
   wave: 'amoled', wave_classic: 'amoled', ribbon: 'amoled', particles: 'amoled', spectrum: 'amoled',
-  aurora: 'halo', pulse: 'halo', orb: 'halo',
+  aurora: 'halo', pulse: 'halo', orb: 'halo', sage: 'line',
   amoled_card: 'amoled', amoled_top: 'amoled', amoled_bottom: 'amoled', amoled_center: 'amoled',
 };
 const ACCENTS = {
@@ -450,6 +460,17 @@ const ACCENTS = {
   red:    { bar: ['#ff453a', '#ff5e6c', '#ff8a80'], ring: ['#ff453a', '#ff9f0a', '#ff375f', '#ff453a'], glow: '255,69,58',   hi: '#ffd9d6' },
   amber:  { bar: ['#ffb340', '#ffa21a', '#ffd60a'], ring: ['#ff9f0a', '#ff6a3d', '#ffd60a', '#ff9f0a'], glow: '255,170,40',  hi: '#fff0cc' },
 };
+// Salbei brings its own palette instead of an accent. The extra keys are
+// for pieces that need more contrast on paper than the bar colors give:
+// LED peaks (pop), the slime's jelly, the mimic's eyes, the line's echo and
+// a real fire for the dragon.
+const SAGE_PAL = {
+  bar: ['#56663a', '#6b7f45', '#86a062'], ring: ['#56663a', '#93ab78', '#c9a85f', '#7b9455'], glow: '93,115,64', hi: '#dfe9c8',
+  pop: '#6f8a43', blob: '#8fb069', eye: '#c3dc96', echo: '#93ab78',
+  fire: ['#fff6dc', '#f3d98f', '#e0a443', '#c06a35', '#8c4a32'],
+};
+// Surface and ink per world (mirrors the CSS tokens).
+const WORLDS = { dark: { surf: '#000000', ink: '#ffffff' }, sage: { surf: '#f5f2e9', ink: '#2b3123' } };
 const I18N = {
   de: { listen: 'Ich höre zu…', proc: 'Verarbeite…', done: 'Eingefügt', rec: 'Aufnahme', procL: 'Verarbeite', doneL: 'Eingefügt' },
   en: { listen: 'Listening…',   proc: 'Processing…', done: 'Inserted',  rec: 'Recording', procL: 'Processing', doneL: 'Inserted' },
@@ -462,13 +483,14 @@ const I18N_CMD = {
 };
 
 const S = {
-  style: 'amoled', accent: 'mint', pos: 'bottom', lang: 'de', sounds: true, preview: true,
+  style: 'amoled', accent: 'mint', world: 'dark', pos: 'bottom', lang: 'de', sounds: true, preview: true,
   state: 'idle', stateAt: 0, recAt: 0, recEnd: 0,
   text: '', hasText: false, leaving: false, command: false,
 };
 const $ = (id) => document.getElementById(id);
 const L = () => (S.command ? I18N_CMD : I18N)[S.lang] || (S.command ? I18N_CMD : I18N).de;
-const ACC = () => ACCENTS[S.accent] || ACCENTS.mint;
+const ACC = () => (S.world === 'sage' ? SAGE_PAL : ACCENTS[S.accent] || ACCENTS.mint);
+const WD = () => WORLDS[S.world] || WORLDS.dark;
 const now = () => performance.now();
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const ease = (x) => 1 - Math.pow(1 - clamp01(x), 3);
@@ -681,7 +703,7 @@ function renderAmoled(dt, t) {
   ctx.globalAlpha = 1;
   // done: the dots dim and a check draws itself across the centre
   if (ds > 0.01) {
-    ctx.fillStyle = '#000'; ctx.globalAlpha = ds * 0.85;
+    ctx.fillStyle = WD().surf; ctx.globalAlpha = ds * 0.85;
     ctx.fillRect(W / 2 - 18, 0, 36, H); ctx.globalAlpha = 1;
     drawCheck(ctx, W / 2, mid, 11, doneProgress(), pal[0], 2.6);
   }
@@ -749,7 +771,7 @@ function renderMatrix(dt, t) {
   }
   // boot-up: the grid switches on column by column after a recording starts
   const boot = S.state === 'listening' ? clamp01((now() - S.recAt) / 360) : 1;
-  const acc = ACC().bar[0];
+  const acc = ACC().pop || ACC().bar[0], ink = WD().ink;
   for (let r = 0; r < R; r++) {
     for (let c = 0; c < C; c++) {
       if (c / C > boot) continue;
@@ -758,10 +780,10 @@ function renderMatrix(dt, t) {
       ctx.beginPath();
       ctx.arc(x, y, v > 0.05 ? 1.45 : 1.2, 0, Math.PI * 2);
       if (v > 0.05) {
-        ctx.fillStyle = mxAcc[idx] ? acc : '#ffffff';
+        ctx.fillStyle = mxAcc[idx] ? acc : ink;
         ctx.globalAlpha = 0.25 + 0.75 * v;
       } else {
-        ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.1;
+        ctx.fillStyle = ink; ctx.globalAlpha = 0.1;
       }
       ctx.fill();
     }
@@ -833,6 +855,9 @@ const HA_PASSES = [[30, 0.03], [19, 0.055], [11, 0.1], [5, 0.2], [2.2, 0.5]];
 function renderHalo(dt, t) {
   const [ctx, W, H] = prep($('haRim'));
   const pal = ACC().ring, e = energy(), ps = mix.processing, ds = mix.done;
+  // Dark adds light (bloom); on paper the rim is a soft colored shade with
+  // olive spots instead of white ones.
+  const paper = S.world === 'sage', add = paper ? 'source-over' : 'lighter', spot = paper ? '86,102,58' : '255,255,255';
   HA.rot += dt * (0.5 + e * 2.4) * (1 - ps * 0.7);
   HA.rot2 -= dt * (0.35 + e * 1.2);
   const cx = W / 2, cy = H / 2;
@@ -844,13 +869,13 @@ function renderHalo(dt, t) {
   const SP = 16;
   for (let i = 0; i <= SP; i++) {
     const d = Math.abs((i / SP) * 2 - 1);
-    g2.addColorStop(i / SP, `rgba(255,255,255,${(Math.pow(band(d * 0.85), 1.1) * 0.95).toFixed(3)})`);
+    g2.addColorStop(i / SP, `rgba(${spot},${(Math.pow(band(d * 0.85), 1.1) * 0.95).toFixed(3)})`);
   }
   const flash = S.state === 'done' ? Math.max(0, 1 - sinceState() * 1.6) : 0;
   const I = (0.42 + 0.95 * e) * (1 - 0.65 * ps) + ds * 0.35 + flash * 0.6;
   const path = () => { ctx.beginPath(); ctx.roundRect(HA.x, HA.y, HA.w, HA.h, HA.h / 2); };
   path();
-  ctx.globalCompositeOperation = 'lighter';
+  ctx.globalCompositeOperation = add;
   for (const [lw, a] of HA_PASSES) {
     ctx.lineWidth = lw * (0.85 + 0.4 * e);
     ctx.strokeStyle = g; ctx.globalAlpha = Math.min(1, a * I); ctx.stroke();
@@ -859,7 +884,7 @@ function renderHalo(dt, t) {
     ctx.lineWidth = lw; ctx.strokeStyle = g2; ctx.globalAlpha = a * (1 - ps); ctx.stroke();
   }
   ctx.globalCompositeOperation = 'source-over';
-  ctx.globalAlpha = 1; ctx.fillStyle = '#000'; ctx.fill();
+  ctx.globalAlpha = 1; ctx.fillStyle = WD().surf; ctx.fill();
   // light bleeding into the glass: soft falloff, not a second border
   ctx.save(); ctx.clip();
   ctx.strokeStyle = g;
@@ -868,12 +893,12 @@ function renderHalo(dt, t) {
   }
   ctx.restore();
   ctx.lineWidth = 1.4; ctx.strokeStyle = g; ctx.globalAlpha = Math.min(1, 0.5 + 0.5 * I); ctx.stroke();
-  // processing: a white comet circling the rim
+  // processing: a comet circling the rim (white on black, olive on paper)
   if (ps > 0.01) {
     const cg = ctx.createConicGradient(t * 5.5, cx, cy);
-    cg.addColorStop(0, 'rgba(255,255,255,0)'); cg.addColorStop(0.78, 'rgba(255,255,255,0)');
-    cg.addColorStop(0.97, 'rgba(255,255,255,1)'); cg.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = cg;
+    cg.addColorStop(0, `rgba(${spot},0)`); cg.addColorStop(0.78, `rgba(${spot},0)`);
+    cg.addColorStop(0.97, `rgba(${spot},1)`); cg.addColorStop(1, `rgba(${spot},0)`);
+    ctx.globalCompositeOperation = add; ctx.strokeStyle = cg;
     for (const [lw, a] of [[10, 0.12], [4, 0.35], [1.6, 1]]) { ctx.lineWidth = lw; ctx.globalAlpha = a * ps; ctx.stroke(); }
     ctx.globalCompositeOperation = 'source-over';
   }
@@ -947,7 +972,7 @@ function renderBuddy(dt, t) {
 
   // boot-up: the face switches on column by column, like the Dot Matrix
   const boot = S.state === 'listening' ? clamp01((ms - S.recAt) / 360) : 1;
-  const acc = ACC().bar[0];
+  const acc = ACC().pop || ACC().bar[0], ink = WD().ink;
   for (let r = 0; r < R; r++) {
     for (let c = 0; c < C; c++) {
       if (c / C > boot) continue;
@@ -955,10 +980,10 @@ function renderBuddy(dt, t) {
       ctx.beginPath();
       ctx.arc((c + 0.5) * P, (r + 0.5) * (H / R), v > 0.05 ? 1.45 : 1.2, 0, Math.PI * 2);
       if (v > 0.05) {
-        ctx.fillStyle = bdAcc[idx] ? acc : '#ffffff';
+        ctx.fillStyle = bdAcc[idx] ? acc : ink;
         ctx.globalAlpha = 0.25 + 0.75 * v;
       } else {
-        ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.1;
+        ctx.fillStyle = ink; ctx.globalAlpha = 0.1;
       }
       ctx.fill();
     }
@@ -986,7 +1011,7 @@ function slSparkle(ctx, x, y, s) {
 }
 function renderSlime(dt, t) {
   const [ctx, W, H] = prep($('slCv'));
-  const acc = ACC(), a1 = acc.bar[0], ms = now();
+  const acc = ACC(), a1 = acc.blob || acc.bar[0], ms = now();
   if (S.recAt !== SL.recAt) {                       // entry: rises out of a puddle
     SL.recAt = S.recAt; SL.sy = 0.14; SL.vs = 0; SL.hop = SL.vh = 0; SL.sparks.length = 0;
   }
@@ -1159,7 +1184,7 @@ function pixRing(L, cx, cy, r, color) {
 }
 function renderDragon(dt, t) {
   const SP = NoTypeSprites.dragon, L = DR.L, ms = now(), acc = ACC(), bar = acc.bar;
-  const pal = pixPalette(L, S.accent, () => ({
+  const pal = pixPalette(L, S.world + ':' + S.accent, () => ({
     K: mixHex(bar[0], '#07070c', 0.76), B: bar[0], D: mixHex(bar[0], '#000000', 0.3),
     L: mixHex(bar[0], '#fff3d6', 0.62), H: '#fff1cf', W: mixHex(bar[1], '#000000', 0.16),
     E: '#0b0b12', Q: '#ffffff', N: mixHex(bar[0], '#000000', 0.62),
@@ -1216,8 +1241,8 @@ function renderDragon(dt, t) {
     pixDraw(L, DR.blink() ? E.blink : st === 'processing' ? E.up : E.open, E.at[0], E.at[1] + bob);
   }
 
-  // flames: white-hot core cooling through the accent colours
-  const ramp = ['#ffffff', acc.hi, bar[1], bar[0], (acc.ring[2] || bar[0])];
+  // flames: white-hot core cooling through the accent colours (Salbei: real fire)
+  const ramp = acc.fire || ['#ffffff', acc.hi, bar[1], bar[0], (acc.ring[2] || bar[0])];
   for (const p of DR.fire) {
     const f = p.age / p.life;
     if (p.smoke) {
@@ -1235,7 +1260,7 @@ function renderDragon(dt, t) {
   if (st === 'done' && since < 1.1) {
     const f = since / 1.1;
     x.globalAlpha = f < 0.6 ? 1 : 1 - (f - 0.6) / 0.4;
-    pixRing(L, Math.round(mouth.x + 3 + f * 7), mouth.y - Math.round(f * 2), Math.round(1 + f * 3.2), f < 0.25 ? '#ffffff' : acc.hi);
+    pixRing(L, Math.round(mouth.x + 3 + f * 7), mouth.y - Math.round(f * 2), Math.round(1 + f * 3.2), f < 0.25 ? ramp[0] : acc.fire ? ramp[2] : acc.hi);
   }
   x.globalAlpha = 1;
   pixBlit($('drCv'), L);
@@ -1286,7 +1311,7 @@ function renderMimic(dt, t) {
   if (g > 0) {
     pixRect(L, x0 + 1, y0, 18, g, MM_MOUTH);
     pixRect(L, x0, y0, 1, g, MM_PAL.K); pixRect(L, x0 + 19, y0, 1, g, MM_PAL.K);
-    const eyeH = g >= 3 ? 2 : 1, eye = acc.bar[0];
+    const eyeH = g >= 3 ? 2 : 1, eye = acc.eye || acc.bar[0];
     if (st === 'done') {
       for (const ex of [4, 13]) {
         pixRect(L, x0 + ex + 1, y0, 1, 1, eye);
@@ -1333,47 +1358,49 @@ function renderMimic(dt, t) {
   pixBlit($('mmCv'), L);
 }
 
-// ═══ 9. SAGE ══════════════════════════════════════════════════════
-// One olive stroke with a sage echo behind it, pinned at both ends so it
-// reads as a line, not a chart. Low bands swell it, high bands ripple it;
-// while it processes it breathes slowly, when the text is in it lies flat
-// and a check draws itself in its middle.
-const SG = { olive: '#56663a', sage: '#93ab78', amp: 0, ph: 0 };
-function renderSage(dt, t) {
-  const [ctx, W, H] = prep($('sgLine'));
+// ═══ 9. LINE ══════════════════════════════════════════════════════
+// One stroke with a softer echo behind it, pinned at both ends so it reads
+// as a line, not a chart. Low bands swell it, high bands ripple it; while
+// it processes it breathes slowly, when the text is in it lies flat and a
+// check draws itself in its middle. Olive and sage on paper, the accent's
+// first and last color on black.
+const LN = { amp: 0, ph: 0 };
+function renderLine(dt, t) {
+  const [ctx, W, H] = prep($('lnWave'));
+  const acc = ACC(), main = acc.bar[0], echo = acc.echo || acc.bar[acc.bar.length - 1];
   const ps = mix.processing, ds = mix.done, mid = H / 2, e = energy();
   const live = 0.07 + e * 0.93;                      // never quite still while listening
   const breath = 0.16 + 0.07 * Math.sin(t * 2.1);
   const target = (live * (1 - ps) + breath * ps) * (1 - ds);
-  SG.amp += (target - SG.amp) * (1 - Math.exp(-dt / 0.08));
-  SG.ph += dt * (2.2 + e * 3 - ps * 0.8);            // travels faster while you talk
+  LN.amp += (target - LN.amp) * (1 - Math.exp(-dt / 0.08));
+  LN.ph += dt * (2.2 + e * 3 - ps * 0.8);            // travels faster while you talk
   const w1 = 0.5 + band(0.12), w2 = 0.25 + band(0.4), w3 = 0.12 + band(0.75);
   const norm = 1 / (w1 + w2 + w3), TAU = Math.PI * 2;
   const gap = 16 * ease(ds);                         // the line parts for the check
   const stroke = (shift, k, color, width, alpha) => {
-    const A = (H / 2 - width) * SG.amp * k * norm;
+    const A = (H / 2 - width) * LN.amp * k * norm;
     ctx.beginPath();
     let pen = false;
     for (let x = 0; x <= W; x += 1.5) {
       if (Math.abs(x - W / 2) < gap) { pen = false; continue; }
       const u = x / W, env = Math.pow(Math.sin(Math.PI * u), 1.4);
-      const y = mid + A * env * (w1 * Math.sin(TAU * 1.3 * u - SG.ph + shift)
-        + w2 * Math.sin(TAU * 2.9 * u - SG.ph * 1.6 + shift * 1.3)
-        + w3 * Math.sin(TAU * 6.1 * u - SG.ph * 2.3 + shift * 0.7));
+      const y = mid + A * env * (w1 * Math.sin(TAU * 1.3 * u - LN.ph + shift)
+        + w2 * Math.sin(TAU * 2.9 * u - LN.ph * 1.6 + shift * 1.3)
+        + w3 * Math.sin(TAU * 6.1 * u - LN.ph * 2.3 + shift * 0.7));
       if (pen) ctx.lineTo(x, y); else { ctx.moveTo(x, y); pen = true; }
     }
     ctx.strokeStyle = color; ctx.lineWidth = width; ctx.globalAlpha = alpha;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
   };
-  stroke(2.1, 0.72, SG.sage, 2, 0.6 * (1 - ds));     // the echo settles into the line
-  stroke(0, 1, SG.olive, 2.2, 1);
+  stroke(2.1, 0.72, echo, 2, 0.6 * (1 - ds));        // the echo settles into the line
+  stroke(0, 1, main, 2.2, 1);
   ctx.globalAlpha = 1;
-  if (ds > 0.01) drawCheck(ctx, W / 2, mid, 10, doneProgress(), SG.olive, 2.4);
+  if (ds > 0.01) drawCheck(ctx, W / 2, mid, 10, doneProgress(), main, 2.4);
 }
 
 const RENDER = {
   amoled: renderAmoled, matrix: renderMatrix, island: renderIsland, halo: renderHalo, buddy: renderBuddy,
-  slime: renderSlime, dragon: renderDragon, mimic: renderMimic, sage: renderSage,
+  slime: renderSlime, dragon: renderDragon, mimic: renderMimic, line: renderLine,
 };
 
 // ── Text + timer ──────────────────────────────────────────────────
@@ -1482,6 +1509,11 @@ function applyStyle(style, opts) {
   document.body.dataset.accent = S.accent;
   document.body.dataset.pos = S.pos;
   requestAnimationFrame(updateClip);
+}
+// main.js sends the resolved theme, 'dark' or 'light'; light is Salbei.
+function applyWorld(theme) {
+  S.world = theme === 'light' || theme === 'sage' ? 'sage' : 'dark';
+  document.body.dataset.world = S.world;
 }
 function applyLang(lang) {
   S.lang = I18N[lang] ? lang : 'de';
@@ -1610,6 +1642,7 @@ if (!DEMO) {
   if (nt.onRecordingCancelled) nt.onRecordingCancelled(recordingCancelled);
   if (nt.onBusy) nt.onBusy(busy);
   if (nt.onSetStyle) nt.onSetStyle(applyStyle);
+  if (nt.onSetTheme) nt.onSetTheme(applyWorld);
   if (nt.onAttachment) nt.onAttachment(addAttachment);
   if (nt.onPreviewEnabled) nt.onPreviewEnabled((on) => { S.preview = !!on; });
   if (nt.onAppLang) nt.onAppLang(applyLang);
@@ -1659,11 +1692,13 @@ function demoTick(dt) {
 }
 if (DEMO) {
   const q = new URLSearchParams(location.search);
+  applyWorld(q.get('world'));
   applyStyle(q.get('style') || 'amoled', { accent: q.get('accent') || 'mint', position: 'center', sounds: false });
   applyLang(q.get('lang') || 'de');
   window.addEventListener('message', (e) => {
     const m = e.data;
     if (!m || m.type !== 'notype-demo') return;
+    if (m.world) applyWorld(m.world);
     if (m.lang) applyLang(m.lang);
     if (typeof m.preview === 'boolean') S.preview = m.preview;
     if (typeof m.paused === 'boolean') D.paused = m.paused;

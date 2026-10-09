@@ -7,29 +7,33 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
+  /* Salbei, the light world: warm paper and olive ink, like the overlays */
   :root {
-    --bg: #ffffff;
-    --fg: #1a1a1a;
-    --fg-muted: #333;
-    --fg-dim: #6b6b6b;
-    --accent: #00b894;
-    --card-bg: #fafafa;
-    --card-border: #f0f0f0;
-    --input-bg: #ffffff;
-    --input-border: #e0e0e0;
-    --input-border-hover: #bbbbbb;
-    --input-focus: #1a1a1a;
-    --hover-bg: #f0f0f0;
-    --toggle-off: #dddddd;
-    --toggle-on: #00b894;
-    --toggle-knob: #ffffff;
-    --scroll-thumb: #cccccc;
-    --scroll-thumb-hover: #999999;
-    --save-bg: #00b894;
-    --save-bg-hover: #00a37f;
-    --save-fg: #ffffff;
-    --bar-track: #eeeeee;
-    --shadow: rgba(0,0,0,0.15);
+    --bg: #f3f0e6;
+    --bg-solid: #f9f7f0;
+    --fg: #262b1f;
+    --fg-muted: #383e2f;
+    --fg-dim: #5f6652;
+    --accent: #56663a;
+    --card-bg: #f9f7f0;
+    --card-border: rgba(70, 82, 48, 0.12);
+    --input-bg: #fdfcf8;
+    --input-border: rgba(70, 82, 48, 0.2);
+    --input-border-hover: rgba(70, 82, 48, 0.42);
+    --input-focus: #56663a;
+    --hover-bg: rgba(86, 102, 58, 0.08);
+    --toggle-off: rgba(70, 82, 48, 0.22);
+    --toggle-on: #56663a;
+    --toggle-knob: #fdfcf8;
+    --scroll-thumb: rgba(70, 82, 48, 0.24);
+    --scroll-thumb-hover: rgba(70, 82, 48, 0.42);
+    --save-bg: #56663a;
+    --save-bg-hover: #4a5832;
+    --save-fg: #f9f7f0;
+    --bar-track: rgba(70, 82, 48, 0.12);
+    --meter: linear-gradient(90deg, #6b7f45, #93ab78);
+    --ok: #56663a;
+    --shadow: rgba(32, 36, 24, 0.22);
   }
 
   [data-theme="dark"] {
@@ -54,6 +58,8 @@
     --save-bg-hover: #1fdcb4;
     --save-fg: #062018;
     --bar-track: rgba(255, 255, 255, 0.10);
+    --meter: linear-gradient(90deg, #22c55e, #4ade80);
+    --ok: #22c55e;
     --shadow: rgba(0,0,0,0.4);
   }
 
@@ -68,6 +74,8 @@
     flex-direction: column;
     overflow: hidden;
   }
+
+  ::selection { background: color-mix(in srgb, var(--accent) 26%, transparent); }
 
   /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 6px; }
@@ -373,17 +381,23 @@
     font-size: 10px; padding: 4px 10px; border-radius: 99px;
     font-weight: 600; letter-spacing: 0.5px; flex-shrink: 0;
   }
-  .status-badge.ok { background: #e6f9f0; color: #059669; }
-  .status-badge.loading { background: #fff3e0; color: #a84d06; }
+  .status-badge.ok { background: rgba(147, 171, 120, 0.28); color: #46552c; }
+  .status-badge.loading { background: #f6e6cc; color: #94460a; }
   [data-theme="dark"] .status-badge.ok { background: rgba(34, 197, 94, 0.18); color: #34d399; }
   [data-theme="dark"] .status-badge.loading { background: rgba(217, 119, 6, 0.20); color: #fbbf24; }
 
   /* ── Overlay pane ── */
   /* Live preview: the real overlay.html in demo mode on a desktop-like
-     backdrop (the overlay is always OLED-black, whatever the app theme). */
+     backdrop, in the chosen world (a light desktop for Salbei). */
   .ovl-stage {
     position: relative; height: calc(180px * var(--s, 0.9)); border-radius: 14px; overflow: hidden;
     border: 1px solid var(--card-border);
+    background:
+      radial-gradient(520px 260px at 18% 0%, #c4d3ea 0%, transparent 70%),
+      radial-gradient(480px 300px at 92% 100%, #e2d0dc 0%, transparent 70%),
+      linear-gradient(160deg, #dbe2ec, #d3d9e4 55%, #dad3df);
+  }
+  [data-theme="dark"] .ovl-stage {
     background:
       radial-gradient(520px 260px at 18% 0%, #3d4f74 0%, transparent 70%),
       radial-gradient(480px 300px at 92% 100%, #6e3d5f 0%, transparent 70%),
@@ -397,10 +411,27 @@
   .ovl-stage .stage-tag {
     position: absolute; left: 12px; top: 10px;
     font-size: 10px; font-weight: 700; letter-spacing: 0.9px; text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.55);
+    color: rgba(38, 43, 31, 0.6);
   }
+  [data-theme="dark"] .ovl-stage .stage-tag { color: rgba(255, 255, 255, 0.55); }
 
-  .style-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  /* Thumbnail colors per world; --g1..--g3 (accent or the Salbei palette)
+     are set from JS. */
+  .style-grid {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;
+    --t-surf: #f5f2e9; --t-rim: rgba(70, 82, 48, 0.24); --t-sep: rgba(70, 82, 48, 0.2);
+    --t-ink: rgba(43, 49, 35, 0.8); --t-ink2: rgba(100, 107, 85, 0.55);
+    --t-dot: #2b3123; --t-dot0: rgba(43, 49, 35, 0.14);
+    --t-pop: #6f8a43; --t-blob: #8fb069; --t-eye: #c3dc96; --t-echo: #93ab78;
+    --t-fire0: #f3d98f; --t-fire1: #e0a443; --t-fire2: #c06a35; --t-fire3: #8c4a32;
+  }
+  [data-theme="dark"] .style-grid {
+    --t-surf: #000; --t-rim: rgba(255, 255, 255, 0.16); --t-sep: rgba(255, 255, 255, 0.14);
+    --t-ink: rgba(255, 255, 255, 0.75); --t-ink2: rgba(255, 255, 255, 0.35);
+    --t-dot: #fff; --t-dot0: rgba(255, 255, 255, 0.16);
+    --t-pop: var(--g1); --t-blob: var(--g1); --t-eye: var(--g1); --t-echo: var(--g3);
+    --t-fire0: #fff; --t-fire1: var(--g2); --t-fire2: var(--g1); --t-fire3: var(--g3);
+  }
   .style-card {
     display: flex; flex-direction: column; gap: 8px; padding: 8px 8px 10px;
     border: 1px solid var(--input-border); border-radius: 12px;
@@ -411,8 +442,9 @@
   .style-card.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .style-card .thumb {
     width: 100%; height: 60px; border-radius: 8px; overflow: hidden;
-    background: linear-gradient(160deg, #222b3c, #352d3d);
+    background: linear-gradient(160deg, #d6dee9, #dad3df);
   }
+  [data-theme="dark"] .style-card .thumb { background: linear-gradient(160deg, #222b3c, #352d3d); }
   .style-card .thumb svg { display: block; width: 100%; height: 100%; }
   .style-card .sc-name { font-size: 12.5px; font-weight: 600; padding: 0 2px; }
   .style-card .sc-desc { font-size: 10.5px; color: var(--fg-dim); line-height: 1.35; padding: 0 2px; }
@@ -423,7 +455,7 @@
     position: relative; transition: transform 0.12s;
   }
   .swatch:hover { transform: scale(1.1); }
-  /* the chosen style brings its own colors; the accent is kept for the others */
+  /* Salbei brings its own colors; the accent is kept for Dark */
   .swatches.muted .swatch { opacity: 0.35; }
   .swatches.muted .swatch:hover { opacity: 0.6; }
   .swatch.active { box-shadow: 0 0 0 2px var(--bg-solid, #fff), 0 0 0 4px var(--fg); }
@@ -488,13 +520,14 @@
         </div>
         <div class="field">
           <div>
-            <div class="field-label" data-i18n="general.dark">Dunkles Design</div>
-            <div class="field-desc" data-i18n="general.dark.desc">Für Einstellungen, Hinweise und Einrichtung</div>
+            <div class="field-label" data-i18n="general.design">Design</div>
+            <div class="field-desc" data-i18n="general.design.desc">Für Overlay, Einstellungen, Hinweise und Einrichtung</div>
           </div>
-          <label class="toggle">
-            <input type="checkbox" id="darkModeToggle">
-            <span class="slider"></span>
-          </label>
+          <select id="designSelect">
+            <option value="system" data-i18n="general.design.system">Automatisch (wie Windows)</option>
+            <option value="dark" data-i18n="general.design.dark">Dark</option>
+            <option value="light" data-i18n="general.design.sage">Salbei</option>
+          </select>
         </div>
         <div class="field">
           <div>
@@ -850,7 +883,7 @@
             <button class="btn-sm" id="micTestBtn">🎤 Test</button>
           </div>
           <div style="background: var(--bar-track); border-radius: 6px; height: 8px; overflow: hidden; position: relative;">
-            <div id="micTestBar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #22c55e, #4ade80); border-radius: 6px; transition: width 0.08s ease-out;"></div>
+            <div id="micTestBar" style="height: 100%; width: 0%; background: var(--meter); border-radius: 6px; transition: width 0.08s ease-out;"></div>
           </div>
         </div>
         <div class="field">
@@ -992,7 +1025,8 @@
       'cleanup.active': 'Aktiv ✓', 'cleanup.ready.desc': 'Lokales LLM bereit – Modus „KI" nutzt es automatisch',
       'cleanup.installed.desc': 'Installiert, aber noch nicht einsatzbereit',
       'cleanup.notinstalled.desc': 'Einmaliger Download – danach läuft die KI-Bereinigung komplett lokal',
-      'general.dark': 'Dunkles Design', 'general.dark.desc': 'Für Einstellungen, Hinweise und Einrichtung',
+      'general.design': 'Design', 'general.design.desc': 'Für Overlay, Einstellungen, Hinweise und Einrichtung',
+      'general.design.system': 'Automatisch (wie Windows)', 'general.design.dark': 'Dark', 'general.design.sage': 'Salbei',
       'overlay.preview': 'Live-Vorschau', 'overlay.style': 'Stil', 'overlay.look': 'Darstellung',
       'overlay.accent': 'Akzentfarbe',
       'overlay.pos': 'Position', 'overlay.pos.desc': 'Wo die Anzeige auf dem Bildschirm erscheint',
@@ -1008,10 +1042,10 @@
       'ovl.slime': 'Schleim', 'ovl.slime.desc': 'Wackelt bei jeder Silbe und hüpft, während er nachdenkt',
       'ovl.dragon': 'Drache', 'ovl.dragon.desc': 'Pixel-Drache, dessen Feueratem deiner Stimme folgt',
       'ovl.mimic': 'Mimic', 'ovl.mimic.desc': 'Lebendige Schatztruhe: Der Deckel redet mit, am Ende fliegt Gold',
-      'ovl.sage': 'Salbei', 'ovl.sage.desc': 'Helle Pille, deine Stimme als ruhige olivgrüne Linie',
+      'ovl.line': 'Linie', 'ovl.line.desc': 'Deine Stimme als ruhige Linie mit Echo',
       'acc.mint': 'Mint', 'acc.mono': 'Mono', 'acc.aurora': 'Aurora', 'acc.blue': 'Blau',
       'acc.violet': 'Violett', 'acc.red': 'Rot', 'acc.amber': 'Bernstein',
-      'acc.own': 'Salbei hat eigene Farben, die Akzentfarbe gilt für die anderen Stile',
+      'acc.own': 'In Salbei haben die Overlays eigene Farben. Die Akzentfarbe gilt für Dark.',
       'system.audio': 'Audio', 'system.mic': 'Mikrofon', 'system.mic.desc': 'Audioeingangsgerät auswählen',
       'system.mic.default': 'Standard (System)', 'system.mic.defaulttag': ' (Standard)',
       'system.mic.missing': ' (nicht verbunden)',
@@ -1108,7 +1142,8 @@
       'cleanup.active': 'Active ✓', 'cleanup.ready.desc': 'Local LLM ready – "AI" mode uses it automatically',
       'cleanup.installed.desc': 'Installed, but not ready yet',
       'cleanup.notinstalled.desc': 'One-time download – afterwards AI cleanup runs fully local',
-      'general.dark': 'Dark theme', 'general.dark.desc': 'For settings, notifications and setup',
+      'general.design': 'Design', 'general.design.desc': 'For the overlay, settings, notifications and setup',
+      'general.design.system': 'Automatic (like Windows)', 'general.design.dark': 'Dark', 'general.design.sage': 'Sage',
       'overlay.preview': 'Live preview', 'overlay.style': 'Style', 'overlay.look': 'Appearance',
       'overlay.accent': 'Accent color',
       'overlay.pos': 'Position', 'overlay.pos.desc': 'Where the indicator appears on screen',
@@ -1124,10 +1159,10 @@
       'ovl.slime': 'Slime', 'ovl.slime.desc': 'Jiggles with every syllable and hops while it thinks',
       'ovl.dragon': 'Dragon', 'ovl.dragon.desc': 'Pixel dragon whose fire breath follows your voice',
       'ovl.mimic': 'Mimic', 'ovl.mimic.desc': 'A living treasure chest: the lid talks along, gold flies at the end',
-      'ovl.sage': 'Sage', 'ovl.sage.desc': 'Light pill, your voice as a calm olive line',
+      'ovl.line': 'Line', 'ovl.line.desc': 'Your voice as a calm line with an echo',
       'acc.mint': 'Mint', 'acc.mono': 'Mono', 'acc.aurora': 'Aurora', 'acc.blue': 'Blue',
       'acc.violet': 'Violet', 'acc.red': 'Red', 'acc.amber': 'Amber',
-      'acc.own': 'Sage has its own colors, the accent applies to the other styles',
+      'acc.own': 'In Sage the overlays bring their own colors. The accent applies to Dark.',
       'system.audio': 'Audio', 'system.mic': 'Microphone', 'system.mic.desc': 'Select the audio input device',
       'system.mic.default': 'Default (system)', 'system.mic.defaulttag': ' (default)',
       'system.mic.missing': ' (not connected)',
@@ -1704,14 +1739,12 @@
   };
 
   // ── Overlay: style cards, accent swatches, live preview ──
-  const OVL_STYLES = ['amoled', 'matrix', 'island', 'halo', 'sage', 'buddy', 'slime', 'dragon', 'mimic'];
-  // Styles with their own palette: the accent swatches don't apply to them.
-  const OVL_OWN_COLORS = ['sage'];
+  const OVL_STYLES = ['amoled', 'matrix', 'island', 'halo', 'line', 'buddy', 'slime', 'dragon', 'mimic'];
   // Retired style ids → successor (mirrors main.js LEGACY_OVERLAY_STYLES).
   const OVL_LEGACY = {
     amoled_top: 'amoled', amoled_bottom: 'amoled', amoled_center: 'amoled', amoled_card: 'amoled',
     wave: 'amoled', wave_classic: 'amoled', ribbon: 'amoled', particles: 'amoled', spectrum: 'amoled',
-    aurora: 'halo', pulse: 'halo', orb: 'halo',
+    aurora: 'halo', pulse: 'halo', orb: 'halo', sage: 'line',
   };
   const OVL_LEGACY_POS = { amoled_top: 'top', amoled_bottom: 'bottom', amoled_center: 'center' };
   const OVL_ACCENTS = {
@@ -1723,19 +1756,26 @@
     red:    ['#ff453a', '#ff5e6c', '#ff8a80'],
     amber:  ['#ffb340', '#ffa21a', '#ffd60a'],
   };
-  // Miniature previews (120×52) – shapes in black like the real overlays,
-  // accent strokes via --g1..--g3 so they follow the chosen color.
+  // Salbei's own palette (mirrors SAGE_PAL in overlay.html).
+  const OVL_SAGE = ['#56663a', '#6b7f45', '#86a062'];
+  // The overlays follow the design: Dark unless the window shows Salbei.
+  const ovlWorld = () => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'sage');
+  // Miniature previews (120×52) in the colors of the chosen world: surfaces,
+  // ink and dots via --t-* (CSS), accent strokes via --g1..--g3 (JS).
   const svgGrad = (id, x1, x2) =>
     `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${x1}" y1="0" x2="${x2}" y2="0">` +
     `<stop offset="0" style="stop-color:var(--g1)"/><stop offset=".5" style="stop-color:var(--g2)"/>` +
     `<stop offset="1" style="stop-color:var(--g3)"/></linearGradient>`;
-  const RIM = 'stroke="rgba(255,255,255,.16)" stroke-width=".8"';
+  const SURF = 'style="fill:var(--t-surf);stroke:var(--t-rim)" stroke-width=".8"';
+  const INK = 'style="stroke:var(--t-ink)" stroke-width="2.2" stroke-linecap="round"';
+  const INK2 = 'style="stroke:var(--t-ink2)" stroke-width="2.2" stroke-linecap="round"';
+  const SEP = 'style="stroke:var(--t-sep)" stroke-width=".8"';
   // Speech bubble for the character thumbs, its tail at x = tail.
   const thumbBubble = (tail) => {
     const x = tail + 13.2;
-    return `<path d="M${x} 16h${103 - x}a10 10 0 0 1 0 20h-${103 - x}a10 10 0 0 1-10-7.2l-3.2-2.8 3.2-2.8a10 10 0 0 1 10-7.2z" fill="#000" ${RIM}/>
-      <path d="M${x + 1} 26h${Math.round((95 - x) * 0.72)}" stroke="rgba(255,255,255,.75)" stroke-width="2.2" stroke-linecap="round"/>
-      <path d="M95 26h8" stroke="rgba(255,255,255,.35)" stroke-width="2.2" stroke-linecap="round"/>`;
+    return `<path d="M${x} 16h${103 - x}a10 10 0 0 1 0 20h-${103 - x}a10 10 0 0 1-10-7.2l-3.2-2.8 3.2-2.8a10 10 0 0 1 10-7.2z" ${SURF}/>
+      <path d="M${x + 1} 26h${Math.round((95 - x) * 0.72)}" ${INK}/>
+      <path d="M95 26h8" ${INK2}/>`;
   };
   // Pixel sprites (sprites.js) → SVG rects, one per horizontal run of a colour.
   function pixelThumb(w, h, parts, fills, px, ox, oy) {
@@ -1757,17 +1797,17 @@
     });
     return out;
   }
-  const tint = (pct, other) => `color-mix(in srgb, var(--g1) ${pct}%, ${other})`;
+  const tint = (pct, other, v = '--g1') => `color-mix(in srgb, var(${v}) ${pct}%, ${other})`;
   const OVL_THUMBS = {
     amoled: (() => {
       const hs = [3, 5, 8, 11, 14, 11, 8, 5, 3];
       const bars = hs.map((h, i) => `M${14 + i * 3} ${26 - h / 2}v${h}`).join('');
       return `<svg viewBox="0 0 120 52"><defs>${svgGrad('tgAm', 14, 38)}</defs>
-        <rect x="6" y="15" width="108" height="22" rx="11" fill="#000" ${RIM}/>
+        <rect x="6" y="15" width="108" height="22" rx="11" ${SURF}/>
         <path d="${bars}" stroke="url(#tgAm)" stroke-width="1.8" stroke-linecap="round"/>
-        <path d="M44 21v10" stroke="rgba(255,255,255,.14)" stroke-width=".8"/>
-        <path d="M50 26h38" stroke="rgba(255,255,255,.75)" stroke-width="2.2" stroke-linecap="round"/>
-        <path d="M96 26h9" stroke="rgba(255,255,255,.35)" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+        <path d="M44 21v10" ${SEP}/>
+        <path d="M50 26h38" ${INK}/>
+        <path d="M96 26h9" ${INK2}/></svg>`;
     })(),
     matrix: (() => {
       const hs = [0, 1, 1, 2, 2, 1, 2, 2, 1, 1, 0], mid = 2;
@@ -1775,49 +1815,49 @@
       for (let c = 0; c < 11; c++) for (let r = 0; r < 5; r++) {
         const lit = Math.abs(r - mid) <= hs[c];
         const peak = lit && hs[c] === 2 && Math.abs(r - mid) === 2;
-        const fill = peak ? 'var(--g1)' : lit ? '#fff' : 'rgba(255,255,255,.16)';
+        const fill = peak ? 'var(--t-pop)' : lit ? 'var(--t-dot)' : 'var(--t-dot0)';
         d += `<circle cx="${13 + c * 3.4}" cy="${18 + r * 4}" r="${lit ? 0.95 : 0.7}" style="fill:${fill}"/>`;
       }
-      return `<svg viewBox="0 0 120 52"><rect x="6" y="11" width="108" height="30" rx="9" fill="#000" ${RIM}/>
-        ${d}<path d="M53 18v16" stroke="rgba(255,255,255,.14)" stroke-width=".8"/>
+      return `<svg viewBox="0 0 120 52"><rect x="6" y="11" width="108" height="30" rx="9" ${SURF}/>
+        ${d}<path d="M53 18v16" ${SEP}/>
         <circle cx="60" cy="21" r="1.4" style="fill:var(--g1)"/>
-        <path d="M64 21h16" stroke="rgba(255,255,255,.45)" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="1.6 1.4"/>
-        <path d="M59 30h44" stroke="rgba(255,255,255,.75)" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+        <path d="M64 21h16" style="stroke:var(--t-ink2)" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="1.6 1.4"/>
+        <path d="M59 30h44" ${INK}/></svg>`;
     })(),
     island: `<svg viewBox="0 0 120 52"><defs>${svgGrad('tgIs', 37, 47)}</defs>
-        <rect x="28" y="16" width="64" height="20" rx="10" fill="#000" ${RIM}/>
+        <rect x="28" y="16" width="64" height="20" rx="10" ${SURF}/>
         <path d="M37 24v4M40.5 21.5v9M44 23v6M47.5 24.5v3" stroke="url(#tgIs)" stroke-width="1.8" stroke-linecap="round"/>
         <path d="M74 26h9" style="stroke:var(--g1)" stroke-width="2.2" stroke-linecap="round"/></svg>`,
-    sage: `<svg viewBox="0 0 120 52"><rect x="6" y="15" width="108" height="22" rx="11" fill="#f5f2e9" stroke="rgba(70,82,48,.22)" stroke-width=".8"/>
-        <path d="M13 26c2.5 0 3.5-4.5 6-4.5s3.5 8 6 8 3-5 5.5-5 2.5 1.5 5 1.5" fill="none" stroke="#93ab78" stroke-width="1.4" stroke-linecap="round" opacity=".7" transform="translate(.8 .9)"/>
-        <path d="M13 26c2.5 0 3.5-4.5 6-4.5s3.5 8 6 8 3-5 5.5-5 2.5 1.5 5 1.5" fill="none" stroke="#56663a" stroke-width="1.6" stroke-linecap="round"/>
-        <path d="M44 21v10" stroke="rgba(70,82,48,.2)" stroke-width=".8"/>
-        <path d="M50 26h38" stroke="rgba(43,49,35,.8)" stroke-width="2.2" stroke-linecap="round"/>
-        <path d="M96 26h9" stroke="rgba(100,107,85,.55)" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+    line: `<svg viewBox="0 0 120 52"><rect x="6" y="15" width="108" height="22" rx="11" ${SURF}/>
+        <path d="M13 26c2.5 0 3.5-4.5 6-4.5s3.5 8 6 8 3-5 5.5-5 2.5 1.5 5 1.5" fill="none" style="stroke:var(--t-echo)" stroke-width="1.4" stroke-linecap="round" opacity=".7" transform="translate(.8 .9)"/>
+        <path d="M13 26c2.5 0 3.5-4.5 6-4.5s3.5 8 6 8 3-5 5.5-5 2.5 1.5 5 1.5" fill="none" style="stroke:var(--g1)" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M44 21v10" ${SEP}/>
+        <path d="M50 26h38" ${INK}/>
+        <path d="M96 26h9" ${INK2}/></svg>`,
     halo: `<svg viewBox="0 0 120 52"><defs>${svgGrad('tgHa', 10, 110)}</defs>
         <rect x="10" y="16" width="100" height="20" rx="10" fill="none" stroke="url(#tgHa)" stroke-width="7" opacity=".22"/>
         <rect x="10" y="16" width="100" height="20" rx="10" fill="none" stroke="url(#tgHa)" stroke-width="3.5" opacity=".35"/>
-        <rect x="10" y="16" width="100" height="20" rx="10" fill="#000" stroke="url(#tgHa)" stroke-width="1.3"/>
-        <path d="M40 26h40" stroke="rgba(255,255,255,.75)" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+        <rect x="10" y="16" width="100" height="20" rx="10" style="fill:var(--t-surf)" stroke="url(#tgHa)" stroke-width="1.3"/>
+        <path d="M40 26h40" ${INK}/></svg>`,
     buddy: (() => {
       // 7 × 7 mini face (1 = lit, 2 = accent): eyes and a smile
       const face = ['0000000', '0010100', '0010100', '0000000', '0200020', '0022200', '0000000'];
       let d = '';
       face.forEach((row, r) => [...row].forEach((v, c) => {
-        const fill = v === '2' ? 'var(--g1)' : v === '1' ? '#fff' : 'rgba(255,255,255,.12)';
+        const fill = v === '2' ? 'var(--t-pop)' : v === '1' ? 'var(--t-dot)' : 'var(--t-dot0)';
         d += `<circle cx="${11.4 + c * 3.2}" cy="${16.4 + r * 3.2}" r="${v !== '0' ? 1 : 0.65}" style="fill:${fill}"/>`;
       }));
-      return `<svg viewBox="0 0 120 52"><rect x="6" y="11" width="30" height="30" rx="9" fill="#000" ${RIM}/>${d}
-        <path d="M54 16h49a10 10 0 0 1 0 20h-49a10 10 0 0 1-10-7.2l-3.2-2.8 3.2-2.8a10 10 0 0 1 10-7.2z" fill="#000" ${RIM}/>
-        <path d="M55 26h33" stroke="rgba(255,255,255,.75)" stroke-width="2.2" stroke-linecap="round"/>
-        <path d="M95 26h8" stroke="rgba(255,255,255,.35)" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+      return `<svg viewBox="0 0 120 52"><rect x="6" y="11" width="30" height="30" rx="9" ${SURF}/>${d}
+        <path d="M54 16h49a10 10 0 0 1 0 20h-49a10 10 0 0 1-10-7.2l-3.2-2.8 3.2-2.8a10 10 0 0 1 10-7.2z" ${SURF}/>
+        <path d="M55 26h33" ${INK}/>
+        <path d="M95 26h8" ${INK2}/></svg>`;
     })(),
     slime: `<svg viewBox="0 0 120 52"><defs>
         <radialGradient id="tgSl" cx="12" cy="20" r="34" gradientUnits="userSpaceOnUse">
-          <stop offset="0" style="stop-color:${tint(40, '#fff')}"/><stop offset=".38" style="stop-color:var(--g1)"/>
-          <stop offset="1" style="stop-color:${tint(50, '#000')}"/></radialGradient></defs>
+          <stop offset="0" style="stop-color:${tint(40, '#fff', '--t-blob')}"/><stop offset=".38" style="stop-color:var(--t-blob)"/>
+          <stop offset="1" style="stop-color:${tint(50, '#000', '--t-blob')}"/></radialGradient></defs>
         <ellipse cx="24" cy="42.6" rx="16" ry="1.6" fill="rgba(0,0,0,.3)"/>
-        <path d="M7.5 42c-1-8 2-17 8-21.5 5-3.8 12-3.8 17 0 6 4.5 9 13.5 8 21.5z" fill="url(#tgSl)" style="stroke:${tint(38, '#000')}" stroke-width="1"/>
+        <path d="M7.5 42c-1-8 2-17 8-21.5 5-3.8 12-3.8 17 0 6 4.5 9 13.5 8 21.5z" fill="url(#tgSl)" style="stroke:${tint(38, '#000', '--t-blob')}" stroke-width="1"/>
         <ellipse cx="14.5" cy="25" rx="3.2" ry="1.8" transform="rotate(-40 14.5 25)" fill="rgba(255,255,255,.55)"/>
         <ellipse cx="20" cy="32" rx="1.7" ry="2.3" fill="#16101d"/><ellipse cx="30" cy="32" rx="1.7" ry="2.3" fill="#16101d"/>
         <circle cx="19.5" cy="31.2" r=".6" fill="#fff"/><circle cx="29.5" cy="31.2" r=".6" fill="#fff"/>
@@ -1834,19 +1874,19 @@
         W: 'color-mix(in srgb, var(--g2) 84%, #000)', E: '#0b0b12', Q: '#fff', M: '#2a0a12', T: '#fff',
       }, 1.55, 5, 10);
       // a few flame pixels licking into the bubble
-      const fire = [[0, 0, '#fff'], [1.55, -1.55, 'var(--g2)'], [1.55, 0, '#fff'], [3.1, 0, 'var(--g2)'], [3.1, 1.55, 'var(--g1)'],
-        [4.65, -1.55, 'var(--g1)'], [6.2, 0, 'var(--g3)'], [4.65, 0, 'var(--g2)']]
+      const fire = [[0, 0, 'var(--t-fire0)'], [1.55, -1.55, 'var(--t-fire1)'], [1.55, 0, 'var(--t-fire0)'], [3.1, 0, 'var(--t-fire1)'],
+        [3.1, 1.55, 'var(--t-fire2)'], [4.65, -1.55, 'var(--t-fire2)'], [6.2, 0, 'var(--t-fire3)'], [4.65, 0, 'var(--t-fire1)']]
         .map(([dx, dy, f]) => `<rect x="${(39.2 + dx).toFixed(2)}" y="${(25.5 + dy).toFixed(2)}" width="1.6" height="1.6" style="fill:${f}"/>`).join('');
-      return `<svg viewBox="0 0 120 52"><path d="M52 16h51a10 10 0 0 1 0 20h-51a10 10 0 0 1 0-20z" fill="#000" ${RIM}/>
-        <path d="M54 26h33" stroke="rgba(255,255,255,.75)" stroke-width="2.2" stroke-linecap="round"/>
-        <path d="M95 26h8" stroke="rgba(255,255,255,.35)" stroke-width="2.2" stroke-linecap="round"/>${art}${fire}</svg>`;
+      return `<svg viewBox="0 0 120 52"><path d="M52 16h51a10 10 0 0 1 0 20h-51a10 10 0 0 1 0-20z" ${SURF}/>
+        <path d="M54 26h33" ${INK}/>
+        <path d="M95 26h8" ${INK2}/>${art}${fire}</svg>`;
     })(),
     mimic: (() => {
       const M = window.NoTypeSprites.mimic;
       const mouth = ['KTTTMEEMMTTMMEEMTTTK', 'KMTMMEEMMMMMMEEMMTMK', 'KMMMMMMMMMMMMMMMMMMK', 'KMMMTTTMRRRRMTTTMMMK'];
       const art = pixelThumb(20, 21, [[M.lid, 0, 0], [mouth, 0, 8], [M.base, 0, 12]], {
         K: '#2a160c', w: '#b37b47', W: '#8a5a35', d: '#6b4226', G: '#e0a93a', g: '#9a6a1c', O: '#2a160c',
-        M: '#16080d', T: '#f5efe2', R: '#ff5d7a', E: 'var(--g1)',
+        M: '#16080d', T: '#f5efe2', R: '#ff5d7a', E: 'var(--t-eye)',
       }, 1.55, 8, 10.5);
       return `<svg viewBox="0 0 120 52">${art}${thumbBubble(48)}</svg>`;
     })(),
@@ -1855,7 +1895,8 @@
 
   function renderOverlayPicker() {
     const grid = $('styleGrid');
-    OVL_ACCENTS[ovlAccent].forEach((c, i) => grid.style.setProperty('--g' + (i + 1), c));
+    const sage = ovlWorld() === 'sage';
+    (sage ? OVL_SAGE : OVL_ACCENTS[ovlAccent]).forEach((c, i) => grid.style.setProperty('--g' + (i + 1), c));
     grid.innerHTML = '';
     for (const id of OVL_STYLES) {
       const card = document.createElement('button');
@@ -1885,9 +1926,9 @@
       };
       sw.appendChild(b);
     }
-    const own = OVL_OWN_COLORS.includes(ovlStyle);
-    sw.classList.toggle('muted', own);
-    $('accentName').textContent = own ? t('acc.own') : t('acc.' + ovlAccent);
+    // Salbei brings its own colors; the accent still saves and applies in Dark.
+    sw.classList.toggle('muted', sage);
+    $('accentName').textContent = sage ? t('acc.own') : t('acc.' + ovlAccent);
   }
 
   // The preview iframe runs overlay.html in demo mode (no preload there, so
@@ -1898,7 +1939,7 @@
     const f = $('ovlPreview');
     if (!previewLoaded || !f.contentWindow) return;
     f.contentWindow.postMessage({
-      type: 'notype-demo', style: ovlStyle, accent: ovlAccent, lang: uiLang,
+      type: 'notype-demo', style: ovlStyle, accent: ovlAccent, world: ovlWorld(), lang: uiLang,
       preview: $('livePreviewToggle').checked, paused: !overlayPaneActive(),
     }, '*');
   }
@@ -1911,7 +1952,7 @@
     const f = $('ovlPreview');
     if (f.getAttribute('src')) { pushPreview(); return; }
     f.addEventListener('load', () => { previewLoaded = true; pushPreview(); }, { once: true });
-    f.src = `overlay.html?demo=1&style=${ovlStyle}&accent=${ovlAccent}&lang=${uiLang}`;
+    f.src = `overlay.html?demo=1&style=${ovlStyle}&accent=${ovlAccent}&world=${ovlWorld()}&lang=${uiLang}`;
   }
   window.addEventListener('resize', fitStage);
   $('livePreviewToggle').addEventListener('change', pushPreview);
@@ -1938,7 +1979,8 @@
     selectedModel = cfg.model_size || 'small';
     renderModels();
     window.notype.listModels();
-    $('darkModeToggle').checked = cfg.overlay_theme === 'dark';
+    $('designSelect').value = ['dark', 'light', 'system'].includes(cfg.overlay_theme) ? cfg.overlay_theme : 'system';
+    applyDesign();
     {
       const st = OVL_LEGACY[cfg.overlay_style] || cfg.overlay_style;
       ovlStyle = OVL_STYLES.includes(st) ? st : 'amoled';
@@ -2011,7 +2053,7 @@
       language: $('langSelect').value,
       auto_language_detect: $('autoLangToggle').checked,
       model_size: selectedModel,
-      overlay_theme: $('darkModeToggle').checked ? 'dark' : 'light',
+      overlay_theme: $('designSelect').value,
       overlay_style: ovlStyle,
       overlay_accent: ovlAccent,
       overlay_position: $('overlayPositionSelect').value,
@@ -2053,10 +2095,25 @@
     $('vadValue').textContent = $('vadSlider').value + 'ms';
   };
 
-  // ── Theme ──
+  // ── Design (Dark / Salbei / like Windows) ──
+  // The choice applies right away in this window and the preview; the other
+  // windows follow once it's saved (main broadcasts 'set-theme').
+  const sysDark = window.matchMedia('(prefers-color-scheme: dark)');
+  function applyDesign() {
+    const v = $('designSelect').value;
+    const dark = v === 'dark' || (v === 'system' && sysDark.matches);
+    if ((document.documentElement.dataset.theme === 'dark') === dark) return;
+    document.documentElement.dataset.theme = dark ? 'dark' : '';
+    renderOverlayPicker(); pushPreview();
+  }
+  $('designSelect').onchange = applyDesign;
+  sysDark.addEventListener('change', applyDesign);
   if (window.notype && window.notype.onSetTheme) {
+    // Main's word counts until the user picks something here.
     window.notype.onSetTheme((theme) => {
+      if (dirty) return;
       document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : '';
+      renderOverlayPicker(); pushPreview();
     });
   }
 
@@ -2224,8 +2281,8 @@
 
       const dataArray = new Float32Array(analyser.fftSize);
       $('micTestBtn').textContent = '⏹ Stop';
-      $('micTestBtn').style.borderColor = '#22c55e';
-      $('micTestBtn').style.color = '#22c55e';
+      $('micTestBtn').style.borderColor = 'var(--ok)';
+      $('micTestBtn').style.color = 'var(--ok)';
 
       function updateMeter() {
         analyser.getFloatTimeDomainData(dataArray);
@@ -2241,7 +2298,7 @@
       $('micTestBar').style.background = '#ef4444';
       $('micTestBar').style.width = '100%';
       setTimeout(() => {
-        $('micTestBar').style.background = 'linear-gradient(90deg, #22c55e, #4ade80)';
+        $('micTestBar').style.background = 'var(--meter)';
         $('micTestBar').style.width = '0%';
       }, 1500);
     }

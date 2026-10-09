@@ -86,16 +86,16 @@ Prefer not to hold a key? Switch to **press once to start, press again to stop**
 
 ### Pick your overlay
 
-<img src="docs/assets/overlay-styles.png" alt="The nine overlay styles: AMOLED Bar, Dot Matrix, Island, Halo, Sage, Buddy, Slime, Dragon and Mimic" width="100%" />
+<img src="docs/assets/overlay-styles.png" alt="The nine overlay styles in the Dark and Sage designs: AMOLED Bar, Dot Matrix, Island, Halo, Line, Buddy, Slime, Dragon and Mimic" width="100%" />
 
-Nine designs react to the actual sound of your voice. **AMOLED Bar**, **Dot Matrix**, **Island** and **Halo** keep it clean and minimal. **Sage** is the light one: a paper-colored pill where your voice runs as a calm olive line, made for bright desktops. The other four are little characters that talk along while you speak:
+Nine styles react to the actual sound of your voice. **AMOLED Bar**, **Dot Matrix**, **Island**, **Halo** and **Line** keep it clean and minimal (Line draws your voice as one calm stroke with a soft echo). The other four are little characters that talk along while you speak:
 
 - **Buddy**, an LED face that thinks while NoType works and grins when your text is in.
 - **Slime**, a jelly blob that jiggles with every syllable and hops while your text is on its way.
 - **Dragon**, a pixel dragon whose fire breath grows when you speak louder.
 - **Mimic**, a treasure chest that chews on your words and spits out gold when it's done.
 
-Every style except Sage, which keeps its own colors, comes in seven accent colors, light and dark. Start and stop sounds are optional. Place the overlay at the bottom, top or center of your screen. The settings show a live preview, so you can see it before you choose it.
+NoType comes in two designs. **Dark** sets every style on deep black, in one of seven accent colors. **Sage** is made for bright desktops: paper-colored surfaces and olive tones, and not just on the overlay but in the settings, notifications and setup too. Pick one, or let NoType follow your Windows theme. Start and stop sounds are optional. Place the overlay at the bottom, top or center of your screen. The settings show a live preview, so you can see it before you choose it.
 
 ### It learns your words
 
