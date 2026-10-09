@@ -672,6 +672,7 @@ const OVERLAY_STYLES = {
   slime:  { w: 640, h: 112, bottom: 8,  top: 0 },   // blob 104×92 + bubble 500×50
   dragon: { w: 612, h: 100, bottom: 8,  top: 0 },   // pixel dragon 136×80, bubble 476×50 tucked under its fire
   mimic:  { w: 666, h: 116, bottom: 8,  top: 0 },   // pixel chest 128×96 + bubble 500×50
+  sage:   { w: 700, h: 96,  bottom: 10, top: 0 },   // light pill 660×60 + its drop shadow
 };
 const DEFAULT_OVERLAY_STYLE = 'amoled';
 const OVERLAY_POSITIONS = ['bottom', 'top', 'center'];

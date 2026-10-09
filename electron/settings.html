@@ -400,7 +400,7 @@
     color: rgba(255, 255, 255, 0.55);
   }
 
-  .style-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .style-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
   .style-card {
     display: flex; flex-direction: column; gap: 8px; padding: 8px 8px 10px;
     border: 1px solid var(--input-border); border-radius: 12px;
@@ -423,6 +423,9 @@
     position: relative; transition: transform 0.12s;
   }
   .swatch:hover { transform: scale(1.1); }
+  /* the chosen style brings its own colors; the accent is kept for the others */
+  .swatches.muted .swatch { opacity: 0.35; }
+  .swatches.muted .swatch:hover { opacity: 0.6; }
   .swatch.active { box-shadow: 0 0 0 2px var(--bg-solid, #fff), 0 0 0 4px var(--fg); }
   [data-theme="dark"] .swatch.active { box-shadow: 0 0 0 2px #1c1c1e, 0 0 0 4px var(--fg); }
 </style>
@@ -1005,8 +1008,10 @@
       'ovl.slime': 'Schleim', 'ovl.slime.desc': 'Wackelt bei jeder Silbe und hüpft, während er nachdenkt',
       'ovl.dragon': 'Drache', 'ovl.dragon.desc': 'Pixel-Drache, dessen Feueratem deiner Stimme folgt',
       'ovl.mimic': 'Mimic', 'ovl.mimic.desc': 'Lebendige Schatztruhe: Der Deckel redet mit, am Ende fliegt Gold',
+      'ovl.sage': 'Salbei', 'ovl.sage.desc': 'Helle Pille, deine Stimme als ruhige olivgrüne Linie',
       'acc.mint': 'Mint', 'acc.mono': 'Mono', 'acc.aurora': 'Aurora', 'acc.blue': 'Blau',
       'acc.violet': 'Violett', 'acc.red': 'Rot', 'acc.amber': 'Bernstein',
+      'acc.own': 'Salbei hat eigene Farben, die Akzentfarbe gilt für die anderen Stile',
       'system.audio': 'Audio', 'system.mic': 'Mikrofon', 'system.mic.desc': 'Audioeingangsgerät auswählen',
       'system.mic.default': 'Standard (System)', 'system.mic.defaulttag': ' (Standard)',
       'system.mic.missing': ' (nicht verbunden)',
@@ -1119,8 +1124,10 @@
       'ovl.slime': 'Slime', 'ovl.slime.desc': 'Jiggles with every syllable and hops while it thinks',
       'ovl.dragon': 'Dragon', 'ovl.dragon.desc': 'Pixel dragon whose fire breath follows your voice',
       'ovl.mimic': 'Mimic', 'ovl.mimic.desc': 'A living treasure chest: the lid talks along, gold flies at the end',
+      'ovl.sage': 'Sage', 'ovl.sage.desc': 'Light pill, your voice as a calm olive line',
       'acc.mint': 'Mint', 'acc.mono': 'Mono', 'acc.aurora': 'Aurora', 'acc.blue': 'Blue',
       'acc.violet': 'Violet', 'acc.red': 'Red', 'acc.amber': 'Amber',
+      'acc.own': 'Sage has its own colors, the accent applies to the other styles',
       'system.audio': 'Audio', 'system.mic': 'Microphone', 'system.mic.desc': 'Select the audio input device',
       'system.mic.default': 'Default (system)', 'system.mic.defaulttag': ' (default)',
       'system.mic.missing': ' (not connected)',
@@ -1697,7 +1704,9 @@
   };
 
   // ── Overlay: style cards, accent swatches, live preview ──
-  const OVL_STYLES = ['amoled', 'matrix', 'island', 'halo', 'buddy', 'slime', 'dragon', 'mimic'];
+  const OVL_STYLES = ['amoled', 'matrix', 'island', 'halo', 'sage', 'buddy', 'slime', 'dragon', 'mimic'];
+  // Styles with their own palette: the accent swatches don't apply to them.
+  const OVL_OWN_COLORS = ['sage'];
   // Retired style ids → successor (mirrors main.js LEGACY_OVERLAY_STYLES).
   const OVL_LEGACY = {
     amoled_top: 'amoled', amoled_bottom: 'amoled', amoled_center: 'amoled', amoled_card: 'amoled',
@@ -1779,6 +1788,12 @@
         <rect x="28" y="16" width="64" height="20" rx="10" fill="#000" ${RIM}/>
         <path d="M37 24v4M40.5 21.5v9M44 23v6M47.5 24.5v3" stroke="url(#tgIs)" stroke-width="1.8" stroke-linecap="round"/>
         <path d="M74 26h9" style="stroke:var(--g1)" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+    sage: `<svg viewBox="0 0 120 52"><rect x="6" y="15" width="108" height="22" rx="11" fill="#f5f2e9" stroke="rgba(70,82,48,.22)" stroke-width=".8"/>
+        <path d="M13 26c2.5 0 3.5-4.5 6-4.5s3.5 8 6 8 3-5 5.5-5 2.5 1.5 5 1.5" fill="none" stroke="#93ab78" stroke-width="1.4" stroke-linecap="round" opacity=".7" transform="translate(.8 .9)"/>
+        <path d="M13 26c2.5 0 3.5-4.5 6-4.5s3.5 8 6 8 3-5 5.5-5 2.5 1.5 5 1.5" fill="none" stroke="#56663a" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M44 21v10" stroke="rgba(70,82,48,.2)" stroke-width=".8"/>
+        <path d="M50 26h38" stroke="rgba(43,49,35,.8)" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M96 26h9" stroke="rgba(100,107,85,.55)" stroke-width="2.2" stroke-linecap="round"/></svg>`,
     halo: `<svg viewBox="0 0 120 52"><defs>${svgGrad('tgHa', 10, 110)}</defs>
         <rect x="10" y="16" width="100" height="20" rx="10" fill="none" stroke="url(#tgHa)" stroke-width="7" opacity=".22"/>
         <rect x="10" y="16" width="100" height="20" rx="10" fill="none" stroke="url(#tgHa)" stroke-width="3.5" opacity=".35"/>
@@ -1870,7 +1885,9 @@
       };
       sw.appendChild(b);
     }
-    $('accentName').textContent = t('acc.' + ovlAccent);
+    const own = OVL_OWN_COLORS.includes(ovlStyle);
+    sw.classList.toggle('muted', own);
+    $('accentName').textContent = own ? t('acc.own') : t('acc.' + ovlAccent);
   }
 
   // The preview iframe runs overlay.html in demo mode (no preload there, so

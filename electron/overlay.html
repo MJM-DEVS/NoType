@@ -15,6 +15,7 @@
        slime   Slime        jelly blob that wobbles with every syllable
        dragon  Dragon       pixel dragon; its fire breath is the visualizer
        mimic   Mimic        treasure chest whose lid talks along
+       sage    Sage         light paper pill, the voice as a calm olive line
      Everything that moves is drawn on small canvases or changes opacity/
      transform only: no CSS blur filters, no backdrop-filter, no per-frame
      box-shadow (transparent always-on-top windows make those expensive and
@@ -48,7 +49,8 @@
   body[data-style="buddy"]  .s-buddy,
   body[data-style="slime"]  .s-slime,
   body[data-style="dragon"] .s-dragon,
-  body[data-style="mimic"]  .s-mimic { display: flex; }
+  body[data-style="mimic"]  .s-mimic,
+  body[data-style="sage"]   .s-sage { display: flex; }
 
   /* Every shape enters with a short spring and leaves with a quick fade;
      main.js sends 'overlay-leaving' ~220 ms before it hides the window. */
@@ -237,6 +239,33 @@
   #mmCv { width: 128px; height: 96px; }
   .s-mimic .bubble { margin-bottom: 22px; }
 
+  /* ═══ 9. SAGE  (window 700×96) ════════════════════════════════════
+     The one light style: warm paper instead of OLED black, the voice as a
+     calm olive line with a sage echo. It has its own palette, the accent
+     color doesn't apply. The drop shadow is static and stays inside the
+     window's 18 px margin. */
+  .s-sage { --sg-paper: #f5f2e9; --sg-ink: 43, 49, 35; --sg-muted: #646b55; }
+  .sg-pill {
+    position: relative; width: 660px; height: 60px; border-radius: 30px;
+    background: var(--sg-paper);
+    box-shadow: 0 0 0 1px rgba(70, 82, 48, 0.16),
+                0 6px 16px -6px rgba(32, 36, 24, 0.34), 0 1px 3px rgba(32, 36, 24, 0.12);
+    display: flex; align-items: center; gap: 14px; padding: 0 24px 0 20px;
+    animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .sg-line { width: 128px; height: 32px; flex: 0 0 auto; }
+  .sg-sep { width: 1px; height: 24px; background: rgba(70, 82, 48, 0.16); flex: 0 0 auto; }
+  .sg-pill .txt { flex: 1 1 auto; font-size: 14.5px; }
+  .sg-pill .txt > span { color: rgb(var(--sg-ink)); }
+  .sg-pill .txt > span.dim { color: rgba(var(--sg-ink), 0.5); }
+  .sg-pill .txt > span.shimmer {
+    color: transparent;
+    background-image: linear-gradient(90deg, rgba(var(--sg-ink), 0.4) 0%, rgba(var(--sg-ink), 0.4) 35%,
+                      rgba(var(--sg-ink), 0.9) 50%, rgba(var(--sg-ink), 0.4) 65%, rgba(var(--sg-ink), 0.4) 100%);
+  }
+  body.processing-dim .sg-pill .txt > span:not(.dim):not(.shimmer) { color: rgba(var(--sg-ink), 0.6); }
+  .sg-pill .time { flex: 0 0 auto; color: var(--sg-muted); }
+
   /* ═══ AI CONTEXT CHIPS ════════════════════════════════════════════
      What goes along with the dictation (screenshot, image, copied text).
      main.js makes the window 40 px taller for them: the strip sits above
@@ -256,6 +285,7 @@
   body[data-style="amoled"], body[data-style="matrix"], body[data-style="buddy"] { --chip-pull: 6px; }
   body[data-style="halo"] { --chip-pull: 18px; }   /* the rim glow needs a little room */
   body[data-style="slime"], body[data-style="dragon"], body[data-style="mimic"] { --chip-pull: 2px; }
+  body[data-style="sage"] { --chip-pull: 10px; }
   body.strip .chips { display: flex; }
   body[data-pos="top"] .chips {
     top: auto; bottom: 0; align-items: flex-start; padding: 2px 24px 0;
@@ -285,6 +315,15 @@
   .chip-ico svg { width: 12px; height: 12px; fill: none; stroke: var(--a1); stroke-width: 1.6; stroke-linecap: round; }
   .chip-lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .chip-sub { flex: 0 0 auto; color: rgba(255, 255, 255, 0.5); font-variant-numeric: tabular-nums; }
+  /* Sage: paper chips to match the pill */
+  body[data-style="sage"] .chip {
+    background: #f5f2e9; color: #2b3123;
+    box-shadow: 0 0 0 1px rgba(70, 82, 48, 0.16), 0 3px 8px -3px rgba(32, 36, 24, 0.3);
+  }
+  body[data-style="sage"] .chip-thumb { box-shadow: 0 0 0 1px rgba(70, 82, 48, 0.2); }
+  body[data-style="sage"] .chip-ico { background: rgba(147, 171, 120, 0.3); }
+  body[data-style="sage"] .chip-ico svg { stroke: #56663a; }
+  body[data-style="sage"] .chip-sub { color: #646b55; }
   body.leaving .chip { animation: leaveOut 0.2s cubic-bezier(0.4, 0, 1, 1) forwards !important; }
   body.leaving.cancelled .chip { animation: cancelOut 0.2s cubic-bezier(0.55, 0, 0.8, 0.2) forwards !important; }
 </style>
@@ -376,6 +415,16 @@
     </div>
   </section>
 
+  <!-- 9. SAGE -->
+  <section class="style s-sage">
+    <div class="sg-pill shape">
+      <canvas class="sg-line" id="sgLine"></canvas>
+      <div class="sg-sep"></div>
+      <div class="txt" data-line="1"><span class="shimmer">Ich höre zu…</span></div>
+      <div class="time" data-timer="mss">0:00</div>
+    </div>
+  </section>
+
 <script src="sprites.js"></script>
 <script>
 'use strict';
@@ -385,7 +434,7 @@
 // overlay runs a self-contained loop with synthetic speech.
 const DEMO = !window.notype || new URLSearchParams(location.search).has('demo');
 const NB = 20;   // spectrum bands (matches audio_recorder.N_BANDS)
-const STYLES = ['amoled', 'matrix', 'island', 'halo', 'buddy', 'slime', 'dragon', 'mimic'];
+const STYLES = ['amoled', 'matrix', 'island', 'halo', 'buddy', 'slime', 'dragon', 'mimic', 'sage'];
 // Ids of styles that no longer exist → their closest successor.
 const LEGACY_STYLES = {
   wave: 'amoled', wave_classic: 'amoled', ribbon: 'amoled', particles: 'amoled', spectrum: 'amoled',
@@ -1284,9 +1333,47 @@ function renderMimic(dt, t) {
   pixBlit($('mmCv'), L);
 }
 
+// ═══ 9. SAGE ══════════════════════════════════════════════════════
+// One olive stroke with a sage echo behind it, pinned at both ends so it
+// reads as a line, not a chart. Low bands swell it, high bands ripple it;
+// while it processes it breathes slowly, when the text is in it lies flat
+// and a check draws itself in its middle.
+const SG = { olive: '#56663a', sage: '#93ab78', amp: 0, ph: 0 };
+function renderSage(dt, t) {
+  const [ctx, W, H] = prep($('sgLine'));
+  const ps = mix.processing, ds = mix.done, mid = H / 2, e = energy();
+  const live = 0.07 + e * 0.93;                      // never quite still while listening
+  const breath = 0.16 + 0.07 * Math.sin(t * 2.1);
+  const target = (live * (1 - ps) + breath * ps) * (1 - ds);
+  SG.amp += (target - SG.amp) * (1 - Math.exp(-dt / 0.08));
+  SG.ph += dt * (2.2 + e * 3 - ps * 0.8);            // travels faster while you talk
+  const w1 = 0.5 + band(0.12), w2 = 0.25 + band(0.4), w3 = 0.12 + band(0.75);
+  const norm = 1 / (w1 + w2 + w3), TAU = Math.PI * 2;
+  const gap = 16 * ease(ds);                         // the line parts for the check
+  const stroke = (shift, k, color, width, alpha) => {
+    const A = (H / 2 - width) * SG.amp * k * norm;
+    ctx.beginPath();
+    let pen = false;
+    for (let x = 0; x <= W; x += 1.5) {
+      if (Math.abs(x - W / 2) < gap) { pen = false; continue; }
+      const u = x / W, env = Math.pow(Math.sin(Math.PI * u), 1.4);
+      const y = mid + A * env * (w1 * Math.sin(TAU * 1.3 * u - SG.ph + shift)
+        + w2 * Math.sin(TAU * 2.9 * u - SG.ph * 1.6 + shift * 1.3)
+        + w3 * Math.sin(TAU * 6.1 * u - SG.ph * 2.3 + shift * 0.7));
+      if (pen) ctx.lineTo(x, y); else { ctx.moveTo(x, y); pen = true; }
+    }
+    ctx.strokeStyle = color; ctx.lineWidth = width; ctx.globalAlpha = alpha;
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+  };
+  stroke(2.1, 0.72, SG.sage, 2, 0.6 * (1 - ds));     // the echo settles into the line
+  stroke(0, 1, SG.olive, 2.2, 1);
+  ctx.globalAlpha = 1;
+  if (ds > 0.01) drawCheck(ctx, W / 2, mid, 10, doneProgress(), SG.olive, 2.4);
+}
+
 const RENDER = {
   amoled: renderAmoled, matrix: renderMatrix, island: renderIsland, halo: renderHalo, buddy: renderBuddy,
-  slime: renderSlime, dragon: renderDragon, mimic: renderMimic,
+  slime: renderSlime, dragon: renderDragon, mimic: renderMimic, sage: renderSage,
 };
 
 // ── Text + timer ──────────────────────────────────────────────────

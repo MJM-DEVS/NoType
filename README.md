@@ -86,16 +86,16 @@ Prefer not to hold a key? Switch to **press once to start, press again to stop**
 
 ### Pick your overlay
 
-<img src="docs/assets/overlay-styles.png" alt="The eight overlay styles: AMOLED Bar, Dot Matrix, Island, Halo, Buddy, Slime, Dragon and Mimic" width="100%" />
+<img src="docs/assets/overlay-styles.png" alt="The nine overlay styles: AMOLED Bar, Dot Matrix, Island, Halo, Sage, Buddy, Slime, Dragon and Mimic" width="100%" />
 
-Eight designs react to the actual sound of your voice. **AMOLED Bar**, **Dot Matrix**, **Island** and **Halo** keep it clean and minimal. The other four are little characters that talk along while you speak:
+Nine designs react to the actual sound of your voice. **AMOLED Bar**, **Dot Matrix**, **Island** and **Halo** keep it clean and minimal. **Sage** is the light one: a paper-colored pill where your voice runs as a calm olive line, made for bright desktops. The other four are little characters that talk along while you speak:
 
 - **Buddy**, an LED face that thinks while NoType works and grins when your text is in.
 - **Slime**, a jelly blob that jiggles with every syllable and hops while your text is on its way.
 - **Dragon**, a pixel dragon whose fire breath grows when you speak louder.
 - **Mimic**, a treasure chest that chews on your words and spits out gold when it's done.
 
-Each style comes in seven accent colors, light and dark, with optional start and stop sounds. Place the overlay at the bottom, top or center of your screen. The settings show a live preview, so you can see it before you choose it.
+Every style except Sage, which keeps its own colors, comes in seven accent colors, light and dark. Start and stop sounds are optional. Place the overlay at the bottom, top or center of your screen. The settings show a live preview, so you can see it before you choose it.
 
 ### It learns your words
 
@@ -426,7 +426,7 @@ NoType/
     ├── main.js           # tray, overlay, hotkeys, IPC, lifecycle, GPU safety
     ├── preload.js        # contextBridge IPC surface
     ├── model-catalog.js  # the ten speech models and their metadata
-    ├── overlay.html      # 8 spectrum-reactive overlay styles + live transcript
+    ├── overlay.html      # 9 spectrum-reactive overlay styles + live transcript
     ├── sprites.js        # pixel art for the Dragon and Mimic overlays
     ├── settings.html     # settings window
     ├── onboarding.html   # first-run setup guide
