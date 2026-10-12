@@ -141,6 +141,62 @@ Raw speech is messy: "uhm", false starts, missing punctuation. NoType cleans it 
 
 The AI engine ([Ollama](https://ollama.com/)) is installed **from inside NoType with one click**, without admin rights, into NoType's own folder. If the AI would take too long, or if it changes the meaning (for example by translating or answering your sentence), NoType inserts the fast version instead. You never wait on the AI.
 
+### Agent hotkey: send your dictation to a URL
+
+Off by default. Switch it on under **Settings → General → Agent hotkey** and enter a URL. From then on a second hotkey (<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Alt</kbd> + <kbd>Space</kbd>, in the same hold or press mode as dictation) sends what you say to that URL instead of typing it, for example to an [n8n](https://n8n.io/) webhook or your own script or assistant. Whatever the URL answers shows in the overlay for a few seconds.
+
+Your words go through the same steps as a normal dictation, dictionary and cleanup included. Nothing is typed, not even when the request fails, and agent dictations stay out of your history. **Send test** next to the URL checks the connection before you rely on it.
+
+<details>
+<summary><b>Request and response format</b></summary>
+
+<br/>
+
+One `POST` per dictation, with a JSON body:
+
+```http
+POST <your URL>
+Content-Type: application/json
+User-Agent: NoType/<version>
+Authorization: Bearer <token>
+```
+
+The `Authorization` header is only sent when you entered a token.
+
+```json
+{
+  "text": "Add oat milk to the shopping list",
+  "source": "notype",
+  "language": "en",
+  "timestamp": "2026-10-12T14:03:27+02:00",
+  "context": {
+    "app": "notepad.exe",
+    "window_title": "todo.txt"
+  }
+}
+```
+
+- `language`: the language the speech model detected (or the one you set), as a short code such as `en` or `de`.
+- `timestamp`: ISO 8601 with your local UTC offset.
+- `context`: only there while **Include app and window title** is on (it is by default). The program name and the window title of what was in front when you started speaking. No screenshot, no clipboard, no selected text.
+
+**Send test** posts `{"text": "NoType test", "source": "notype", "test": true, "timestamp": "…"}` with the same headers, using the URL and token as they are in the form, saved or not.
+
+What the overlay shows:
+
+| The URL answers | Overlay |
+|---|---|
+| 2xx with a JSON object | its `message`, else `reply`, else `text` field; **Sent** if none of them is there |
+| 2xx with plain text or HTML | the start of the body (HTML without tags) |
+| 2xx with an empty body | **Sent** |
+| any other status, including redirects | **Error: HTTP** and the status code |
+| nothing within 15 seconds | a timeout notice |
+| no connection | **Unreachable** (or a TLS notice for certificate problems) |
+
+Replies are cut to 200 characters on one line; a long one scrolls through once. Redirects are not followed, so your token never reaches another host. The token is stored in `settings.json` like your other settings. The log notes the host, status code and timing of each request, never the URL path, the token, your text or the reply.
+
+</details>
+
 ### Everything in one place
 
 <img src="docs/assets/settings.png" alt="NoType settings with live overlay preview" width="100%" />
@@ -212,10 +268,11 @@ Canary 1B (v2 and Flash) was slower and less accurate in our tests and has the s
 
 Dictation, AI cleanup and command mode are **fully offline**. There is no telemetry of any kind.
 
-NoType goes online for two things only:
+NoType goes online for these things only:
 
 - **The update check.** When it starts and every 6 hours, NoType asks GitHub whether a newer version is out. The request carries no personal data; like any website, GitHub sees your IP address. Switch it off under **Settings → General**; the tray menu still lets you check by hand.
 - **Downloads you start yourself:** the speech model you choose, the optional AI engine and its updates, and a new NoType version once you click **Update now**.
+- **The agent hotkey, if you set it up.** It is off by default. Once it is on, each agent dictation goes to the URL you entered and nowhere else: the text, its language, the time and, unless you switch it off, the name and title of the window in front ([format](#agent-hotkey-send-your-dictation-to-a-url)). What happens there is up to whoever runs that URL.
 
 Everything else stays in `%APPDATA%\NoType\` on your PC:
 
@@ -417,6 +474,7 @@ NoType/
 ├── ollama_manager.py     # portable Ollama install, update, lifecycle (job object), model pull
 ├── text_output.py        # clipboard + SendInput paste/copy, Unicode typing fallback
 ├── context_capture.py    # copies and screenshots that go along into AI apps and terminals
+├── agent_webhook.py      # agent hotkey: POSTs a dictation to the user's URL, reads the reply
 ├── escape_hook.py        # low-level keyboard hook: Esc cancels a dictation
 ├── output_mute.py        # mutes the speakers while recording (Core Audio)
 ├── config.py             # atomic settings with rolling backups (%APPDATA%/NoType)
