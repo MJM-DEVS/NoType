@@ -159,6 +159,8 @@ let holdReleaseViaBackend = true;// backend reports real key-up (optimistic; see
 let onboardingWin = null;        // first-run wizard (also reachable from settings/tray)
 let lastBusyTs = 0;              // throttle for the "still processing" nudge
 let commandActive = false;       // current recording is a command-mode instruction
+let agentActive = false;         // current recording goes to the agent URL instead of being typed
+let agentHintUntil = 0;          // agent hotkey without a URL: one hint per press, not per key repeat
 let hotkeyQuietUntil = 0;        // hold mode: ignore the still-held hotkey after an Esc cancel
 let attachments = [];            // AI context chips of the current dictation (replayed into a fresh overlay)
 let config = {};
@@ -237,6 +239,11 @@ function loadConfig() {
     first_run_complete: false,
     command_enabled: true,
     command_hotkey: 'ctrl+alt+space',
+    agent_enabled: false,
+    agent_hotkey: 'ctrl+shift+alt+space',
+    agent_url: '',
+    agent_token: '',
+    agent_send_context: true,
     learn_corrections: true,
     ...config,
   };
@@ -553,6 +560,27 @@ function handlePythonMessage(line) {
         }
         break;
 
+      case 'agent_sending':
+        // Agent hotkey: transcribed, now on its way to the URL. Nothing gets
+        // pasted, so the hotkeys can come back already.
+        if (!(isTranscribing && agentActive)) break;
+        registerHotkeys();
+        if (overlayWin && !overlayWin.isDestroyed()) {
+          const text = config.live_preview_enabled !== false && data && data.text ? String(data.text) : '';
+          overlayWin.webContents.send('agent-sending', { text });
+        }
+        break;
+
+      case 'agent_result':
+        if (data && data.test) {
+          if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('agent-test-result', data);
+        } else if (isTranscribing && agentActive) {
+          finishAgent(data || {});
+        } else {
+          console.log('Agent answer arrived after the timeout, dropped');
+        }
+        break;
+
       case 'recording_paused':
         isPaused = true;
         if (overlayWin && !overlayWin.isDestroyed()) {
@@ -594,14 +622,10 @@ function handlePythonMessage(line) {
       case 'config':
         // If the backend's hotkey/mode differ from what we registered at boot, re-register.
         {
-          const prevHotkey = config.hotkey, prevMode = config.mode;
-          const prevCmd = `${config.command_enabled}|${config.command_hotkey}`;
+          const prevKeys = hotkeySignature(config);
           config = data;
           if (normalizeOverlayConfig()) writeConfigToDisk();
-          if (data.hotkey !== prevHotkey || data.mode !== prevMode ||
-              `${data.command_enabled}|${data.command_hotkey}` !== prevCmd) {
-            registerHotkeys();
-          }
+          if (hotkeySignature(data) !== prevKeys) registerHotkeys();
         }
         if (settingsWin && !settingsWin.isDestroyed()) {
           settingsWin.webContents.send('config', configForSettings(data));
@@ -799,8 +823,9 @@ function createOverlay() {
 
 // Push the current style/theme + recording-started to the overlay. If the
 // renderer isn't loaded yet (freshly recreated window), wait for did-finish-load
-// so the IPC messages are never dropped.
-function pushOverlayState() {
+// so the IPC messages are never dropped. `agentHint`: show that agent result
+// instead of starting a recording (agent hotkey without a URL).
+function pushOverlayState(agentHint = null) {
   if (!overlayWin || overlayWin.isDestroyed()) return;
   const styleName = OVERLAY_STYLES[config.overlay_style] ? config.overlay_style : DEFAULT_OVERLAY_STYLE;
   const send = () => {
@@ -814,7 +839,8 @@ function pushOverlayState() {
       strip: chipStrip() > 0,
     });
     overlayWin.webContents.send('set-theme', currentTheme());
-    overlayWin.webContents.send('recording-started', { command: commandActive });
+    if (agentHint) { overlayWin.webContents.send('agent-result', agentHint); return; }
+    overlayWin.webContents.send('recording-started', { command: commandActive, agent: agentActive });
     // Copies that came in before the window had loaded (look-back at start).
     for (const a of attachments) overlayWin.webContents.send('attachment', a);
   };
@@ -824,13 +850,13 @@ function pushOverlayState() {
 
 let overlayHideTimer = null;
 
-function showOverlay() {
+function showOverlay(agentHint = null) {
   if (overlayIdleTimer) { clearTimeout(overlayIdleTimer); overlayIdleTimer = null; }
   if (overlayHideTimer) { clearTimeout(overlayHideTimer); overlayHideTimer = null; }
   if (!overlayWin || overlayWin.isDestroyed()) createOverlay();
   applyOverlayBounds();
   overlayWin.showInactive();
-  pushOverlayState();
+  pushOverlayState(agentHint);
 }
 
 function hideOverlay() {
@@ -880,12 +906,31 @@ function configHotkeyToElectron(hotkey) {
     .join('+');
 }
 
+// Everything registerHotkeys() depends on: re-register when it changes.
+function hotkeySignature(cfg) {
+  return [cfg.hotkey, cfg.mode, cfg.command_enabled, cfg.command_hotkey,
+          cfg.agent_enabled, cfg.agent_hotkey].join('|');
+}
+
+// Same keys in any order ("Alt+Shift+X" = "Shift+Alt+X").
+function sameAccelerator(a, b) {
+  const norm = (k) => String(k || '').toLowerCase().split('+').sort().join('+');
+  return norm(a) === norm(b);
+}
+
+// What the running recording is for: 'dictate', 'command' or 'agent'.
+function activeKind() {
+  return commandActive ? 'command' : agentActive ? 'agent' : 'dictate';
+}
+
 let holdTimer = null;  // Timer for hold-to-speak release detection
 
-// One handler for both hotkeys: dictation and command mode (`command`).
-function onHotkey(command) {
+// One handler for every hotkey: dictation, command mode and the agent
+// hotkey (the text goes to a URL instead of being typed).
+function onHotkey(kind) {
   const mode = config.mode || 'press_to_speak';
-  const keys = command ? config.command_hotkey : config.hotkey;
+  const keys = kind === 'command' ? config.command_hotkey
+    : kind === 'agent' ? config.agent_hotkey : config.hotkey;
   if (mode === 'hold_to_speak') {
     // Cancelled with Esc while the hotkey is still held: its key repeats
     // must not start a new recording. Every repeat extends the quiet time,
@@ -897,7 +942,7 @@ function onHotkey(command) {
     // Hold-to-speak: globalShortcut fires repeatedly while held.
     // Start recording on first fire, reset release-detection timer each fire.
     if (!isRecording && !isTranscribing) {
-      startRecording({ command });
+      startRecording({ kind });
       // Precise release: the backend polls the hotkey's virtual keys
       // (GetAsyncKeyState, ~15 ms) and sends 'hotkey_released'.
       // globalShortcut has no key-up event – the old 350 ms-after-last-
@@ -906,8 +951,8 @@ function onHotkey(command) {
       // the first repeat and cut the recording off mid-word.
       if (isRecording) sendToPython('watch_hotkey_release', { hotkey: keys });
     }
-    // The other hotkey's repeats must not keep this recording alive.
-    if (isRecording && commandActive !== command) return;
+    // The other hotkeys' repeats must not keep this recording alive.
+    if (isRecording && activeKind() !== kind) return;
     // Timer is now only a fallback (hotkey not mappable by the backend):
     // long enough that it can't fire before OS key-repeat kicks in.
     if (holdTimer) clearTimeout(holdTimer);
@@ -918,7 +963,7 @@ function onHotkey(command) {
   } else {
     // Press-to-speak: toggle
     if (!isRecording) {
-      startRecording({ command });
+      startRecording({ kind });
     } else {
       stopRecording();
     }
@@ -934,7 +979,7 @@ function registerHotkeys() {
   console.log(`Registering hotkey: ${hotkey} (mode: ${mode})`);
 
   try {
-    const success = globalShortcut.register(hotkey, () => onHotkey(false));
+    const success = globalShortcut.register(hotkey, () => onHotkey('dictate'));
 
     if (!success) {
       console.error(`✗ Failed to register hotkey: ${hotkey}`);
@@ -956,7 +1001,7 @@ function registerHotkeys() {
     try {
       if (cmdKey.toLowerCase() === hotkey.toLowerCase()) {
         console.error(`✗ Command hotkey equals the dictation hotkey (${cmdKey}) – skipped`);
-      } else if (globalShortcut.register(cmdKey, () => onHotkey(true))) {
+      } else if (globalShortcut.register(cmdKey, () => onHotkey('command'))) {
         console.log(`✓ Command hotkey registered: ${cmdKey}`);
       } else {
         console.error(`✗ Failed to register command hotkey: ${cmdKey}`);
@@ -965,9 +1010,27 @@ function registerHotkeys() {
       console.error('Command hotkey registration error:', e);
     }
   }
+
+  // Agent hotkey (off by default): the dictation goes to a URL instead.
+  if (config.agent_enabled === true && config.agent_hotkey) {
+    const agentKey = configHotkeyToElectron(config.agent_hotkey);
+    const taken = [hotkey];
+    if (config.command_enabled !== false && config.command_hotkey) taken.push(configHotkeyToElectron(config.command_hotkey));
+    try {
+      if (taken.some((k) => sameAccelerator(k, agentKey))) {
+        console.error(`✗ Agent hotkey equals another hotkey (${agentKey}), skipped`);
+      } else if (globalShortcut.register(agentKey, () => onHotkey('agent'))) {
+        console.log(`✓ Agent hotkey registered: ${agentKey}`);
+      } else {
+        console.error(`✗ Failed to register agent hotkey: ${agentKey}`);
+      }
+    } catch (e) {
+      console.error('Agent hotkey registration error:', e);
+    }
+  }
 }
 
-function startRecording({ command = false } = {}) {
+function startRecording({ kind = 'dictate' } = {}) {
   if (isTranscribing) {
     // Previous dictation is still being transcribed. The press is ignored,
     // but not silently: a low blip + nudge on the (still visible) overlay.
@@ -980,19 +1043,26 @@ function startRecording({ command = false } = {}) {
     return;
   }
   if (isRecording) return;     // Already recording – ignore re-trigger
+  // Agent hotkey without a URL: say so instead of recording for nothing.
+  if (kind === 'agent' && !String(config.agent_url || '').trim()) {
+    showAgentHint();
+    return;
+  }
   if (!modelLoaded) {
     showToast(trayT().modelNotReady, 'warning');
     return;
   }
   isRecording = true;
-  commandActive = !!command;
+  commandActive = kind === 'command';
+  agentActive = kind === 'agent';
   attachments = [];
   closeSuggestion();  // a new dictation supersedes it (and the overlay sits there)
   sendToOnboarding('recording-started');
   isPaused = false;
   showOverlay();
-  // Command mode works on the selection; the AI context stays out of it.
-  sendToPython('start_recording', commandActive ? { command: true } : undefined);
+  // Command mode works on the selection; the AI context stays out of it
+  // (and out of the agent hotkey, which only sends app and window title).
+  sendToPython('start_recording', commandActive ? { command: true } : agentActive ? { agent: true } : undefined);
   updateTray('recording');
 }
 
@@ -1011,19 +1081,21 @@ function stopRecording() {
   // Unregister hotkeys during paste to prevent Ctrl+V from triggering
   globalShortcut.unregisterAll();
   recordStopTs = Date.now();
-  sendToPython(commandActive ? 'stop_command' : 'stop_recording');
+  if (agentActive) sendToPython('stop_agent', { version: app.getVersion() });
+  else sendToPython(commandActive ? 'stop_command' : 'stop_recording');
   updateTray('processing');
 
   // Safety net: if the backend NEVER replies (process crashed, IPC stuck),
   // make sure we unlock after 30 s instead of leaving the user dead. A
-  // command also waits on the LLM (up to 25 s) – give it more room.
+  // command also waits on the LLM (up to 25 s), the agent hotkey on the
+  // URL (15 s per connect/read) – give them more room.
   setTimeout(() => {
     if (isTranscribing) {
       console.error('Transcription timeout – forcing state reset');
       finishTranscription();
       showToast(trayT().transcribeStuck, 'error');
     }
-  }, commandActive ? 45_000 : 30_000);
+  }, commandActive ? 45_000 : agentActive ? 50_000 : 30_000);
 }
 
 // Esc while recording: the take is dropped, nothing is transcribed or inserted.
@@ -1060,6 +1132,51 @@ function finishTranscription(ok = false, text = '') {
   else hideOverlay();
   registerHotkeys();
   updateTray('ready');
+}
+
+// Agent hotkey: how long the overlay shows a result. Long enough to read a
+// reply (it rolls through the line in the overlay), short when there is none.
+function agentHoldMs(result) {
+  if (!result.ok) return 3600;
+  const n = String(result.message || '').length;
+  return n ? Math.min(15_000, 2600 + n * 60) : 1400;
+}
+
+function agentOverlayData(result, hold) {
+  const ok = !!result.ok;
+  return {
+    ok,
+    text: ok ? String(result.message || '') : '',
+    error: ok ? '' : String(result.error || 'unreachable'),
+    status: Number(result.status) || null,
+    hold,
+  };
+}
+
+// The URL answered (or didn't): show it, then back to ready. Never types
+// anything, also not as a fallback.
+function finishAgent(result) {
+  isRecording = false;
+  isTranscribing = false;
+  isPaused = false;
+  const hold = agentHoldMs(result);
+  if (overlayWin && !overlayWin.isDestroyed()) {
+    overlayWin.webContents.send('agent-result', agentOverlayData(result, hold));
+  }
+  setTimeout(() => { if (!isRecording) hideOverlay(); }, hold);
+  registerHotkeys();
+  updateTray('ready');
+}
+
+// Agent hotkey pressed, but no URL set: a short hint on the overlay.
+function showAgentHint() {
+  const now = Date.now();
+  if (now < agentHintUntil) return;   // hold mode repeats the hotkey ~30×/s
+  const result = { ok: false, error: 'no_url' };
+  const hold = agentHoldMs(result);
+  agentHintUntil = now + hold;
+  showOverlay({ ...agentOverlayData(result, hold), fresh: true });
+  setTimeout(() => { if (!isRecording) hideOverlay(); }, hold);
 }
 
 function togglePause() {
@@ -1422,8 +1539,7 @@ ipcMain.on('save-config', (_, newConfig) => {
   //    backend is dead or in restart back-off. So a user who picked a smaller
   //    model *because* the big one kept crashing lost exactly that change.
   const prevModel = config.model_size;
-  const prevHotkey = config.hotkey, prevMode = config.mode;
-  const prevCmd = `${config.command_enabled}|${config.command_hotkey}`;
+  const prevKeys = hotkeySignature(config);
   const autostartChanged = typeof newConfig.autostart === 'boolean' && newConfig.autostart !== autostartEnabled();
   const prevTheme = currentTheme();
   config = { ...config, ...newConfig };
@@ -1434,8 +1550,7 @@ ipcMain.on('save-config', (_, newConfig) => {
     updateTray(trayStatus);   // the tray menu's checkbox
   }
   writeConfigToDisk();
-  if (config.hotkey !== prevHotkey || config.mode !== prevMode ||
-      `${config.command_enabled}|${config.command_hotkey}` !== prevCmd) registerHotkeys();
+  if (hotkeySignature(config) !== prevKeys) registerHotkeys();
 
   const modelChanged = !!newConfig.model_size && newConfig.model_size !== prevModel;
   if (modelChanged) {
@@ -1474,6 +1589,15 @@ ipcMain.on('close-onboarding', () => {
   // Finished or dismissed – either way, don't show the wizard again.
   markOnboardingDone();
   if (onboardingWin && !onboardingWin.isDestroyed()) onboardingWin.close();
+});
+// Settings "Send test": the backend posts a fixed test body to the URL and
+// token from the form and answers with agent_result (test: true).
+ipcMain.on('agent-test', (_, cfg) => {
+  const data = { url: String((cfg && cfg.url) || ''), token: String((cfg && cfg.token) || ''), version: app.getVersion() };
+  if (pythonProcess && pythonProcess.stdin.writable) sendToPython('agent_test', data);
+  else if (settingsWin && !settingsWin.isDestroyed()) {
+    settingsWin.webContents.send('agent-test-result', { test: true, ok: false, status: null, message: '', error: 'backend' });
+  }
 });
 ipcMain.on('ollama-status', () => sendToPython('ollama_status'));
 ipcMain.on('ollama-setup', () => sendToPython('ollama_setup'));

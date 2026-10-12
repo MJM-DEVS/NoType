@@ -293,6 +293,20 @@
   }
   .cmd-note { margin-top: 12px; }
   .card.off .cmd-examples, .card.off .cmd-note, .card.off #cmdHotkeyField { opacity: 0.45; }
+  .card.off .agent-body { opacity: 0.45; }
+  /* One-line text input on the right of a field, as wide as a select. */
+  .text-input {
+    width: 280px; max-width: 280px; min-width: 0; flex-shrink: 0;
+    padding: 8px 12px; font-size: 13px; font-family: inherit;
+    background: var(--input-bg); color: var(--fg);
+    border: 1px solid var(--input-border); border-radius: 8px; outline: none;
+    transition: border-color 0.15s;
+    user-select: text;
+  }
+  .text-input:hover { border-color: var(--input-border-hover); }
+  .text-input:focus { border-color: var(--input-focus); }
+  .text-input::placeholder { color: var(--fg-dim); opacity: 1; }
+  .field-desc.ok { color: var(--ok); }
   .x-btn {
     border: none; background: none; cursor: pointer; flex: 0 0 auto;
     width: 20px; height: 20px; border-radius: 50%;
@@ -607,6 +621,63 @@
           </label>
         </div>
         <div class="field-desc cmd-note" data-i18n="ctx.note">ChatGPT, Claude und Gemini bekommen Bilder direkt eingefügt und Text als Zitat unter deinem Satz. Im Terminal (Claude Code, Codex) steht der Dateipfad vor dem Satz. Bei KI-Apps und Terminals zählt auch, was du bis zu einer Minute vor dem Start kopiert hast.</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title" data-i18n="agent.title">Agent-Hotkey</div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="agent.enable">Diktat an eine URL senden</div>
+            <div class="field-desc" data-i18n="agent.enable.desc">Ein eigener Hotkey: Statt zu tippen, schickt NoType deinen Text an eine URL, zum Beispiel an einen n8n-Webhook oder dein eigenes Skript. Die Antwort erscheint kurz im Overlay.</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="agentToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="agent-body">
+          <div class="field">
+            <div>
+              <div class="field-label" data-i18n="agent.hotkey">Agent-Hotkey</div>
+              <div class="field-desc" data-i18n="agent.hotkey.desc">Gleicher Modus wie beim Diktieren (halten oder drücken)</div>
+            </div>
+            <div class="hotkey-display">
+              <div class="hotkey-value" id="agentHotkeyValue" data-hotkey="ctrl+shift+alt+space"></div>
+              <button class="btn-sm" id="agentHotkeyBtn" data-i18n="general.change">Ändern</button>
+            </div>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-label" data-i18n="agent.url">URL</div>
+              <div class="field-desc" data-i18n="agent.url.desc">Bekommt Text, Sprache und Uhrzeit als JSON per POST</div>
+            </div>
+            <input type="url" class="text-input" id="agentUrl" spellcheck="false" autocomplete="off" placeholder="https://">
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-label" data-i18n="agent.token">Token (optional)</div>
+              <div class="field-desc" data-i18n="agent.token.desc">Geht als „Authorization: Bearer …“ mit</div>
+            </div>
+            <input type="password" class="text-input" id="agentToken" spellcheck="false" autocomplete="off">
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-label" data-i18n="agent.context">App und Fenstertitel mitsenden</div>
+              <div class="field-desc" data-i18n="agent.context.desc">Damit dein Agent weiß, wo du gerade bist. Kein Screenshot, keine Zwischenablage.</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="agentContextToggle">
+              <span class="slider"></span>
+            </label>
+          </div>
+          <div class="field">
+            <div>
+              <div class="field-label" data-i18n="agent.test">Verbindung testen</div>
+              <div class="field-desc" id="agentTestDesc" data-i18n="agent.test.desc">Schickt „NoType test“ an die URL, auch ungespeichert</div>
+            </div>
+            <button class="btn-sm" id="agentTestBtn" data-i18n="agent.test.btn">Test senden</button>
+          </div>
+        </div>
       </div>
 
       <div class="card">
@@ -962,6 +1033,22 @@
       'cmd.ex.5': 'Ohne Markierung: „Schreib eine kurze Absage für morgen“',
       'cmd.note': 'Nutzt die lokale KI aus „Text-Bereinigung“ – auch wenn die Bereinigung selbst aus ist.',
       'cmd.same': 'Muss sich vom Diktier-Hotkey unterscheiden',
+      'agent.title': 'Agent-Hotkey', 'agent.enable': 'Diktat an eine URL senden',
+      'agent.enable.desc': 'Ein eigener Hotkey: Statt zu tippen, schickt NoType deinen Text an eine URL, zum Beispiel an einen n8n-Webhook oder dein eigenes Skript. Die Antwort erscheint kurz im Overlay.',
+      'agent.hotkey': 'Agent-Hotkey', 'agent.hotkey.desc': 'Gleicher Modus wie beim Diktieren (halten oder drücken)',
+      'agent.url': 'URL', 'agent.url.desc': 'Bekommt Text, Sprache und Uhrzeit als JSON per POST',
+      'agent.token': 'Token (optional)', 'agent.token.desc': 'Geht als „Authorization: Bearer …“ mit',
+      'agent.context': 'App und Fenstertitel mitsenden',
+      'agent.context.desc': 'Damit dein Agent weiß, wo du gerade bist. Kein Screenshot, keine Zwischenablage.',
+      'agent.test': 'Verbindung testen', 'agent.test.desc': 'Schickt „NoType test“ an die URL, auch ungespeichert',
+      'agent.test.btn': 'Test senden', 'agent.test.sending': 'Sende…',
+      'agent.test.ok': 'Angekommen (HTTP {status})', 'agent.test.reply': 'Angekommen (HTTP {status}): {msg}',
+      'agent.err.no_url': 'Bitte zuerst eine URL eintragen',
+      'agent.err.bad_url': 'Die URL muss mit http:// oder https:// beginnen',
+      'agent.err.http': 'Fehler: HTTP {status}', 'agent.err.timeout': 'Keine Antwort nach 15 Sekunden',
+      'agent.err.tls': 'TLS-Fehler, Zertifikat prüfen', 'agent.err.unreachable': 'Nicht erreichbar',
+      'agent.err.backend': 'NoType startet noch, gleich noch mal versuchen',
+      'agent.same': 'Muss sich von den anderen Hotkeys unterscheiden',
       'ctx.title': 'KI-Kontext', 'ctx.enable': 'Kopiertes mitschicken',
       'ctx.enable.desc': 'Was du während des Diktats kopierst, kommt mit, wenn du in eine KI-App, ein Terminal oder den Browser sprichst. Einen Screenshot machst du mit {snip}.',
       'ctx.note': 'ChatGPT, Claude und Gemini bekommen Bilder direkt eingefügt und Text als Zitat unter deinem Satz. Im Terminal (Claude Code, Codex) steht der Dateipfad vor dem Satz. Bei KI-Apps und Terminals zählt auch, was du bis zu einer Minute vor dem Start kopiert hast.',
@@ -1079,6 +1166,22 @@
       'cmd.ex.5': 'Nothing selected: “Write a short decline for tomorrow”',
       'cmd.note': 'Uses the local AI from “Text Cleanup” – even when cleanup itself is off.',
       'cmd.same': 'Must differ from the dictation hotkey',
+      'agent.title': 'Agent hotkey', 'agent.enable': 'Send dictation to a URL',
+      'agent.enable.desc': 'A hotkey of its own: instead of typing, NoType sends your text to a URL, for example an n8n webhook or your own script. The reply shows briefly in the overlay.',
+      'agent.hotkey': 'Agent hotkey', 'agent.hotkey.desc': 'Same mode as dictation (hold or press)',
+      'agent.url': 'URL', 'agent.url.desc': 'Receives text, language and time as JSON via POST',
+      'agent.token': 'Token (optional)', 'agent.token.desc': 'Sent as “Authorization: Bearer …”',
+      'agent.context': 'Include app and window title',
+      'agent.context.desc': 'So your agent knows where you are. No screenshot, no clipboard.',
+      'agent.test': 'Test the connection', 'agent.test.desc': 'Sends “NoType test” to the URL, saved or not',
+      'agent.test.btn': 'Send test', 'agent.test.sending': 'Sending…',
+      'agent.test.ok': 'Delivered (HTTP {status})', 'agent.test.reply': 'Delivered (HTTP {status}): {msg}',
+      'agent.err.no_url': 'Enter a URL first',
+      'agent.err.bad_url': 'The URL must start with http:// or https://',
+      'agent.err.http': 'Error: HTTP {status}', 'agent.err.timeout': 'No answer after 15 seconds',
+      'agent.err.tls': 'TLS error, check the certificate', 'agent.err.unreachable': 'Unreachable',
+      'agent.err.backend': 'NoType is still starting, try again in a moment',
+      'agent.same': 'Must differ from the other hotkeys',
       'ctx.title': 'AI context', 'ctx.enable': 'Send copied content along',
       'ctx.enable.desc': 'When you dictate into an AI app, a terminal or the browser, whatever you copy meanwhile goes along. Take a screenshot with {snip}.',
       'ctx.note': 'ChatGPT, Claude and Gemini get images pasted in and text quoted below your sentence. In a terminal (Claude Code, Codex) the file path goes before the sentence. For AI apps and terminals, anything copied up to a minute before you start counts too.',
@@ -1202,6 +1305,8 @@
     // Key names are translated too (Strg / Ctrl).
     if (recordingHotkey !== 'hotkey') showHotkey('hotkey', hotkeyOf('hotkey'));
     if (recordingHotkey !== 'cmdHotkey') showHotkey('cmdHotkey', hotkeyOf('cmdHotkey'));
+    if (recordingHotkey !== 'agentHotkey') showHotkey('agentHotkey', hotkeyOf('agentHotkey'));
+    $('agentTestDesc').classList.remove('ok', 'warn');   // its text was just reset
     renderUpdate();
   }
 
@@ -1262,7 +1367,8 @@
 
   // ── Hotkey Recording ──
   // `recordingHotkey` is the id prefix of the recorder in use ('hotkey' for
-  // dictation, 'cmdHotkey' for command mode) – or false.
+  // dictation, 'cmdHotkey' for command mode, 'agentHotkey' for the agent
+  // hotkey) – or false.
   let hotkeyBefore = '';
   // The combo itself ("ctrl+shift+space") lives in data-hotkey; the box shows
   // it as keycaps.
@@ -1273,6 +1379,7 @@
   }
   showHotkey('hotkey', hotkeyOf('hotkey'));
   showHotkey('cmdHotkey', hotkeyOf('cmdHotkey'));
+  showHotkey('agentHotkey', hotkeyOf('agentHotkey'));
   function startHotkeyCapture(which) {
     if (recordingHotkey) return;
     recordingHotkey = which;
@@ -1286,12 +1393,42 @@
   }
   $('hotkeyBtn').onclick = () => startHotkeyCapture('hotkey');
   $('cmdHotkeyBtn').onclick = () => startHotkeyCapture('cmdHotkey');
+  $('agentHotkeyBtn').onclick = () => startHotkeyCapture('agentHotkey');
   const renderCmdCard = () =>
     $('cmdToggle').closest('.card').classList.toggle('off', !$('cmdToggle').checked);
   $('cmdToggle').addEventListener('change', renderCmdCard);
   const renderCtxCard = () =>
     $('ctxToggle').closest('.card').classList.toggle('off', !$('ctxToggle').checked);
   $('ctxToggle').addEventListener('change', renderCtxCard);
+  const renderAgentCard = () =>
+    $('agentToggle').closest('.card').classList.toggle('off', !$('agentToggle').checked);
+  $('agentToggle').addEventListener('change', () => {
+    renderAgentCard();
+    // Switched on with a combo another hotkey already uses: say so now.
+    if ($('agentToggle').checked && agentHotkeyClash(hotkeyOf('agentHotkey'))) warnHotkey('agentHotkey', 'agent.same');
+  });
+
+  // Same keys in any order count as the same combo (the agent hotkey is
+  // compared that way; dictation vs. command keeps its exact comparison).
+  const canonHotkey = (h) => String(h || '').toLowerCase().split('+').filter(Boolean).sort().join('+');
+  function agentHotkeyClash(combo) {
+    // Command mode counts even while off, as it does for dictation.
+    return [hotkeyOf('hotkey'), hotkeyOf('cmdHotkey')]
+      .some((o) => canonHotkey(o) === canonHotkey(combo));
+  }
+  // The row's description turns into the reason for a moment.
+  function warnHotkey(which, key) {
+    const desc = $(which + 'Value').closest('.field').querySelector('.field-desc');
+    const descText = desc.textContent;
+    desc.textContent = t(key);
+    desc.classList.add('warn');
+    $(which + 'Value').classList.add('recording');
+    setTimeout(() => {
+      $(which + 'Value').classList.remove('recording');
+      desc.classList.remove('warn');
+      if (desc.textContent === t(key)) desc.textContent = descText;
+    }, 2200);
+  }
 
   document.addEventListener('keydown', (e) => {
     if (!recordingHotkey) return;
@@ -1319,21 +1456,16 @@
       $(which + 'Value').classList.remove('recording');
       $(which + 'Btn').textContent = t('general.change');
       let combo = Array.from(hotkeyParts).join('+');
-      // Both hotkeys on one combo can't work – keep the previous one.
+      // Two hotkeys on one combo can't work – keep the previous one and say
+      // why inline. The agent hotkey only counts while it is switched on.
       const other = hotkeyOf(which === 'hotkey' ? 'cmdHotkey' : 'hotkey');
-      if (combo.toLowerCase() === other.toLowerCase()) {
+      if (which !== 'agentHotkey' && combo.toLowerCase() === other.toLowerCase()) {
         combo = hotkeyBefore;
-        // Say why inline – the row's description turns into the reason.
-        const desc = $(which + 'Value').closest('.field').querySelector('.field-desc');
-        const descText = desc.textContent;
-        desc.textContent = t('cmd.same');
-        desc.classList.add('warn');
-        $(which + 'Value').classList.add('recording');
-        setTimeout(() => {
-          $(which + 'Value').classList.remove('recording');
-          desc.classList.remove('warn');
-          if (desc.textContent === t('cmd.same')) desc.textContent = descText;
-        }, 2200);
+        warnHotkey(which, 'cmd.same');
+      } else if (which === 'agentHotkey' ? agentHotkeyClash(combo)
+          : $('agentToggle').checked && canonHotkey(combo) === canonHotkey(hotkeyOf('agentHotkey'))) {
+        combo = hotkeyBefore;
+        warnHotkey(which, 'agent.same');
       } else {
         markDirty();
       }
@@ -1958,6 +2090,45 @@
   $('livePreviewToggle').addEventListener('change', pushPreview);
   renderOverlayPicker();
 
+  // ── Agent hotkey: "Send test" ──
+  // Posts a fixed test body with the URL and token as typed (saved or not).
+  // The answer is the remote server's text: textContent only.
+  let agentTestTimer = null;
+  function showAgentTest(text, kind) {
+    const desc = $('agentTestDesc');
+    desc.textContent = text;
+    desc.classList.toggle('ok', kind === 'ok');
+    desc.classList.toggle('warn', kind === 'warn');
+  }
+  function agentTestText(r) {
+    if (r.ok) {
+      const msg = String(r.message || '');
+      return (msg ? t('agent.test.reply') : t('agent.test.ok'))
+        .replace('{status}', r.status || '200').replace('{msg}', msg);
+    }
+    const key = 'agent.err.' + (r.error || 'unreachable');
+    return (I18N.de[key] ? t(key) : t('agent.err.unreachable')).replace('{status}', r.status || '?');
+  }
+  function finishAgentTest(r) {
+    clearTimeout(agentTestTimer); agentTestTimer = null;
+    $('agentTestBtn').disabled = false;
+    showAgentTest(agentTestText(r || {}), r && r.ok ? 'ok' : 'warn');
+  }
+  $('agentTestBtn').onclick = () => {
+    const url = $('agentUrl').value.trim();
+    if (!url) { finishAgentTest({ ok: false, error: 'no_url' }); $('agentUrl').focus(); return; }
+    if (!window.notype.agentTest) return;
+    $('agentTestBtn').disabled = true;
+    showAgentTest(t('agent.test.sending'), '');
+    window.notype.agentTest({ url, token: $('agentToken').value.trim() });
+    // The backend always answers (15 s timeout); this only covers a dead one.
+    clearTimeout(agentTestTimer);
+    agentTestTimer = setTimeout(() => finishAgentTest({ ok: false, error: 'unreachable' }), 35000);
+  };
+  if (window.notype && window.notype.onAgentTestResult) {
+    window.notype.onAgentTestResult((r) => { if (agentTestTimer) finishAgentTest(r); });
+  }
+
   // ── Populate from config ──
   function applyConfig(cfg) {
     // A later `config` push (backend restart, second reply) must not wipe
@@ -1974,6 +2145,12 @@
     renderCmdCard();
     $('ctxToggle').checked = cfg.ai_context !== false;
     renderCtxCard();
+    $('agentToggle').checked = cfg.agent_enabled === true;
+    showHotkey('agentHotkey', cfg.agent_hotkey || 'ctrl+shift+alt+space');
+    $('agentUrl').value = cfg.agent_url || '';
+    $('agentToken').value = cfg.agent_token || '';
+    $('agentContextToggle').checked = cfg.agent_send_context !== false;
+    renderAgentCard();
     $('langSelect').value = cfg.language || 'de';
     $('autoLangToggle').checked = cfg.auto_language_detect !== false;
     selectedModel = cfg.model_size || 'small';
@@ -2050,6 +2227,11 @@
       learn_corrections: $('learnToggle').checked,
       command_hotkey: hotkeyOf('cmdHotkey'),
       ai_context: $('ctxToggle').checked,
+      agent_enabled: $('agentToggle').checked,
+      agent_hotkey: hotkeyOf('agentHotkey'),
+      agent_url: $('agentUrl').value.trim(),
+      agent_token: $('agentToken').value.trim(),
+      agent_send_context: $('agentContextToggle').checked,
       language: $('langSelect').value,
       auto_language_detect: $('autoLangToggle').checked,
       model_size: selectedModel,

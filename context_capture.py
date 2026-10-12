@@ -181,6 +181,17 @@ def foreground_process() -> str:
         return ""
 
 
+def foreground_window() -> tuple[str, str]:
+    """(exe name in lower case, title) of the window in front, '' if unknown."""
+    if not _WIN:
+        return "", ""
+    try:
+        hwnd = _u32.GetForegroundWindow()
+        return _process_name(_window_pid(hwnd)), _window_title(hwnd)
+    except Exception:
+        return "", ""
+
+
 # ── Where the dictation goes ──────────────────────────────────────
 
 @dataclass(frozen=True)

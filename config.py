@@ -69,6 +69,11 @@ DEFAULT_CONFIG = {
     "learn_corrections": True,       # offer fixes typed right after a dictation
     "command_enabled": True,         # command mode: rewrite the selection by voice
     "command_hotkey": "ctrl+alt+space",
+    "agent_enabled": False,          # agent hotkey: POST the dictation to agent_url instead of typing it
+    "agent_hotkey": "ctrl+shift+alt+space",
+    "agent_url": "",
+    "agent_token": "",               # sent as "Authorization: Bearer …" when set
+    "agent_send_context": True,      # include app name + window title in the request
     "cleanup_mode": "fast",          # off | fast (rules) | ai (local LLM via Ollama)
     "llm_model": "qwen3:4b-instruct",  # Ollama model for cleanup_mode="ai"
     "llm_min_words": 8,              # below this, "ai" mode uses rules only (latency)

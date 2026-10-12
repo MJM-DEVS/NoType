@@ -31,6 +31,10 @@ contextBridge.exposeInMainWorld('notype', {
   onDictionary: (callback) => ipcRenderer.on('dictionary', (_, entries) => callback(entries)),
   onUpdateData: (callback) => ipcRenderer.on('update-data', (_, data) => callback(data)),
   onUpdateStatus: (callback) => ipcRenderer.on('update-status', (_, status) => callback(status)),
+  // Agent hotkey: the text is on its way, the URL's answer, the settings test.
+  onAgentSending: (callback) => ipcRenderer.on('agent-sending', (_, data) => callback(data || {})),
+  onAgentResult: (callback) => ipcRenderer.on('agent-result', (_, data) => callback(data || {})),
+  onAgentTestResult: (callback) => ipcRenderer.on('agent-test-result', (_, data) => callback(data || {})),
 
   // Send messages to main process
   saveConfig: (config) => ipcRenderer.send('save-config', config),
@@ -55,4 +59,8 @@ contextBridge.exposeInMainWorld('notype', {
   ollamaStatus: () => ipcRenderer.send('ollama-status'),
   ollamaSetup: () => ipcRenderer.send('ollama-setup'),
   ollamaUpdate: () => ipcRenderer.send('ollama-update'),
+  // Agent hotkey: POST a test body to { url, token } from the settings form.
+  agentTest: (cfg) => ipcRenderer.send('agent-test', {
+    url: String((cfg && cfg.url) || ''), token: String((cfg && cfg.token) || ''),
+  }),
 });

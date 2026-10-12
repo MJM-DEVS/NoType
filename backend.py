@@ -57,7 +57,9 @@ import dictionary
 import ollama_manager
 from correction_watch import CorrectionWatcher
 from escape_hook import EscapeHook
-from context_capture import ContextCapture, classify_foreground, insert_with_context
+from context_capture import (ContextCapture, classify_foreground, foreground_window,
+                             insert_with_context)
+import agent_webhook
 from output_mute import OutputMuter
 
 # Log to file only (stdout is for IPC). Rotate so the log file never grows unbounded.
@@ -122,6 +124,9 @@ class Backend:
         self.context = ContextCapture(os.path.join(CONFIG_DIR, "attachments"),
                                       lambda info: self.send("attachment_added", info))
         self._context = None  # Session of the running dictation, if any
+        # Agent hotkey: app + window title in front when the recording started
+        # (only collected when the user lets them go along).
+        self._agent_context = None
         self._send_lock = threading.Lock()
         self._mic_missing = None  # name of a chosen mic we last couldn't find
         self._migrate_mic_setting()
@@ -224,9 +229,10 @@ class Backend:
         """Called by AudioRecorder per block: level + spectrum for the overlay."""
         self.send("amplitude", {"value": round(amplitude, 4), "bands": bands or []})
 
-    def handle_start_recording(self, command: bool = False):
-        """Start audio recording. `command`: the command hotkey started it."""
-        logger.info("Recording START")
+    def handle_start_recording(self, command: bool = False, agent: bool = False):
+        """Start audio recording. `command`: the command hotkey started it,
+        `agent`: the agent hotkey (the text goes to a URL, not into the app)."""
+        logger.info("Recording START" + (" (agent)" if agent else ""))
         self.corrections.cancel()
         if self.recorder and self.recorder.is_recording:
             self.recorder.stop()  # stray take – the rescan needs every stream closed
@@ -240,7 +246,13 @@ class Backend:
             # Let the start chime finish before the speakers go quiet.
             self.muter.mute(delay=0.5 if self.config.get("overlay_sounds", True) else 0.0)
         self._end_context()  # a stray session (stop without a recorder)
-        if not command and self.config.get("ai_context", True):
+        self._agent_context = None
+        if agent:
+            # Where the user is right now, read once. No clipboard, no screen.
+            if self.config.get("agent_send_context", True):
+                app, title = foreground_window()
+                self._agent_context = {"app": app, "window_title": title}
+        elif not command and self.config.get("ai_context", True):
             target = classify_foreground()
             if target:
                 logger.info(f"AI context: {target.kind} ({target.app})")
@@ -437,24 +449,27 @@ class Backend:
 
         threading.Thread(target=loop, daemon=True).start()
 
-    def handle_stop_recording(self, command: bool = False):
+    def handle_stop_recording(self, command: bool = False, agent: bool = False,
+                              version: str = ""):
         """Stop recording and transcribe. `command`: the recording is a spoken
-        instruction for the selected text (command mode) instead of dictation."""
+        instruction for the selected text (command mode) instead of dictation.
+        `agent`: the text goes to the agent URL instead of being typed
+        (`version` is the app version for the User-Agent)."""
         try:
-            self._stop_and_transcribe(command)
+            self._stop_and_transcribe(command, agent, version)
         finally:
             self.esc_hook.disarm()
 
-    def _stop_and_transcribe(self, command: bool):
+    def _stop_and_transcribe(self, command: bool, agent: bool = False, version: str = ""):
         if not self.recorder:
             self.send("error", {"message": "Not recording"})
             return
 
-        logger.info("Recording STOP" + (" (command)" if command else ""))
+        logger.info("Recording STOP" + (" (command)" if command else " (agent)" if agent else ""))
         audio = self.recorder.stop()
         self.muter.restore()
         context = self._end_context()
-        done = {"command": True} if command else {}
+        done = {"command": True} if command else {"agent": True} if agent else {}
 
         if self._cancelled(done):
             return
@@ -539,9 +554,17 @@ class Backend:
                 stats["cleanup"] = cleaned["engine"]
                 stats["cleanup_ms"] = cleaned["ms"]
 
-            if self._cancelled(stats):
+            if self._cancelled({**done, **stats}):
                 return
             self.esc_hook.disarm()  # from here on Esc belongs to the app again
+
+            if agent:
+                if text:
+                    self._send_to_agent(text, result.get("language") or language, version)
+                else:
+                    logger.info("No speech detected")
+                    self.send("transcription_done", {"text": "", "empty": True, **done, **stats})
+                return
 
             if text:
                 logger.info(f"Transcribed: {len(text)} chars")
@@ -568,6 +591,42 @@ class Backend:
         except Exception as e:
             logger.error(f"Transcription error: {e}", exc_info=True)
             self.send("error", {"message": f"Transcription failed: {e}"})
+
+    def _send_to_agent(self, text: str, language: str, version: str):
+        """Agent hotkey: POST the dictation to the configured URL and report
+        the answer (agent_result). The request runs on its own thread, so the
+        stdin loop (hotkeys, Esc, the next recording) never waits on it."""
+        url = self.config.get("agent_url") or ""
+        token = self.config.get("agent_token") or ""
+        context = self._agent_context if self.config.get("agent_send_context", True) else None
+        payload = agent_webhook.build_payload(text, language=language, context=context)
+        logger.info(f"Agent: sending {len(text)} chars"
+                    + (" with context" if context is not None else ""))
+        self.send("agent_sending", {"text": _safe_str(text)})
+
+        def worker():
+            result = agent_webhook.post(url, payload, token=token, version=version)
+            if result.get("message"):
+                result["message"] = _safe_str(result["message"])
+            self.send("agent_result", result)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def handle_agent_test(self, data: dict):
+        """Settings "Send test" button: a fixed test body to the URL and token
+        typed in the form (saved or not). Answers with agent_result + test."""
+        url = str(data.get("url") or "")
+        token = str(data.get("token") or "")
+        version = str(data.get("version") or "")
+
+        def worker():
+            result = agent_webhook.post(url, agent_webhook.build_test_payload(),
+                                        token=token, version=version)
+            if result.get("message"):
+                result["message"] = _safe_str(result["message"])
+            self.send("agent_result", {**result, "test": True})
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _run_command(self, spoken: str, selection: str, entries, stats: dict):
         """Command mode: rewrite the selection per the spoken instruction (or
@@ -803,12 +862,18 @@ class Backend:
                 cmd = msg.get("command")
 
                 if cmd == "start_recording":
-                    self.handle_start_recording(
-                        command=bool((msg.get("data") or {}).get("command")))
+                    data = msg.get("data") or {}
+                    self.handle_start_recording(command=bool(data.get("command")),
+                                                agent=bool(data.get("agent")))
                 elif cmd == "stop_recording":
                     self.handle_stop_recording()
                 elif cmd == "stop_command":
                     self.handle_stop_recording(command=True)
+                elif cmd == "stop_agent":
+                    self.handle_stop_recording(
+                        agent=True, version=str((msg.get("data") or {}).get("version") or ""))
+                elif cmd == "agent_test":
+                    self.handle_agent_test(msg.get("data") or {})
                 elif cmd == "cancel_recording":
                     self.handle_cancel_recording()
                 elif cmd == "pause_recording":

@@ -311,6 +311,9 @@ class Transcriber:
             "compute_fallback": compute_fallback,
             "duration": round(audio_duration, 1),
             "vad_ms": vad_sensitivity,
+            # Whisper's language code for this audio (detected, or the one
+            # it was told to use), None if it didn't say.
+            "language": (info.language if info else None) or None,
         }
 
     @property

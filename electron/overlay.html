@@ -41,6 +41,7 @@
     --lift: 0 0 transparent;
     /* accent tokens (mirrored in ACCENTS for the canvases) */
     --a1: #00d4aa; --a2: #2ee9c6; --a3: #4dd0ff; --glow: 0, 212, 170; --rec: #00d4aa;
+    --err: #ff6b5e;   /* agent hotkey: the URL failed */
   }
   body[data-accent="mono"]   { --a1: #ffffff; --a2: #f2f2f2; --a3: #d4d4d4; --glow: 255, 255, 255; --rec: #ff3b30; }
   body[data-accent="aurora"] { --a1: #ff7a45; --a2: #ff4fb4; --a3: #8f7bff; --glow: 170, 120, 255; --rec: #ff4fb4; }
@@ -58,6 +59,7 @@
     --hair: rgba(70, 82, 48, 0.16); --sep: rgba(70, 82, 48, 0.16); --edge: rgba(255, 255, 255, 0.7);
     --lift: 0 5px 14px -6px rgba(32, 36, 24, 0.32), 0 1px 3px rgba(32, 36, 24, 0.1);
     --a1: #56663a; --a2: #6b7f45; --a3: #93ab78; --glow: 93, 115, 64; --rec: #b0563d;
+    --err: #a24a32;
   }
 
   .style { display: none; position: fixed; inset: 0; align-items: center; justify-content: center; }
@@ -124,6 +126,19 @@
   @keyframes shimmer { from { background-position: 100% 0; } to { background-position: 0% 0; } }
   body.processing-dim .txt > span:not(.dim):not(.shimmer) { color: var(--t-busy); transition: color 0.3s; }
 
+  /* Agent hotkey failed: the reason in error ink, no running timer. */
+  body[data-state="failed"] .txt > span,
+  body[data-state="failed"] .is-text > span { color: var(--err); }
+  body[data-state="failed"] [data-timer] { visibility: hidden; }
+  /* Agent reply: read from its start, a long one rolls through once
+     (startReel); the fade sits where more text follows. */
+  body.reel .txt { direction: ltr; }
+  body.reel .txt > span { display: inline-block; padding-right: 28px; }
+  body.reel .txt.clip { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+  body.reel .is-text { justify-content: flex-start; }
+  body.reel .is-text > span { padding-bottom: 10px; }
+  body.reel .is-text.clip { -webkit-mask-image: linear-gradient(0deg, transparent 0, #000 12px); }
+
   .time {
     font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em;
     font-variant-numeric: tabular-nums; white-space: nowrap;
@@ -175,6 +190,7 @@
   @keyframes recPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.28; } }
   body[data-state="processing"] .mx-rec { background: rgb(var(--ink)); animation-duration: 0.5s; }
   body[data-state="done"] .mx-rec { background: var(--a1); animation: none; }
+  body[data-state="failed"] .mx-rec { background: var(--err); animation: none; }
   .mx-body .txt { font-size: 14.5px; }
 
   /* ═══ 3. ISLAND  (window 648×116) ═══════════════════════════════
@@ -481,14 +497,34 @@ const I18N_CMD = {
   de: { listen: 'Befehl sprechen…', proc: 'KI schreibt um…', done: 'Fertig', rec: 'Befehl', procL: 'KI', doneL: 'Fertig' },
   en: { listen: 'Speak a command…', proc: 'AI rewriting…',   done: 'Done',   rec: 'Command', procL: 'AI', doneL: 'Done' },
 };
+// Agent hotkey: the text goes to a URL; the overlay shows the answer.
+const I18N_AGENT = {
+  de: {
+    listen: 'Für deinen Agenten…', proc: 'Sende…', done: 'Gesendet', rec: 'Agent', procL: 'Sende', doneL: 'Gesendet', failL: 'Fehler',
+    err: {
+      no_url: 'Agent-URL fehlt (Einstellungen › Allgemein)', bad_url: 'Agent-URL ist ungültig',
+      http: 'Fehler: HTTP {status}', timeout: 'Keine Antwort (Zeitüberschreitung)',
+      tls: 'TLS-Fehler, Zertifikat prüfen', unreachable: 'Nicht erreichbar',
+    },
+  },
+  en: {
+    listen: 'Speak to your agent…', proc: 'Sending…', done: 'Sent', rec: 'Agent', procL: 'Sending', doneL: 'Sent', failL: 'Error',
+    err: {
+      no_url: 'Agent URL missing (Settings › General)', bad_url: 'Agent URL is not valid',
+      http: 'Error: HTTP {status}', timeout: 'No answer (timed out)',
+      tls: 'TLS error, check the certificate', unreachable: 'Unreachable',
+    },
+  },
+};
 
 const S = {
   style: 'amoled', accent: 'mint', world: 'dark', pos: 'bottom', lang: 'de', sounds: true, preview: true,
   state: 'idle', stateAt: 0, recAt: 0, recEnd: 0,
-  text: '', hasText: false, leaving: false, command: false,
+  text: '', hasText: false, leaving: false, command: false, agent: false,
 };
 const $ = (id) => document.getElementById(id);
-const L = () => (S.command ? I18N_CMD : I18N)[S.lang] || (S.command ? I18N_CMD : I18N).de;
+const LSET = () => (S.command ? I18N_CMD : S.agent ? I18N_AGENT : I18N);
+const L = () => LSET()[S.lang] || LSET().de;
 const ACC = () => (S.world === 'sage' ? SAGE_PAL : ACCENTS[S.accent] || ACCENTS.mint);
 const WD = () => WORLDS[S.world] || WORLDS.dark;
 const now = () => performance.now();
@@ -827,7 +863,7 @@ function renderIsland(dt, t) {
   const inner = clamp01((IS.w - 60) / 70);                  // glyph/timer fade in as it opens
   const glyph = $('isGlyph'), time = shape.querySelector('.is-time');
   glyph.style.opacity = inner.toFixed(3);
-  time.style.opacity = (inner * (S.state === 'done' ? 0 : 1)).toFixed(3);
+  time.style.opacity = (inner * (S.state === 'done' || S.state === 'failed' ? 0 : 1)).toFixed(3);
 
   const [ctx, W, H] = prep(glyph);
   const pal = ACC().bar, ps = mix.processing, ds = mix.done, mid = H / 2;
@@ -1437,7 +1473,8 @@ function tickTimer() {
   for (const el of document.querySelectorAll('[data-timer]')) el.textContent = txt;
 }
 function setLabel() {
-  const lab = S.state === 'processing' ? L().procL : S.state === 'done' ? L().doneL : L().rec;
+  const lab = S.state === 'processing' ? L().procL : S.state === 'done' ? L().doneL
+    : S.state === 'failed' ? L().failL || L().rec : L().rec;
   $('mxLabel').textContent = lab;
 }
 
@@ -1455,6 +1492,8 @@ function replayEntry() {
 }
 function recordingStarted(opts) {
   S.command = !!(opts && opts.command);
+  S.agent = !S.command && !!(opts && opts.agent);
+  stopReel();
   document.body.classList.remove('leaving', 'busy', 'cancelled');
   S.leaving = false;
   S.recAt = now(); S.recEnd = 0;
@@ -1477,6 +1516,73 @@ function transcriptionDone(data) {
   setState('done');
   if (data.text) setText(String(data.text), 'final');
   else setText(L().done, 'status');
+}
+// ── Agent hotkey ─────────────────────────────────────────────────
+// Transcribed and on its way: the sent text stays (dimmed) while waiting.
+function agentSending(data) {
+  if (S.state !== 'processing') return;
+  if (data && data.text) setText(String(data.text), 'final');
+  else setText(L().proc, 'status');
+}
+function agentErrorText(data) {
+  const e = L().err || I18N_AGENT.de.err;
+  return (e[data.error] || e.unreachable).replace('{status}', data.status || '?');
+}
+// The URL's answer (main.js hides us after data.hold ms). `fresh`: shown
+// without a recording first (agent hotkey pressed, but no URL set).
+function agentResult(data) {
+  data = data || {};
+  S.agent = true; S.command = false;
+  stopReel();
+  if (data.fresh) {
+    document.body.classList.remove('leaving', 'busy', 'cancelled');
+    S.leaving = false;
+    S.recAt = 0; S.recEnd = 0;
+    bandsIn.fill(0); bandsSm.fill(0); levelIn = levelSm = 0;
+    IS.w = IS.h = 40; IS.vw = IS.vh = 0;
+    $('chips').replaceChildren();
+    replayEntry();
+  }
+  if (data.ok) {
+    setState('done');
+    if (data.text) setText(String(data.text), 'final');
+    else setText(L().done, 'status');
+  } else {
+    setState('failed');
+    setText(agentErrorText(data), 'final');
+    if (S.sounds && !DEMO) chime('cancel');
+  }
+  if (!data.ok || data.text) startReel(data.hold || 3000);
+}
+// A reply is read from its start; the shared text line normally keeps the
+// newest words in view. Longer than the line: it rolls through once, after
+// a short look at the start, and rests at its end before the overlay goes.
+let reelAnims = [];
+function stopReel() {
+  for (const a of reelAnims) a.cancel();
+  reelAnims = [];
+  document.body.classList.remove('reel');
+}
+function startReel(holdMs) {
+  document.body.classList.add('reel');
+  requestAnimationFrame(() => {
+    updateClip();
+    const lead = 900, rest = 1300, run = holdMs - lead - rest;
+    if (run < 400) return;
+    const roll = (el, over, axis) => reelAnims.push(el.animate(
+      [{ transform: `translate${axis}(0)` }, { transform: `translate${axis}(${-over}px)` }],
+      { duration: run, delay: lead, easing: 'linear', fill: 'forwards' }));
+    for (const box of document.querySelectorAll('.txt')) {
+      if (!box.clientWidth) continue;            // not the style on screen
+      const over = box.firstElementChild.offsetWidth - box.clientWidth;
+      if (over > 0) roll(box.firstElementChild, over, 'X');
+    }
+    const it = $('isText');
+    if (S.style === 'island') {
+      const over = it.firstElementChild.offsetHeight - it.clientHeight;
+      if (over > 0) roll(it.firstElementChild, over, 'Y');
+    }
+  });
 }
 // Esc: main.js hides the window right after; this picks the exit and sound.
 function recordingCancelled() {
@@ -1640,6 +1746,8 @@ if (!DEMO) {
   if (nt.onTranscriptionDone) nt.onTranscriptionDone(transcriptionDone);
   if (nt.onOverlayLeaving) nt.onOverlayLeaving(leaving);
   if (nt.onRecordingCancelled) nt.onRecordingCancelled(recordingCancelled);
+  if (nt.onAgentSending) nt.onAgentSending(agentSending);
+  if (nt.onAgentResult) nt.onAgentResult(agentResult);
   if (nt.onBusy) nt.onBusy(busy);
   if (nt.onSetStyle) nt.onSetStyle(applyStyle);
   if (nt.onSetTheme) nt.onSetTheme(applyWorld);
