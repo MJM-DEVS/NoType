@@ -52,13 +52,16 @@ _migrate_from_legacy_path()
 
 DEFAULT_CONFIG = {
     "language": "de",  # any Whisper language code – the UI offers all 99
+    # "languages": [{"code": "de", "share": 80}, …] – the languages the user
+    # speaks; not defaulted, a config without it reads as `language` at 100 %
     "app_language": "de",  # UI language: de | en
     "model_size": "small",
     "hotkey": "ctrl+shift+space",
     "mode": "hold_to_speak",  # "hold_to_speak" or "press_to_speak"
     "autostart": False,
     "update_check": True,            # ask GitHub for a newer release (Electron side)
-    "auto_language_detect": True,
+    "auto_language_detect": True,    # also recognize languages outside `languages`
+    "spoken_punctuation": True,      # "Fragezeichen", "neue Zeile" … become characters
     "overlay_enabled": True,
     "overlay_style": "amoled",       # amoled | matrix | island | halo | buddy | slime | dragon | mimic | line (retired ids are migrated by the Electron app)
     "overlay_position": "bottom",    # bottom | top | center – applies to every style

@@ -104,7 +104,7 @@ def _type_unicode(text: str) -> bool:
     windows) and never touches the clipboard. Newlines are sent as real Enter
     presses; astral chars (emoji) go as UTF-16 surrogate pairs."""
     events = []
-    for ch in text:
+    for ch in text.replace("\r\n", "\n"):
         if ch in ("\n", "\r"):
             events.append((VK_RETURN, 0, 0))
             events.append((VK_RETURN, 0, KEYEVENTF_KEYUP))
@@ -312,7 +312,8 @@ def insert_text(text: str, method: str = "auto") -> bool:
     the transcribed text is silently lost. The clipboard simply ending up with
     the transcribed text is the expected dictation UX.
     """
-    if not text or not text.strip():
+    # A dictated "neuer Absatz" alone is text, too.
+    if not text or not (text.strip() or "\n" in text):
         logger.debug("Empty text, skipping insertion")
         return False
 
@@ -327,7 +328,9 @@ def insert_text(text: str, method: str = "auto") -> bool:
             return success
 
         seq = user32.GetClipboardSequenceNumber()
-        pyperclip.copy(text)
+        # Windows text on the clipboard uses CRLF; some editors paste a bare
+        # LF as nothing at all.
+        pyperclip.copy(text.replace("\r\n", "\n").replace("\n", "\r\n"))
         if not _wait_clipboard_updated(seq):
             logger.warning("Clipboard did not update in time, typing instead")
             return _type_unicode(text)

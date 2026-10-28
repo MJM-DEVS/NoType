@@ -7,15 +7,81 @@ import logging
 import os
 import threading
 import numpy as np
-from faster_whisper import WhisperModel
+from faster_whisper import WhisperModel, BatchedInferencePipeline
 from faster_whisper.utils import download_model
+from faster_whisper.vad import VadOptions
+
+import hallucinations
 
 logger = logging.getLogger("NoType.Transcriber")
 
-# Language codes pass through to Whisper as-is – every language the loaded
-# model supports (99 for the large models) is available. The map only exists
-# as a hook for engines whose codes differ from ISO 639-1.
-LANGUAGE_MAP: dict = {}
+SAMPLE_RATE = 16000
+
+# ── Language policy ──────────────────────────────────────────────────
+# The user lists the languages they speak, optionally with shares ("80 %
+# German, 15 % English, 5 % Polish"). Whisper's own detection picks the most
+# probable of all 99 languages, and on short or noisy audio that regularly is
+# one the user never speaks (Russian, French, Portuguese …). Instead, its
+# probabilities are weighed:
+# - between the user's languages only lightly (share ** 0.3), so the shares
+#   decide close calls but a clearly English sentence stays English
+# - every other language counts five times less, or not at all when the user
+#   turned "also recognize other languages" off
+SHARE_EXPONENT = 0.3
+OTHER_WEIGHT = 0.2
+# Whisper decides the language from the first 30 s of speech – no need to run
+# the VAD over a five-minute dictation twice for that.
+DETECT_SECONDS = 40
+
+
+def normalize_languages(entries, fallback: str = "de") -> list:
+    """Config entries → [(code, share)] with shares summing to 1, highest
+    first. Shares are percentages and optional: the ones left empty split
+    what's left of 100 (80 + 15 + empty → 5), at least 1 each. They don't
+    have to add up to 100. Plain codes ("de") are accepted, too. The
+    settings window mirrors this in effectiveShares()."""
+    shares = {}
+    for e in entries or []:
+        code, share = (e, None) if isinstance(e, str) else (
+            (e.get("code"), e.get("share")) if isinstance(e, dict) else (None, None))
+        code = str(code or "").strip().lower()
+        if not code or code in shares:
+            continue
+        try:
+            shares[code] = max(float(share), 1.0)
+        except (TypeError, ValueError):
+            shares[code] = None
+    if not shares:
+        return [(fallback or "de", 1.0)]
+    given = [s for s in shares.values() if s is not None]
+    missing = len(shares) - len(given)
+    default = max((100.0 - sum(given)) / missing, 1.0) if missing else 0.0
+    shares = {c: (s if s is not None else default) for c, s in shares.items()}
+    total = sum(shares.values())
+    return sorted(((c, s / total) for c, s in shares.items()), key=lambda x: -x[1])
+
+
+def pick_language(probs: dict, languages: list, allow_other: bool) -> str:
+    """The language to decode with: Whisper's probabilities weighed by the
+    user's languages (see above)."""
+    weights = {code: share ** SHARE_EXPONENT for code, share in languages}
+    best, best_score = languages[0][0], -1.0
+    for code in (set(probs) | set(weights)) if allow_other else weights:
+        score = probs.get(code, 0.0) * weights.get(code, OTHER_WEIGHT)
+        if score > best_score:
+            best, best_score = code, score
+    return best
+
+
+# Long dictations are decoded in parallel batches (BatchedInferencePipeline,
+# ~1.7× faster on 80 s). Below this length a single 30 s window does the job.
+BATCH_MIN_SECONDS = 30
+BATCH_SIZE = 8
+# The batched decoder skips Whisper's anti-hallucination guards. They are
+# re-applied per chunk afterwards with the same thresholds as the normal path.
+NO_SPEECH_THRESHOLD = 0.6
+LOG_PROB_THRESHOLD = -1.0
+COMPRESSION_RATIO_THRESHOLD = 2.4
 
 # Curated catalog of local open-weight models – all served by the same
 # faster-whisper/CTranslate2 engine (no extra runtimes). `repo` is what
@@ -76,6 +142,7 @@ class Transcriber:
         # Single-language models ignore the configured/auto language.
         self.forced_language = entry["lang"]
         self._model = None
+        self._batched = None
 
         # Auto-detect device
         if device == "auto":
@@ -188,22 +255,125 @@ class Transcriber:
         else:
             return int(beam_size_setting)
 
-    def transcribe(self, audio: np.ndarray, language: str = None,
-                   auto_detect: bool = True, beam_size: str = "auto",
-                   vad_sensitivity: int = 300,
-                   initial_prompt: str = None,
-                   vad_filter: bool = True,
-                   on_segment=None) -> dict:
+    def _choose_language(self, audio, languages, allow_other: bool,
+                         vad_filter: bool, vad_sensitivity: int):
+        """Language code to decode with (None = Whisper decides on its own).
+        Must run under inference_lock – it uses the model."""
+        if self.forced_language:
+            return self.forced_language
+        if not languages:
+            return None
+        if len(languages) == 1 and not allow_other:
+            return languages[0][0]
+        try:
+            _, _, all_probs = self._model.detect_language(
+                audio[:DETECT_SECONDS * SAMPLE_RATE], vad_filter=vad_filter,
+                vad_parameters=VadOptions(min_silence_duration_ms=vad_sensitivity,
+                                          speech_pad_ms=150),
+            )
+        except Exception as e:
+            # Typically no speech left after the VAD – the decode comes back
+            # empty anyway, any language will do.
+            logger.info(f"Language detection skipped ({e.__class__.__name__})")
+            return languages[0][0]
+        probs = dict(all_probs)
+        chosen = pick_language(probs, languages, allow_other)
+        top = max(probs, key=probs.get)
+        logger.info(f"Detected language: {chosen} (prob: {probs.get(chosen, 0.0):.2f})"
+                    + (f", Whisper alone: {top} ({probs[top]:.2f})" if top != chosen else ""))
+        return chosen
+
+    def _decode(self, audio, language, beam: int, vad_filter: bool,
+                vad_sensitivity: int, prompt):
+        """The normal, sequential decode with Whisper's guards on."""
+        segments, info = self._model.transcribe(
+            audio,
+            language=language,
+            beam_size=beam,
+            vad_filter=vad_filter,
+            vad_parameters=dict(
+                min_silence_duration_ms=vad_sensitivity,
+                speech_pad_ms=150,
+            ),
+            initial_prompt=prompt,
+            # Anti-hallucination guards. Whisper invents text on noise and
+            # loops on silence ("sehr sehr sehr...") – these thresholds drop
+            # such segments instead of inserting them:
+            # - no context carry-over, so one hallucinated segment can't
+            #   poison every following segment (initial_prompt is unaffected)
+            condition_on_previous_text=False,
+            # - discard segments whose token stream is repetitive garbage
+            compression_ratio_threshold=COMPRESSION_RATIO_THRESHOLD,
+            # - discard segments the model itself is unsure about / flags
+            #   as non-speech
+            log_prob_threshold=LOG_PROB_THRESHOLD,
+            no_speech_threshold=NO_SPEECH_THRESHOLD,
+        )
+        # Force segments to materialise inside the lock – the generator
+        # does the actual model work lazily as we iterate it.
+        return list(segments), info
+
+    def _decode_batched(self, audio, language, beam: int, vad_sensitivity: int, prompt):
+        """Long audio: decode the speech chunks (up to 30 s each) in parallel,
+        then re-apply the guards the batched decoder skips. A chunk Whisper
+        flags as silence is dropped; a repetitive or unsure one is decoded
+        again on the normal path, whose temperature fallback handles it."""
+        if self._batched is None or self._batched.model is not self._model:
+            self._batched = BatchedInferencePipeline(self._model)
+        segments, info = self._batched.transcribe(
+            audio,
+            language=language,
+            beam_size=beam,
+            batch_size=BATCH_SIZE,
+            vad_filter=True,
+            vad_parameters=dict(min_silence_duration_ms=vad_sensitivity, speech_pad_ms=150),
+            initial_prompt=prompt,
+            # Sentence-level segments with timestamps (for the hallucination
+            # filter) instead of one block per chunk.
+            without_timestamps=False,
+        )
+        chunks = {}
+        for seg in segments:
+            chunks.setdefault(seg.seek, []).append(seg)
+
+        kept = []
+        for chunk in chunks.values():
+            # avg_logprob and no_speech_prob are per chunk in batched mode.
+            logprob, no_speech = chunk[0].avg_logprob, chunk[0].no_speech_prob
+            if no_speech > NO_SPEECH_THRESHOLD and logprob < LOG_PROB_THRESHOLD:
+                logger.info(f"Batched: dropped a {chunk[-1].end - chunk[0].start:.1f}s "
+                            f"chunk as silence")
+                continue
+            if (logprob < LOG_PROB_THRESHOLD
+                    or any(s.compression_ratio > COMPRESSION_RATIO_THRESHOLD for s in chunk)):
+                start = max(0.0, chunk[0].start - 0.3)
+                end = chunk[-1].end + 0.3
+                logger.info(f"Batched: re-decoding a {end - start:.1f}s chunk "
+                            f"(logprob {logprob:.2f})")
+                redo, _ = self._decode(audio[int(start * SAMPLE_RATE):int(end * SAMPLE_RATE)],
+                                       language, beam, True, vad_sensitivity, prompt)
+                for seg in redo:
+                    seg.start += start
+                    seg.end += start
+                kept.extend(redo)
+                continue
+            kept.extend(chunk)
+        return kept, info
+
+    def transcribe(self, audio: np.ndarray, languages=None, allow_other: bool = True,
+                   beam_size: str = "auto", vad_sensitivity: int = 300,
+                   initial_prompt: str = None, vad_filter: bool = True) -> dict:
         """
         Transcribe audio to text.
 
         Args:
-            on_segment: Optional callback(text:str) invoked for each segment as
-                        faster-whisper produces it. Used by the frontend for a
-                        live-rolling tail preview while transcription runs.
+            languages: [(code, share)] from normalize_languages(): the
+                       languages the user speaks. None = Whisper decides alone.
+            allow_other: also accept languages outside that list.
 
         Returns:
-            Dict with 'text', 'beam', 'compute_type', 'duration', 'vad_ms'.
+            Dict with 'text', 'beam', 'compute_type', 'duration', 'vad_ms',
+            'language'.
         """
         if self._model is None:
             raise RuntimeError("Model not loaded. Call load_model() first.")
@@ -212,53 +382,37 @@ class Transcriber:
             return {"text": "", "beam": 0, "compute_type": self.compute_type,
                     "duration": 0, "vad_ms": vad_sensitivity}
 
-        # Calculate audio duration (16kHz sample rate)
-        audio_duration = len(audio) / 16000.0
+        audio_duration = len(audio) / SAMPLE_RATE
         actual_beam = self._get_beam_size(audio_duration, beam_size)
+        batched = (vad_filter and self.device == "cuda"
+                   and audio_duration >= BATCH_MIN_SECONDS)
 
         logger.info(f"Transcribing: {audio_duration:.1f}s audio, beam={actual_beam}, "
-                    f"compute={self.compute_type}, vad_ms={vad_sensitivity}")
+                    f"compute={self.compute_type}, vad_ms={vad_sensitivity}"
+                    + (", batched" if batched else ""))
 
-        # Determine language parameter for whisper. Single-language models
-        # (distil = en, german fine-tune = de) always win over the UI setting.
-        whisper_lang = None
-        if self.forced_language:
-            whisper_lang = self.forced_language
-        elif language and not auto_detect:
-            whisper_lang = LANGUAGE_MAP.get(language, language)
+        # `initial_prompt` biases the model toward custom vocabulary (product
+        # names, jargon, etc.) – the simplest form of vocabulary customization
+        # without fine-tuning.
+        prompt = initial_prompt.strip() if initial_prompt else None
 
-        # Transcribe with optimized parameters. `initial_prompt` biases the
-        # model toward custom vocabulary (product names, jargon, etc.) – the
-        # simplest form of vocabulary customization without fine-tuning.
         # Inference is serialised via the class-level lock – see comment above.
         def _run_inference():
             with Transcriber.inference_lock:
-                segments, info = self._model.transcribe(
-                    audio,
-                    language=whisper_lang,
-                    beam_size=actual_beam,
-                    vad_filter=vad_filter,
-                    vad_parameters=dict(
-                        min_silence_duration_ms=vad_sensitivity,
-                        speech_pad_ms=150,
-                    ),
-                    initial_prompt=(initial_prompt.strip() if initial_prompt else None),
-                    # Anti-hallucination guards. Whisper invents text on noise and
-                    # loops on silence ("sehr sehr sehr...") – these thresholds drop
-                    # such segments instead of inserting them:
-                    # - no context carry-over, so one hallucinated segment can't
-                    #   poison every following segment (initial_prompt is unaffected)
-                    condition_on_previous_text=False,
-                    # - discard segments whose token stream is repetitive garbage
-                    compression_ratio_threshold=2.4,
-                    # - discard segments the model itself is unsure about / flags
-                    #   as non-speech
-                    log_prob_threshold=-1.0,
-                    no_speech_threshold=0.6,
-                )
-                # Force segments to materialise inside the lock – the generator
-                # does the actual model work lazily as we iterate it.
-                return list(segments), info
+                language = self._choose_language(audio, languages, allow_other,
+                                                 vad_filter, vad_sensitivity)
+                if batched:
+                    try:
+                        return self._decode_batched(audio, language, actual_beam,
+                                                    vad_sensitivity, prompt)
+                    except RuntimeError as e:
+                        # cuBLAS: handled below. Anything else (e.g. out of
+                        # VRAM next to the LLM): the sequential path still works.
+                        if "CUBLAS" in str(e).upper():
+                            raise
+                        logger.warning(f"Batched decode failed, decoding sequentially: {e}")
+                return self._decode(audio, language, actual_beam, vad_filter,
+                                    vad_sensitivity, prompt)
 
         compute_fallback = False
         try:
@@ -281,24 +435,14 @@ class Transcriber:
             compute_fallback = True
             segments, info = _run_inference()
 
-        # Collect all segments. `segments` is a generator – iterating it is what
-        # actually runs the model. We push each chunk through `on_segment` as it
-        # arrives so the UI can roll out text without waiting for the full pass.
-        text_parts = []
-        for segment in segments:
-            piece = segment.text.strip()
-            if not piece:
-                continue
-            text_parts.append(piece)
-            if on_segment is not None:
-                try:
-                    on_segment(piece)
-                except Exception as e:
-                    logger.warning(f"on_segment callback raised: {e}")
+        # Known hallucinations (subtitle credits, video outros on noise) out.
+        pieces = hallucinations.filter_segments(segments, audio)
+        dropped = sum(1 for s in segments if s.text.strip()) - len(pieces)
+        if dropped > 0:
+            logger.info(f"Dropped {dropped} hallucinated segment(s)")
+        result = " ".join(pieces).strip()
 
-        result = " ".join(text_parts).strip()
-
-        if info and info.language:
+        if info and info.language and not languages:
             logger.info(f"Detected language: {info.language} "
                         f"(prob: {info.language_probability:.2f})")
 

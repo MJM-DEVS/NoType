@@ -48,12 +48,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from audio_recorder import (AudioRecorder, refresh_devices, input_devices,
                             find_input_device, input_device_name)
-from transcriber import Transcriber
+from transcriber import Transcriber, normalize_languages
 from text_output import insert_text, copy_selection
 from config import load_config, save_config, CONFIG_DIR
-from postprocess import (clean_transcript, warm_up, reset_availability_cache,
-                         rule_clean, run_command, DEFAULT_LLM_MODEL)
+from postprocess import (clean_transcript, warm_up, warm_up_async,
+                         reset_availability_cache, rule_clean, run_command,
+                         DEFAULT_LLM_MODEL)
 import dictionary
+import spoken_punctuation
 import ollama_manager
 from correction_watch import CorrectionWatcher
 from escape_hook import EscapeHook
@@ -204,7 +206,7 @@ class Backend:
         try:
             silence = np.zeros(8000, dtype=np.float32)  # 0.5s @ 16kHz
             result = self.transcriber.transcribe(
-                silence, language="de", auto_detect=False,
+                silence, languages=[("de", 1.0)], allow_other=False,
                 beam_size="1", vad_filter=False,
             )
             if result.get("compute_fallback"):
@@ -257,6 +259,11 @@ class Backend:
             if target:
                 logger.info(f"AI context: {target.kind} ({target.app})")
                 self._context = self.context.begin(target)
+
+        # An unloaded cleanup LLM loads while the user speaks (~5 s) instead
+        # of being skipped when the dictation is done.
+        if command or self.config.get("cleanup_mode", "fast") == "ai":
+            warm_up_async(self._llm_model())
 
         if (self.config.get("live_preview_enabled", True)
                 and self.transcriber and self.transcriber.is_loaded):
@@ -328,11 +335,9 @@ class Backend:
         Throwaway text – the final full-quality pass after stop is what gets
         inserted. Uses the shared inference lock, so a preview pass in flight
         can delay the final pass by at most one window (~0.3 s)."""
-        language = self.config.get("language", "de")
-        # Same language policy as the final pass – otherwise the caption is
-        # forced into the configured language while the inserted text is
-        # auto-detected, and the two visibly disagree for mixed speech.
-        auto_detect = self.config.get("auto_language_detect", True)
+        # Same language policy as the final pass – otherwise the caption and
+        # the inserted text visibly disagree for mixed speech.
+        languages, allow_other = self._languages()
         while self._running and recorder.is_recording:
             time.sleep(1.0)
             # Recorder may have been stopped/replaced while we slept.
@@ -346,7 +351,7 @@ class Backend:
                 continue
             try:
                 result = self.transcriber.transcribe(
-                    audio, language=language, auto_detect=auto_detect,
+                    audio, languages=languages, allow_other=allow_other,
                     beam_size="1",
                 )
             except Exception as e:
@@ -354,8 +359,9 @@ class Backend:
                 break
             if not recorder.is_recording or recorder is not self.recorder:
                 break
-            text = dictionary.apply(result["text"], self.config.get("dictionary"))
-            tail = text[-120:]
+            text = self._spoken_punctuation(result)
+            text = dictionary.apply(text, self.config.get("dictionary"))
+            tail = " ".join(text.split())[-120:]
             if tail:
                 self.send("preview", {"text": _safe_str(tail)})
 
@@ -496,8 +502,7 @@ class Backend:
                 with self.context.own_writes():
                     selection = copy_selection()
 
-            language = self.config.get("language", "de")
-            auto_detect = self.config.get("auto_language_detect", True)
+            languages, allow_other = self._languages()
             beam_size = self.config.get("beam_size", "auto")
             vad_sensitivity = self.config.get("vad_sensitivity", 300)
             entries = self.config.get("dictionary") or []
@@ -510,7 +515,7 @@ class Backend:
                 return
 
             result = self.transcriber.transcribe(
-                audio, language=language, auto_detect=auto_detect,
+                audio, languages=languages, allow_other=allow_other,
                 beam_size=beam_size, vad_sensitivity=vad_sensitivity,
                 initial_prompt=initial_prompt,
             )
@@ -538,6 +543,9 @@ class Backend:
                 return
 
             if text:
+                # "Fragezeichen", "neue Zeile" … → characters, first: the
+                # dictionary and the LLM then see the finished punctuation.
+                text = self._spoken_punctuation(result)
                 # Dictionary before the cleanup (so the LLM already sees the
                 # right words) and after it (the LLM may re-split or
                 # re-capitalize a term). Idempotent, ~1 ms per pass.
@@ -560,7 +568,8 @@ class Backend:
 
             if agent:
                 if text:
-                    self._send_to_agent(text, result.get("language") or language, version)
+                    self._send_to_agent(text, result.get("language") or languages[0][0],
+                                        version)
                 else:
                     logger.info("No speech detected")
                     self.send("transcription_done", {"text": "", "empty": True, **done, **stats})
@@ -591,6 +600,21 @@ class Backend:
         except Exception as e:
             logger.error(f"Transcription error: {e}", exc_info=True)
             self.send("error", {"message": f"Transcription failed: {e}"})
+
+    def _languages(self):
+        """The languages the user speaks as [(code, share)] plus whether
+        other languages are accepted, too. A config from before the language
+        list (one language + "detect automatically") reads as that language
+        at 100 %."""
+        main = self.config.get("language") or "de"
+        languages = normalize_languages(self.config.get("languages") or [main], fallback=main)
+        return languages, self.config.get("auto_language_detect", True)
+
+    def _spoken_punctuation(self, result: dict) -> str:
+        """Transcript with spoken punctuation turned into characters (if on)."""
+        if not self.config.get("spoken_punctuation", True):
+            return result["text"]
+        return spoken_punctuation.apply(result["text"], result.get("language"))
 
     def _send_to_agent(self, text: str, language: str, version: str):
         """Agent hotkey: POST the dictation to the configured URL and report
