@@ -19,24 +19,37 @@
   }
 
   :root {
-    --toast-bg: rgba(245, 242, 233, 0.96);
+    --gas: #00d4aa;   /* the overlay colour; main.js sends the user's pick */
+    --toast-bg: rgba(245, 242, 233, 0.97);
     --toast-fg: #2b3123;
-    --toast-sub: rgba(43, 49, 35, 0.64);
+    --toast-sub: rgba(43, 49, 35, 0.74);
     --toast-shadow: rgba(32, 36, 24, 0.22);
     --toast-border: rgba(70, 82, 48, 0.16);
-    --ok: #5d7037;
-    --err: #b0563d;
-    --warn: #b5772a;
+    --act-bg: rgba(70, 82, 48, 0.08);
+    --act-hover: rgba(70, 82, 48, 0.16);
+    --act-border: rgba(70, 82, 48, 0.22);
+    --ok: #56663a;
+    --err: #a63d24;
+    --warn: #8f5418;
   }
+  /* Dark: Neon-Werkstatt. A soot pill with a glass rim; "done" lights in
+     the gas, errors and warnings are cracked tubes (dashed, unlit). */
   [data-theme="dark"] {
-    --toast-bg: rgba(28, 28, 30, 0.92);
-    --toast-fg: #f5f5f5;
-    --toast-sub: rgba(255, 255, 255, 0.55);
+    --toast-bg: #171513;
+    --toast-fg: #f1ebe1;
+    --toast-sub: #a39a8c;
     --toast-shadow: rgba(0, 0, 0, 0.5);
-    --toast-border: rgba(255, 255, 255, 0.08);
-    --ok: #22c55e;
-    --err: #ef4444;
-    --warn: #f59e0b;
+    --toast-border: rgba(241, 235, 225, 0.28);
+    --act-bg: transparent;
+    --act-hover: transparent;
+    --act-border: var(--gas);
+    --ok: var(--gas);
+    --err: #ff6b5e;
+    --warn: #ffb547;
+    --core: color-mix(in srgb, var(--gas) 45%, #fff);
+    --halo: 0 0 2px color-mix(in srgb, var(--gas) 90%, transparent), 0 0 9px color-mix(in srgb, var(--gas) 55%, transparent), 0 0 22px color-mix(in srgb, var(--gas) 22%, transparent);
+    --halo-text: 0 0 6px color-mix(in srgb, var(--gas) 70%, transparent),
+                 0 0 16px color-mix(in srgb, var(--gas) 30%, transparent);
   }
 
   .toast {
@@ -49,12 +62,21 @@
     -webkit-backdrop-filter: blur(20px) saturate(140%);
     border: 1px solid var(--toast-border);
     border-radius: 999px;
-    padding: 10px 20px 10px 14px;
+    padding: 9px 20px 9px 13px;
     box-shadow: 0 6px 24px var(--toast-shadow);
-    animation: toastIn 0.35s cubic-bezier(0.16, 1, 0.3, 1),
-               toastOut 0.3s ease-in 2.2s forwards;
+    animation: toastIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
     max-width: 520px;
   }
+  .toast.leaving { animation: toastOut 0.3s ease-in forwards; }
+
+  /* Warnings and errors: room for the cause, the next step and a button. */
+  .toast.loud {
+    gap: 12px;
+    border-radius: 18px;
+    padding: 11px 12px 11px 14px;
+    max-width: 564px;
+  }
+  .toast.loud:not(.has-act) { padding-right: 20px; }
 
   @keyframes toastIn {
     from { opacity: 0; transform: translateY(12px) scale(0.95); }
@@ -66,6 +88,10 @@
     to { opacity: 0; transform: translateY(-8px); }
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    .toast, .toast.leaving { animation-duration: 0.01s; }
+  }
+
   .icon {
     width: 22px;
     height: 22px;
@@ -75,6 +101,7 @@
     justify-content: center;
     flex-shrink: 0;
   }
+  .loud .icon { width: 24px; height: 24px; }
 
   .icon.success { background: var(--ok); }
   .icon.error { background: var(--err); }
@@ -87,31 +114,94 @@
     flex-direction: column;
     gap: 1px;
     min-width: 0;
+    flex: 1;
   }
+  .loud .toast-body { gap: 2px; }
 
   .toast-title {
-    font-size: 12px;
+    font-size: 12.5px;
     font-weight: 600;
     line-height: 1.2;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .loud .toast-title { font-size: 13px; line-height: 1.25; }
 
   .toast-sub {
-    font-size: 10px;
+    font-size: 11.5px;
+    line-height: 1.3;
     color: var(--toast-sub);
     font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .toast-sub:empty { display: none; }
+  .loud .toast-sub {
+    font-size: 12px;
+    line-height: 1.35;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .loud .toast-sub:empty { display: none; }
+
+  .act {
+    flex-shrink: 0;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--toast-fg);
+    background: var(--act-bg);
+    border: 1px solid var(--act-border);
+    border-radius: 999px;
+    padding: 7px 14px;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+  }
+  .act:hover { background: var(--act-hover); }
+  .act:focus-visible { outline: 2px solid var(--toast-fg); outline-offset: 2px; }
+  .act[hidden] { display: none; }
+
+  /* ── Dark: "done" is a lit tube ring; a fault is a cracked one ── */
+  [data-theme="dark"] .toast { backdrop-filter: none; -webkit-backdrop-filter: none; }
+  [data-theme="dark"] .icon {
+    --lit: var(--ok);
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px var(--lit), 0 0 2px color-mix(in srgb, var(--lit) 90%, transparent),
+      0 0 9px color-mix(in srgb, var(--lit) 55%, transparent), 0 0 22px color-mix(in srgb, var(--lit) 22%, transparent);
+  }
+  [data-theme="dark"] .icon svg path { stroke: color-mix(in srgb, var(--lit) 45%, #fff); }
+  /* Warnings and errors differ by form, not only hue, so an amber or red gas
+     can't pass for them: a dashed ring that doesn't glow. */
+  [data-theme="dark"] .icon.error { --lit: var(--err); }
+  [data-theme="dark"] .icon.warning { --lit: var(--warn); }
+  [data-theme="dark"] .icon.error,
+  [data-theme="dark"] .icon.warning { box-shadow: none; border: 1.5px dashed var(--lit); }
+  [data-theme="dark"] .icon.error svg path,
+  [data-theme="dark"] .icon.warning svg path { stroke: var(--lit); }
+  /* The action only rides on warnings and errors, so it stays glass: the
+     state light is the one lit thing, the fix doesn't outshine the fault. */
+  [data-theme="dark"] .act { border: 1.5px solid rgba(241, 235, 225, 0.42); color: var(--toast-fg); }
+  [data-theme="dark"] .act:hover { border-color: rgba(241, 235, 225, 0.7); }
+  [data-theme="dark"] .act:focus-visible { outline-color: var(--gas); }
+
+  /* Ignition: a "done" light flickers on once as the pill arrives. */
+  @keyframes ignite {
+    0% { opacity: 0.35; } 18% { opacity: 1; } 30% { opacity: 0.45; }
+    46% { opacity: 1; } 58% { opacity: 0.8; } 100% { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-theme="dark"] .icon.success { animation: ignite 0.3s steps(1, end) 140ms both; }
+  }
 </style>
 </head>
 <body>
 
-<div class="toast" id="toast">
-  <div class="icon success" id="icon">
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <div class="icon success" id="icon" aria-hidden="true">
     <svg viewBox="0 0 12 12" fill="none" id="icon-svg">
       <path d="M2.5 6L5 8.5L9.5 3.5" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
@@ -120,6 +210,7 @@
     <div class="toast-title" id="title">Text eingefügt</div>
     <div class="toast-sub" id="subtitle"></div>
   </div>
+  <button class="act" id="act" type="button" hidden></button>
 </div>
 
 <script>
@@ -128,10 +219,28 @@
     error:   '<path d="M3 3L9 9M9 3L3 9" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>',
     warning: '<path d="M6 3.5V6.5M6 8.5V8" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/>',
   };
+  const toastEl = document.getElementById('toast');
+
+  // The page fades itself out; main closes the window when told (or as a
+  // backstop). Hovering a warning or error holds it until the mouse leaves.
+  let leaveTimer = null;
+  let leaving = false;
+  function leave() {
+    if (leaving) return;
+    leaving = true;
+    toastEl.classList.add('leaving');
+    setTimeout(() => { if (window.notype) window.notype.closeToast(); }, 300);
+  }
+  function leaveIn(ms) {
+    clearTimeout(leaveTimer);
+    leaveTimer = setTimeout(leave, ms);
+  }
+  leaveIn(2200);   // until the data says otherwise
 
   if (window.notype && window.notype.onSetTheme) {
-    window.notype.onSetTheme((theme) => {
+    window.notype.onSetTheme((theme, gas) => {
       document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : '';
+      if (gas) document.documentElement.style.setProperty('--gas', gas);
     });
   }
 
@@ -139,13 +248,15 @@
     window.notype.onToastData((data) => {
       const type = data.type || 'success';
       const lang = data.lang === 'en' ? 'en' : 'de';
+      document.documentElement.lang = lang;
       const L = lang === 'en'
-        ? { error: 'Error', words: (n) => `${n} ${n === 1 ? 'word' : 'words'}`, ai: 'AI cleanup', dec: '.' }
-        : { error: 'Fehler', words: (n) => `${n} ${n === 1 ? 'Wort' : 'Wörter'}`, ai: 'KI-Bereinigung', dec: ',' };
+        ? { words: (n) => `${n} ${n === 1 ? 'word' : 'words'}`, ai: 'AI cleanup', dec: '.' }
+        : { words: (n) => `${n} ${n === 1 ? 'Wort' : 'Wörter'}`, ai: 'KI-Bereinigung', dec: ',' };
       const iconEl = document.getElementById('icon');
       const svgEl = document.getElementById('icon-svg');
       const titleEl = document.getElementById('title');
       const subEl = document.getElementById('subtitle');
+      const actEl = document.getElementById('act');
 
       iconEl.className = 'icon ' + type;
       svgEl.innerHTML = icons[type] || icons.success;
@@ -163,22 +274,37 @@
           if (s.engine === 'llm') parts.push(L.ai);
           subEl.textContent = parts.join('  ·  ');
         } else {
-          // Informational success ("model ready") – no stats line.
+          // Informational success ("model ready"): no stats line.
           subEl.textContent = '';
         }
-      } else if (type === 'error') {
-        titleEl.textContent = L.error;
-        subEl.textContent = data.text;
-      } else if (type === 'warning') {
-        titleEl.textContent = data.text;
-        subEl.textContent = '';
+      } else {
+        // Warning or error: what happened (title), what to do now (sub).
+        toastEl.classList.add('loud');
+        toastEl.setAttribute('role', type === 'error' ? 'alert' : 'status');
+        toastEl.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
+        titleEl.textContent = String(data.text || '');
+        subEl.textContent = String(data.sub || '');
+        titleEl.title = titleEl.textContent;
+        if (data.action && data.actionLabel) {
+          actEl.textContent = data.actionLabel;
+          actEl.hidden = false;
+          toastEl.classList.add('has-act');
+          actEl.onclick = () => window.notype.toastAction(data.action);
+        }
+        toastEl.addEventListener('mouseenter', () => {
+          if (leaving) return;
+          clearTimeout(leaveTimer);
+          window.notype.toastHover(true);
+        });
+        toastEl.addEventListener('mouseleave', () => {
+          if (leaving) return;
+          window.notype.toastHover(false);
+          leaveIn(2500);
+        });
       }
+      leaveIn(Math.max(1500, (Number(data.dwell) || 3000) - 800));
     });
   }
-
-  setTimeout(() => {
-    if (window.notype) window.notype.closeToast();
-  }, 2600);
 </script>
 </body>
 </html>

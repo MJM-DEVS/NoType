@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NoType – Settings</title>
+<title>NoType · Einstellungen</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -33,34 +33,62 @@
     --bar-track: rgba(70, 82, 48, 0.12);
     --meter: linear-gradient(90deg, #6b7f45, #93ab78);
     --ok: #56663a;
+    --danger: #a63d24;
+    --warn: #8f5418;
     --shadow: rgba(32, 36, 24, 0.22);
   }
 
+  /* Dark, the neon workshop: a flat soot wall. What is on glows like a tube
+     filled with the overlay's accent (the "gas", set from JS); what is off
+     is cold glass. */
   [data-theme="dark"] {
-    --bg: rgba(28, 28, 30, 0.0);   /* transparent so Mica shines through */
-    --fg: #f5f5f5;
-    --fg-muted: #d4d4d4;
-    --fg-dim: #999999;
-    --accent: #00d4aa;
-    --card-bg: rgba(255, 255, 255, 0.04);
-    --card-border: rgba(255, 255, 255, 0.08);
-    --input-bg: rgba(255, 255, 255, 0.06);
-    --input-border: rgba(255, 255, 255, 0.12);
-    --input-border-hover: rgba(255, 255, 255, 0.30);
-    --input-focus: #ffffff;
-    --hover-bg: rgba(255, 255, 255, 0.08);
-    --toggle-off: rgba(255, 255, 255, 0.15);
-    --toggle-on: #00d4aa;
-    --toggle-knob: #ffffff;
-    --scroll-thumb: rgba(255, 255, 255, 0.15);
-    --scroll-thumb-hover: rgba(255, 255, 255, 0.30);
-    --save-bg: #00d4aa;
-    --save-bg-hover: #1fdcb4;
-    --save-fg: #062018;
-    --bar-track: rgba(255, 255, 255, 0.10);
-    --meter: linear-gradient(90deg, #22c55e, #4ade80);
-    --ok: #22c55e;
-    --shadow: rgba(0,0,0,0.4);
+    --gas: #00d4aa;
+    --core: color-mix(in srgb, var(--gas) 45%, #ffffff);
+    --halo: 0 0 2px color-mix(in srgb, var(--gas) 90%, transparent),
+            0 0 9px color-mix(in srgb, var(--gas) 55%, transparent),
+            0 0 22px color-mix(in srgb, var(--gas) 22%, transparent);
+    --halo-text: 0 0 6px color-mix(in srgb, var(--gas) 70%, transparent),
+                 0 0 16px color-mix(in srgb, var(--gas) 30%, transparent);
+    --glass: rgba(241, 235, 225, 0.42);
+    --bg: #0f0e0d;
+    --bg-solid: #171513;
+    --fg: #f1ebe1;
+    --fg-muted: #d6cec1;
+    --fg-dim: #a39a8c;
+    --accent: var(--gas);
+    --card-bg: #171513;
+    --card-border: rgba(241, 235, 225, 0.08);
+    --input-bg: #1d1a17;
+    --input-border: rgba(241, 235, 225, 0.14);
+    --input-border-hover: rgba(241, 235, 225, 0.32);
+    --input-focus: var(--gas);
+    --hover-bg: rgba(241, 235, 225, 0.06);
+    --toggle-off: transparent;
+    --toggle-on: var(--gas);
+    --toggle-knob: var(--core);
+    --scroll-thumb: rgba(241, 235, 225, 0.14);
+    --scroll-thumb-hover: rgba(241, 235, 225, 0.30);
+    --save-bg: transparent;
+    --save-bg-hover: transparent;
+    --save-fg: var(--fg-muted);
+    --bar-track: rgba(241, 235, 225, 0.08);
+    --meter: var(--core);
+    --ok: #4ade80;
+    --danger: #ff6b5e;
+    --warn: #ffb547;
+    --shadow: rgba(0, 0, 0, 0.55);
+  }
+
+  /* Quicksand: monoline like bent tube lettering. Headings in Dark only. */
+  @font-face {
+    font-family: 'Quicksand'; font-style: normal; font-weight: 500 700; font-display: swap;
+    src: url('assets/fonts/quicksand-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  @font-face {
+    font-family: 'Quicksand'; font-style: normal; font-weight: 500 700; font-display: swap;
+    src: url('assets/fonts/quicksand-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
   }
 
   body {
@@ -155,7 +183,7 @@
     padding: 18px;
   }
   .card-title {
-    font-size: 11px; font-weight: 700; letter-spacing: 1px;
+    font-size: 11.5px; font-weight: 700; letter-spacing: 0.9px;
     text-transform: uppercase; color: var(--fg-dim); margin-bottom: 14px;
   }
   .field {
@@ -168,7 +196,7 @@
   .field > div:first-child { flex: 1 1 auto; min-width: 0; }
   .field-label { font-size: 13px; font-weight: 500; color: var(--fg-muted); }
   .field-desc {
-    font-size: 11px; color: var(--fg-dim); margin-top: 2px;
+    font-size: 12px; line-height: 1.45; color: var(--fg-dim); margin-top: 2px;
     overflow-wrap: anywhere;
   }
 
@@ -184,16 +212,13 @@
     transition: border-color 0.15s;
     max-width: 280px; width: 280px; min-width: 0;
     text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
-    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23999' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%235f6652' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 12px center;
     flex-shrink: 0;
   }
   select:hover { border-color: var(--input-border-hover); }
   select:focus { border-color: var(--input-focus); }
-  [data-theme="dark"] select option, [data-theme="dark"] select optgroup {
-    background: #1f1f1f; color: #f5f5f5;
-  }
 
   /* ── Toggle Switch ── */
   .toggle { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
@@ -223,10 +248,16 @@
     font-size: 12px; color: var(--fg-dim);
     white-space: nowrap; overflow: hidden;
   }
+  /* Waiting for keys: the accent, calm. Red is kept for a clash. */
   .hotkey-value.recording {
-    border-color: #ef4444; color: #ef4444; padding: 0 10px;
+    border-color: var(--accent); color: var(--fg-muted); padding: 0 10px;
+    background: var(--hover-bg);
+  }
+  .hotkey-value.clash {
+    border-color: var(--warn); color: var(--warn); padding: 0 10px;
     animation: hotkey-pulse 1s infinite;
   }
+  @media (prefers-reduced-motion: reduce) { .hotkey-value.clash { animation: none; } }
   kbd {
     display: inline-block; min-width: 26px; padding: 5px 8px;
     font-family: inherit; font-size: 12px; font-weight: 600; line-height: 1;
@@ -237,11 +268,14 @@
   }
   .keys { display: inline-flex; gap: 3px; vertical-align: baseline; }
   .field-desc kbd { min-width: 0; padding: 2px 5px; font-size: 11px; border-radius: 5px; }
-  .field-desc.warn { color: #ef4444; }
+  .field-desc.warn { color: var(--danger); }
+  /* A hotkey clash is a caution, not an error: amber, as in the setup wizard. */
+  .field:has(.hotkey-value) .field-desc.warn { color: var(--warn); }
+  .field-desc.hint { color: var(--accent); }
   .learn-auto { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--card-border); }
   @keyframes hotkey-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.2); }
-    50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1); }
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 22%, transparent); }
+    50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 12%, transparent); }
   }
 
   .btn-sm {
@@ -284,16 +318,18 @@
     color: var(--fg-dim); font-size: 12px; line-height: 1;
     display: flex; align-items: center; justify-content: center;
   }
-  .vocab-chip button:hover { background: var(--hover-bg); color: #ef4444; }
-  .vocab-budget { font-size: 11px; color: var(--fg-dim); margin-top: 10px; }
+  .vocab-chip button:hover { background: var(--hover-bg); color: var(--danger); }
+  .vocab-budget { font-size: 12px; color: var(--fg-dim); margin-top: 10px; }
   .cmd-examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
   .cmd-examples span {
-    font-size: 11.5px; color: var(--fg-muted); padding: 5px 10px; border-radius: 999px;
+    font-size: 12px; color: var(--fg-muted); padding: 5px 10px; border-radius: 999px;
     background: var(--input-bg); border: 1px solid var(--input-border);
   }
   .cmd-note { margin-top: 12px; }
-  .card.off .cmd-examples, .card.off .cmd-note, .card.off #cmdHotkeyField { opacity: 0.45; }
-  .card.off .agent-body { opacity: 0.45; }
+  /* Switched off: the examples and controls step back, the words stay readable. */
+  .card.off .cmd-examples span, .card.off .spoken-examples > span { opacity: 0.55; }
+  .card.off #cmdHotkeyField :is(.hotkey-value, button),
+  .card.off .agent-body :is(input, select, button, .toggle) { opacity: 0.5; }
   /* One-line text input on the right of a field, as wide as a select. */
   .text-input {
     width: 280px; max-width: 280px; min-width: 0; flex-shrink: 0;
@@ -313,12 +349,13 @@
     color: var(--fg-dim); font-size: 12px; line-height: 1;
     display: flex; align-items: center; justify-content: center;
   }
-  .x-btn:hover { background: var(--hover-bg); color: #ef4444; }
+  .x-btn:hover { background: var(--hover-bg); color: var(--danger); }
   .btn-sm.primary { background: var(--save-bg); border-color: transparent; color: var(--save-fg); font-weight: 600; }
   .btn-sm.primary:hover { background: var(--save-bg-hover); }
 
   /* ── Dictionary: corrections + learn from recent dictations ── */
-  .dict-arrow { align-self: center; color: var(--fg-dim); font-size: 13px; }
+  .dict-arrow { align-self: center; display: inline-flex; color: var(--fg-dim); }
+  .btn-add { display: inline-flex; align-items: center; justify-content: center; }
   .dict-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
   .dict-row {
     display: flex; align-items: center; gap: 10px;
@@ -327,9 +364,9 @@
   }
   .dict-row .from {
     color: var(--fg-dim); text-decoration: line-through;
-    text-decoration-color: rgba(239, 68, 68, 0.55); overflow-wrap: anywhere;
+    text-decoration-color: color-mix(in srgb, var(--danger) 55%, transparent); overflow-wrap: anywhere;
   }
-  .dict-row .arrow { color: var(--fg-dim); flex: 0 0 auto; }
+  .dict-row .arrow { display: inline-flex; color: var(--fg-dim); flex: 0 0 auto; }
   .dict-row .to { flex: 1; min-width: 0; color: var(--fg); font-weight: 600; overflow-wrap: anywhere; }
   .dict-row.flash { animation: dict-flash 1.4s ease-out; }
   @keyframes dict-flash {
@@ -342,7 +379,7 @@
     padding: 10px 12px; border-radius: 10px;
     background: var(--input-bg); border: 1px solid var(--input-border);
   }
-  .hist-time { font-size: 10.5px; color: var(--fg-dim); margin-bottom: 3px; letter-spacing: 0.3px; }
+  .hist-time { font-size: 11.5px; color: var(--fg-dim); margin-bottom: 3px; letter-spacing: 0.2px; }
   .hist-text { font-size: 13px; line-height: 1.8; color: var(--fg-muted); overflow-wrap: anywhere; }
   .hist-text > span { padding: 2px 0; }
   .hist-text .tok { cursor: pointer; border-radius: 4px; transition: background 0.12s, color 0.12s; }
@@ -360,10 +397,67 @@
   }
   .hist-edit .heard {
     flex: 0 1 auto; max-width: 38%; font-size: 12.5px; color: var(--fg-dim);
-    text-decoration: line-through; text-decoration-color: rgba(239, 68, 68, 0.55);
+    text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--danger) 55%, transparent);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .vocab-budget.full { color: #ef4444; font-weight: 600; }
+  .vocab-budget.full { color: var(--danger); font-weight: 600; }
+
+  /* ── My languages: one row per language with an optional share, the bar
+     above shows the mix the backend will actually use ── */
+  .field.stack { flex-direction: column; align-items: stretch; gap: 10px; }
+  .lang-mix { display: flex; gap: 2px; height: 6px; border-radius: 3px; overflow: hidden; }
+  .lang-mix[hidden] { display: none; }
+  .lang-mix span {
+    flex: 0 1 0; min-width: 4px; background: var(--accent);
+    transition: flex-grow 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .lang-list { display: flex; flex-direction: column; gap: 6px; }
+  .lang-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 5px 8px 5px 12px; min-height: 40px; font-size: 13px;
+    background: var(--input-bg); border: 1px solid var(--input-border); border-radius: 8px;
+  }
+  .lang-row .dot {
+    width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--accent); opacity: var(--o, 1);
+  }
+  .lang-row .name {
+    flex: 1; min-width: 0; color: var(--fg); font-weight: 500;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lang-row .share {
+    display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto;
+    font-size: 12px; color: var(--fg-dim);
+  }
+  .lang-row .share input {
+    width: 54px; padding: 5px 8px; text-align: right;
+    font-size: 13px; font-family: inherit; font-variant-numeric: tabular-nums;
+    background: var(--card-bg); color: var(--fg);
+    border: 1px solid var(--input-border); border-radius: 6px; outline: none;
+    transition: border-color 0.15s; user-select: text;
+  }
+  .lang-row .share input:hover { border-color: var(--input-border-hover); }
+  .lang-row .share input:focus { border-color: var(--input-focus); }
+  .lang-row .share input::placeholder { color: var(--fg-dim); opacity: 1; }
+  .lang-row .share input::-webkit-inner-spin-button,
+  .lang-row .share input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .lang-row.solo .share, .lang-row.solo .x-btn { display: none; }
+  .lang-row .x-btn:focus-visible { outline: 2px solid var(--input-focus); outline-offset: 1px; }
+  .lang-foot { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; }
+  .lang-foot .field-desc { margin-top: 0; }
+
+  /* ── Spoken punctuation: what to say, what comes out ── */
+  .spoken-examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .spoken-examples > span {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 12px; color: var(--fg-muted); padding: 5px 11px 5px 10px; border-radius: 999px;
+    background: var(--input-bg); border: 1px solid var(--input-border);
+  }
+  .spoken-examples b { color: var(--accent); font-weight: 700; font-size: 12.5px; line-height: 1; }
+  .spoken-examples svg {
+    width: 13px; height: 13px; display: block; fill: none; stroke: var(--accent);
+    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  }
 
   /* ── Save bar ── */
   .save-bar {
@@ -382,23 +476,49 @@
   .btn-save:hover { background: var(--save-bg-hover); }
   .btn-save:active { transform: scale(0.98); }
   .btn-save:disabled { opacity: 0.85; cursor: default; transform: none; }
-  /* Unsaved-changes hint: a soft pulsing dot on the Save button. */
+  /* Unsaved-changes hint: a dot on the Save button that pops in once and
+     then stays still (closing asks anyway). */
   .btn-save.dirty::after {
     content: ''; display: inline-block; width: 6px; height: 6px; margin-left: 9px;
     border-radius: 50%; background: currentColor; vertical-align: middle;
-    animation: dirty-pulse 1.4s ease-in-out infinite;
+    animation: dirty-in 0.32s cubic-bezier(0.22, 1, 0.36, 1);
   }
-  @keyframes dirty-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .btn-save.saved::after {
+    content: ''; display: inline-block; width: 11px; height: 11px; margin-left: 7px;
+    vertical-align: -1px; background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M1.5 5.4l2.4 2.4L8.5 2.6' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  @keyframes dirty-in { from { transform: scale(0); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .btn-save.dirty::after { animation: none; } }
+
+  /* ── Unsaved changes: asked before the window closes ── */
+  .confirm {
+    margin: auto;
+    width: min(420px, calc(100vw - 48px));
+    padding: 22px 22px 18px;
+    border: 1px solid var(--card-border); border-radius: 14px;
+    background: var(--bg-solid); color: var(--fg);
+    box-shadow: 0 18px 48px var(--shadow);
+  }
+  .confirm::backdrop { background: rgba(32, 36, 24, 0.28); }
+  .confirm h2 { font-size: 15px; font-weight: 650; margin-bottom: 6px; }
+  .confirm p { font-size: 13px; line-height: 1.5; color: var(--fg-dim); }
+  .confirm-actions { display: flex; gap: 8px; align-items: center; margin-top: 20px; }
+  .confirm-actions .grow { flex: 1; }
+  .confirm-actions .btn-save { padding: 8px 18px; }
 
   /* ── Status badge ── */
   .status-badge {
-    font-size: 10px; padding: 4px 10px; border-radius: 99px;
-    font-weight: 600; letter-spacing: 0.5px; flex-shrink: 0;
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; padding: 4px 10px; border-radius: 99px;
+    font-weight: 600; letter-spacing: 0.3px; flex-shrink: 0;
+  }
+  .status-badge.ok::after {
+    content: ''; width: 10px; height: 10px; background: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M1.5 5.4l2.4 2.4L8.5 2.6' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
   }
   .status-badge.ok { background: rgba(147, 171, 120, 0.28); color: #46552c; }
   .status-badge.loading { background: #f6e6cc; color: #94460a; }
-  [data-theme="dark"] .status-badge.ok { background: rgba(34, 197, 94, 0.18); color: #34d399; }
-  [data-theme="dark"] .status-badge.loading { background: rgba(217, 119, 6, 0.20); color: #fbbf24; }
 
   /* ── Overlay pane ── */
   /* Live preview: the real overlay.html in demo mode on a desktop-like
@@ -407,15 +527,9 @@
     position: relative; height: calc(180px * var(--s, 0.9)); border-radius: 14px; overflow: hidden;
     border: 1px solid var(--card-border);
     background:
-      radial-gradient(520px 260px at 18% 0%, #c4d3ea 0%, transparent 70%),
-      radial-gradient(480px 300px at 92% 100%, #e2d0dc 0%, transparent 70%),
-      linear-gradient(160deg, #dbe2ec, #d3d9e4 55%, #dad3df);
-  }
-  [data-theme="dark"] .ovl-stage {
-    background:
-      radial-gradient(520px 260px at 18% 0%, #3d4f74 0%, transparent 70%),
-      radial-gradient(480px 300px at 92% 100%, #6e3d5f 0%, transparent 70%),
-      linear-gradient(160deg, #1b2231, #2a2e3a 55%, #372f3e);
+      radial-gradient(520px 260px at 18% 0%, #e4e8d2 0%, transparent 70%),
+      radial-gradient(480px 300px at 92% 100%, #e9dcc6 0%, transparent 70%),
+      linear-gradient(160deg, #e6e2d3, #dedbcb 55%, #e3dccd);
   }
   .ovl-stage iframe {
     position: absolute; left: 50%; top: 0; width: 720px; height: 180px; border: 0;
@@ -424,10 +538,9 @@
   }
   .ovl-stage .stage-tag {
     position: absolute; left: 12px; top: 10px;
-    font-size: 10px; font-weight: 700; letter-spacing: 0.9px; text-transform: uppercase;
-    color: rgba(38, 43, 31, 0.6);
+    font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase;
+    color: rgba(38, 43, 31, 0.74);
   }
-  [data-theme="dark"] .ovl-stage .stage-tag { color: rgba(255, 255, 255, 0.55); }
 
   /* Thumbnail colors per world; --g1..--g3 (accent or the Salbei palette)
      are set from JS. */
@@ -456,12 +569,11 @@
   .style-card.active { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
   .style-card .thumb {
     width: 100%; height: 60px; border-radius: 8px; overflow: hidden;
-    background: linear-gradient(160deg, #d6dee9, #dad3df);
+    background: linear-gradient(160deg, #e3e2d0, #e4dccb);
   }
-  [data-theme="dark"] .style-card .thumb { background: linear-gradient(160deg, #222b3c, #352d3d); }
   .style-card .thumb svg { display: block; width: 100%; height: 100%; }
   .style-card .sc-name { font-size: 12.5px; font-weight: 600; padding: 0 2px; }
-  .style-card .sc-desc { font-size: 10.5px; color: var(--fg-dim); line-height: 1.35; padding: 0 2px; }
+  .style-card .sc-desc { font-size: 11.5px; color: var(--fg-dim); line-height: 1.4; padding: 0 2px; }
 
   .swatches { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
   .swatch {
@@ -469,19 +581,164 @@
     position: relative; transition: transform 0.12s;
   }
   .swatch:hover { transform: scale(1.1); }
-  /* Salbei brings its own colors; the accent is kept for Dark */
-  .swatches.muted .swatch { opacity: 0.35; }
-  .swatches.muted .swatch:hover { opacity: 0.6; }
+  /* Salbei brings its own colors; the accent is kept for Dark and can't be
+     picked here. */
+  .swatches.muted .swatch { opacity: 0.35; cursor: default; box-shadow: none; }
+  .swatches.muted .swatch:hover { transform: none; }
   .swatch.active { box-shadow: 0 0 0 2px var(--bg-solid, #fff), 0 0 0 4px var(--fg); }
-  [data-theme="dark"] .swatch.active { box-shadow: 0 0 0 2px #1c1c1e, 0 0 0 4px var(--fg); }
+
+  /* ── Keyboard focus: one visible ring on everything Tab reaches ── */
+  :is(button, select, input, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--input-focus); outline-offset: 2px;
+  }
+  :is(select, input, textarea):focus-visible { outline-offset: 1px; }
+  .toggle input:focus-visible + .slider { outline: 2px solid var(--input-focus); outline-offset: 2px; }
+  .nav-item:focus-visible { outline-offset: -2px; }
+  .swatch:focus-visible { outline-offset: 5px; }
+  .hist-text .tok:focus-visible { outline-offset: 1px; border-radius: 3px; }
+
+  .btn-ico { display: inline-flex; align-items: center; gap: 6px; }
+  .btn-ico svg {
+    width: 14px; height: 14px; fill: none; stroke: currentColor;
+    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  /* Pane heading: the section name and what it is for (Dark only, Salbei
+     stays as it was). */
+  .pane-head { display: none; }
+
+  /* ═══ Dark: the neon workshop ═══ */
+  [data-theme="dark"] .pane-head { display: block; padding: 6px 2px 2px; }
+  [data-theme="dark"] .pane-head h2 {
+    font: 600 30px/1.1 'Quicksand', 'Segoe UI', sans-serif; letter-spacing: -0.4px;
+    color: var(--fg);
+  }
+  [data-theme="dark"] .pane-head p { margin-top: 6px; font-size: 13px; color: var(--fg-dim); }
+  [data-theme="dark"] .titlebar h1 { font: 700 18px/1 'Quicksand', 'Segoe UI', sans-serif; letter-spacing: 0.1px; }
+  [data-theme="dark"] .titlebar h1 .lit { color: var(--core); text-shadow: var(--halo-text); }
+  [data-theme="dark"] .card-title {
+    font: 700 15px/1.2 'Quicksand', 'Segoe UI', sans-serif;
+    letter-spacing: 0; text-transform: none; color: var(--fg); margin-bottom: 8px;
+  }
+  [data-theme="dark"] .confirm h2 { font: 700 17px/1.25 'Quicksand', 'Segoe UI', sans-serif; }
+
+  /* Navigation: unlit glass icons; the open section burns, with a tube
+     under its name. */
+  [data-theme="dark"] .nav-item .nav-ico { opacity: 1; color: rgba(241, 235, 225, 0.5); }
+  [data-theme="dark"] .nav-item.active { background: none; color: var(--core); text-shadow: var(--halo-text); }
+  [data-theme="dark"] .nav-item.active:hover { background: var(--hover-bg); }
+  [data-theme="dark"] .nav-item.active::before { display: none; }
+  [data-theme="dark"] .nav-item.active .nav-ico {
+    color: var(--gas); filter: drop-shadow(0 0 3px color-mix(in srgb, var(--gas) 80%, transparent));
+  }
+  [data-theme="dark"] .nav-item.active [data-i18n] { position: relative; }
+  [data-theme="dark"] .nav-item.active [data-i18n]::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: -5px; height: 2px;
+    border-radius: 2px; background: var(--gas); box-shadow: var(--halo);
+  }
+
+  /* Toggles: a glass tube with a hollow knob; on, the gas lights it. */
+  [data-theme="dark"] .toggle .slider { box-shadow: inset 0 0 0 1.5px var(--glass); }
+  [data-theme="dark"] .toggle .slider::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--glass); }
+  [data-theme="dark"] .toggle input:checked + .slider {
+    background: color-mix(in srgb, var(--gas) 12%, transparent);
+    box-shadow: inset 0 0 0 1.5px var(--gas), var(--halo);
+  }
+  [data-theme="dark"] .toggle input:checked + .slider::before { background: var(--core); box-shadow: var(--halo); }
+
+  /* Buttons: glass until they matter. Save lights up once there is
+     something to save; the dialog's Save is always the lit one. */
+  [data-theme="dark"] .btn-sm { background: transparent; }
+  [data-theme="dark"] .btn-sm:hover { border-color: var(--input-border-hover); background: var(--hover-bg); color: var(--fg); }
+  [data-theme="dark"] .btn-save { box-shadow: inset 0 0 0 1.5px var(--glass); }
+  [data-theme="dark"] .btn-save:hover { color: var(--fg); background: var(--hover-bg); }
+  [data-theme="dark"] :is(.btn-save.dirty, .confirm .btn-save, .btn-sm.primary) {
+    background: color-mix(in srgb, var(--gas) 12%, transparent); color: var(--core);
+    border-color: transparent; text-shadow: var(--halo-text);
+    box-shadow: inset 0 0 0 1.5px var(--gas), var(--halo);
+  }
+  [data-theme="dark"] :is(.btn-save.dirty, .confirm .btn-save, .btn-sm.primary):hover {
+    background: color-mix(in srgb, var(--gas) 20%, transparent);
+  }
+
+  /* Fields: focus is light too. */
+  [data-theme="dark"] select { background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23a39a8c' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E"); }
+  [data-theme="dark"] select option, [data-theme="dark"] select optgroup { background: #1d1a17; color: #f1ebe1; }
+  [data-theme="dark"] :is(select, .text-input, .vocab-add input, .hist-edit input, .lang-row .share input):focus {
+    box-shadow: 0 0 10px color-mix(in srgb, var(--gas) 28%, transparent);
+  }
+  [data-theme="dark"] kbd { background: transparent; border-color: var(--glass); box-shadow: none; }
+  [data-theme="dark"] .hotkey-value.recording {
+    background: transparent; border-color: var(--gas); box-shadow: var(--halo);
+  }
+  /* Warnings and limits differ by form, not only hue, so an amber or red gas
+     can't pass for them: a cracked (dashed) tube that doesn't glow. */
+  [data-theme="dark"] .hotkey-value.clash {
+    background: transparent; border-style: dashed; border-color: var(--warn); box-shadow: none; animation: none;
+  }
+
+  /* Meters are tubes whose lit length is the value. */
+  /* drop-shadow, not box-shadow, so silence leaves no glowing stub. */
+  [data-theme="dark"] #micTestBar {
+    filter: drop-shadow(0 0 2px color-mix(in srgb, var(--gas) 90%, transparent)) drop-shadow(0 0 5px color-mix(in srgb, var(--gas) 55%, transparent));
+  }
+  [data-theme="dark"] .vocab-budget { position: relative; padding-top: 12px; }
+  [data-theme="dark"] .vocab-budget::before,
+  [data-theme="dark"] .vocab-budget::after {
+    content: ''; position: absolute; left: 0; top: 0; height: 3px; border-radius: 2px;
+  }
+  [data-theme="dark"] .vocab-budget::before { right: 0; background: var(--bar-track); }
+  [data-theme="dark"] .vocab-budget::after {
+    width: calc(var(--fill, 0) * 100%); background: var(--gas); box-shadow: var(--halo);
+    transition: width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  [data-theme="dark"] .vocab-budget.full::after {
+    background: repeating-linear-gradient(90deg, var(--danger) 0 7px, transparent 7px 11px);
+    box-shadow: none;
+  }
+  [data-theme="dark"] .lang-row .dot { box-shadow: 0 0 6px color-mix(in srgb, var(--gas) 70%, transparent); }
+
+  /* Overlay pane: a flat wall for the preview; the chosen style and colour burn. */
+  [data-theme="dark"] .ovl-stage { background: #24201c; }
+  [data-theme="dark"] .ovl-stage .stage-tag {
+    font: 700 13px/1 'Quicksand', 'Segoe UI', sans-serif; letter-spacing: 0.2px; text-transform: none;
+    color: var(--fg-muted);
+  }
+  [data-theme="dark"] .style-card .thumb { background: #24201c; }
+  [data-theme="dark"] .style-card.active { border-color: var(--gas); box-shadow: inset 0 0 0 0.5px var(--gas), var(--halo); }
+  [data-theme="dark"] .swatch.active {
+    box-shadow: 0 0 0 2px var(--card-bg), 0 0 0 3.5px var(--core),
+                0 0 16px color-mix(in srgb, var(--gas) 60%, transparent);
+  }
+
+  /* The AI engine running is an on-state, so it burns in the gas; still
+     loading is a cracked amber tube, unlit. */
+  [data-theme="dark"] .status-badge.ok {
+    background: transparent; color: var(--core); text-shadow: var(--halo-text);
+    box-shadow: inset 0 0 0 1.5px var(--gas), var(--halo);
+  }
+  [data-theme="dark"] .status-badge.loading {
+    background: transparent; color: var(--warn); box-shadow: none;
+    border: 1.5px dashed var(--warn); padding: 2.5px 8.5px;
+  }
+  [data-theme="dark"] .confirm { background: #1d1a17; border-color: rgba(241, 235, 225, 0.12); }
+  [data-theme="dark"] .confirm::backdrop { background: rgba(8, 7, 6, 0.6); }
+
+  /* Ignition: a tube that just lit flickers once, then holds. */
+  @keyframes ignite {
+    0% { opacity: 0.35; } 18% { opacity: 1; } 30% { opacity: 0.45; }
+    46% { opacity: 1; } 58% { opacity: 0.8; } 100% { opacity: 1; }
+  }
+  [data-theme="dark"] .ignite { animation: ignite 0.3s steps(1, end); }
+  @media (prefers-reduced-motion: reduce) { [data-theme="dark"] .ignite { animation: none; } }
 </style>
 </head>
 <body>
 
 <!-- Titlebar -->
 <div class="titlebar">
-  <h1>NoType</h1>
-  <button class="close-btn" id="closeBtn">✕</button>
+  <h1>No<span class="lit">Type</span></h1>
+  <button class="close-btn" id="closeBtn" aria-label="Schließen"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M2.5 2.5l9 9M11.5 2.5l-9 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
 </div>
 
 <div class="layout">
@@ -500,6 +757,7 @@
 
     <!-- ═══ Pane: Allgemein ═══ -->
     <section class="pane active" id="pane-general">
+      <header class="pane-head"><h2 data-i18n="nav.general">Allgemein</h2><p data-i18n="pane.general">Wie du NoType startest und was es nebenher kann.</p></header>
       <div class="card">
         <div class="card-title" data-i18n="general.app">App</div>
         <div class="field">
@@ -557,7 +815,7 @@
         <div class="field">
           <div>
             <div class="field-label" data-i18n="general.combo">Tastenkombination</div>
-            <div class="field-desc" data-i18n="general.combo.desc">Drücke „Ändern" und dann deine gewünschte Kombination</div>
+            <div class="field-desc" data-i18n="general.combo.desc">Drücke „Ändern“ und dann deine gewünschte Kombination</div>
           </div>
           <div class="hotkey-display">
             <div class="hotkey-value" id="hotkeyValue" data-hotkey="ctrl+shift+space"></div>
@@ -605,7 +863,7 @@
           <span data-i18n="cmd.ex.4">„Kürzer und freundlicher“</span>
           <span data-i18n="cmd.ex.5">Ohne Markierung: „Schreib eine kurze Absage für morgen“</span>
         </div>
-        <div class="field-desc cmd-note" data-i18n="cmd.note">Nutzt die lokale KI aus „Text-Bereinigung“ – auch wenn die Bereinigung selbst aus ist.</div>
+        <div class="field-desc cmd-note" data-i18n="cmd.note">Nutzt die lokale KI aus „Text-Bereinigung“, auch wenn die Bereinigung selbst aus ist.</div>
       </div>
 
       <div class="card">
@@ -704,19 +962,27 @@
 
     <!-- ═══ Pane: Sprache & Modell ═══ -->
     <section class="pane" id="pane-speech">
+      <header class="pane-head"><h2 data-i18n="nav.speech">Sprache &amp; Modell</h2><p data-i18n="pane.speech">Welche Sprachen NoType hört und welches Modell zuhört.</p></header>
       <div class="card">
         <div class="card-title" data-i18n="speech.title">Sprache</div>
-        <div class="field">
+        <!-- The languages the user speaks, each with an optional share
+             (rendered by renderLangs). -->
+        <div class="field stack">
           <div>
-            <div class="field-label" data-i18n="speech.lang">Sprache</div>
-            <div class="field-desc" data-i18n="speech.lang.desc">99 Sprachen verfügbar</div>
+            <div class="field-label" data-i18n="speech.langs">Meine Sprachen</div>
+            <div class="field-desc" data-i18n="speech.langs.desc">Die Sprachen, in denen du diktierst. Anteile sind optional und helfen, kurze Sätze richtig zuzuordnen.</div>
           </div>
-          <select id="langSelect"></select>
+          <div class="lang-mix" id="langMix" aria-hidden="true" hidden></div>
+          <div class="lang-list" id="langList"></div>
+          <div class="lang-foot">
+            <select id="langAdd"></select>
+            <span class="field-desc" id="langSum" hidden></span>
+          </div>
         </div>
         <div class="field">
           <div>
-            <div class="field-label" data-i18n="speech.autodetect">Automatische Spracherkennung</div>
-            <div class="field-desc" data-i18n="speech.autodetect.desc">Erkennt die gesprochene Sprache automatisch</div>
+            <div class="field-label" data-i18n="speech.other">Andere Sprachen auch erkennen</div>
+            <div class="field-desc" data-i18n="speech.other.desc">Nur wenn sie eindeutig klingen. Aus: NoType wählt nur zwischen deinen Sprachen.</div>
           </div>
           <label class="toggle">
             <input type="checkbox" id="autoLangToggle">
@@ -743,7 +1009,7 @@
           <div>
             <div class="field-label" data-i18n="speech.status">Modell-Status</div>
           </div>
-          <span class="status-badge loading" id="modelStatus" data-i18n="speech.status.loading">Laden...</span>
+          <span class="status-badge loading" id="modelStatus" data-i18n="speech.status.loading">Lädt …</span>
         </div>
       </div>
 
@@ -756,9 +1022,9 @@
           </div>
           <select id="beamSelect">
             <option value="auto" data-i18n="speech.beam.auto">Auto (Empfohlen)</option>
-            <option value="1" data-i18n="speech.beam.1">1 – Schnellste</option>
-            <option value="3" data-i18n="speech.beam.3">3 – Balanciert</option>
-            <option value="5" data-i18n="speech.beam.5">5 – Höchste Qualität</option>
+            <option value="1" data-i18n="speech.beam.1">1 · Schnellste</option>
+            <option value="3" data-i18n="speech.beam.3">3 · Balanciert</option>
+            <option value="5" data-i18n="speech.beam.5">5 · Höchste Qualität</option>
           </select>
         </div>
         <div class="field">
@@ -787,17 +1053,18 @@
 
     <!-- ═══ Pane: Wörterbuch ═══ -->
     <section class="pane" id="pane-vocab">
+      <header class="pane-head"><h2 data-i18n="nav.vocab">Wörterbuch</h2><p data-i18n="pane.vocab">Namen und Fachwörter, die NoType richtig schreiben soll.</p></header>
       <div class="card">
         <div class="card-title" data-i18n="dict.learn.title">Aus letzten Diktaten lernen</div>
         <div class="field-desc" style="margin-bottom: 14px;" data-i18n="dict.learn.desc">
-          Klicke auf ein falsch erkanntes Wort – oder ziehe über mehrere – und tippe die
+          Klicke auf ein falsch erkanntes Wort oder ziehe über mehrere und tippe die
           richtige Schreibweise ein. Ab dann korrigiert NoType es automatisch.
         </div>
         <div class="hist-list" id="histList"></div>
         <div class="field learn-auto">
           <div>
             <div class="field-label" data-i18n="dict.auto">Korrekturen automatisch vorschlagen</div>
-            <div class="field-desc" data-i18n="dict.auto.desc">Korrigierst du ein diktiertes Wort gleich danach, fragt NoType, ob es das lernen soll. Liest dafür kurz das Textfeld mit – nur lokal, nie Passwortfelder.</div>
+            <div class="field-desc" data-i18n="dict.auto.desc">Korrigierst du ein diktiertes Wort gleich danach, fragt NoType, ob es das lernen soll. Liest dafür kurz das Textfeld mit (nur lokal, nie Passwortfelder).</div>
           </div>
           <label class="toggle">
             <input type="checkbox" id="learnToggle">
@@ -814,10 +1081,10 @@
         <div class="vocab-add">
           <input type="text" id="dictFrom" maxlength="80"
                  placeholder="Erkannt als …" data-i18n-placeholder="dict.fix.from">
-          <span class="dict-arrow">→</span>
+          <span class="dict-arrow" aria-hidden="true"><svg width="14" height="10" viewBox="0 0 14 10" aria-hidden="true"><path d="M1.5 5h11M9 1.5 12.5 5 9 8.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
           <input type="text" id="dictTo" maxlength="80"
                  placeholder="Richtig geschrieben …" data-i18n-placeholder="dict.fix.to">
-          <button class="btn-sm" id="dictAddBtn">+</button>
+          <button class="btn-sm btn-add" id="dictAddBtn" aria-label="Hinzufügen"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5v9M1.5 6h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
         </div>
         <div class="dict-list" id="dictList"></div>
         <div class="vocab-budget" id="dictCount">0 / 500</div>
@@ -827,12 +1094,12 @@
         <div class="card-title" data-i18n="vocab.title">Eigene Begriffe</div>
         <div class="field-desc" style="margin-bottom: 14px;" data-i18n="vocab.desc">
           Firmen-, Produkt- oder Eigennamen, damit sie korrekt geschrieben werden.
-          Ein Begriff pro Eintrag – Enter oder „+" zum Hinzufügen.
+          Ein Begriff pro Eintrag, mit Enter oder „+“ hinzufügen.
         </div>
         <div class="vocab-add">
           <input type="text" id="vocabInput" maxlength="80"
-                 placeholder="z.B. MetricDash, Supabase, Mijo …" data-i18n-placeholder="vocab.placeholder">
-          <button class="btn-sm" id="vocabAddBtn">+</button>
+                 placeholder="z. B. MetricDash, Supabase, Kubernetes …" data-i18n-placeholder="vocab.placeholder">
+          <button class="btn-sm btn-add" id="vocabAddBtn" aria-label="Hinzufügen"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5v9M1.5 6h9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
         </div>
         <div class="vocab-list" id="vocabList"></div>
         <div class="vocab-budget" id="vocabBudget">0 / 850</div>
@@ -841,6 +1108,7 @@
 
     <!-- ═══ Pane: Text-Bereinigung ═══ -->
     <section class="pane" id="pane-cleanup">
+      <header class="pane-head"><h2 data-i18n="nav.cleanup">Text-Bereinigung</h2><p data-i18n="pane.cleanup">Was mit dem Text passiert, bevor er erscheint.</p></header>
       <div class="card">
         <div class="card-title" data-i18n="cleanup.title">Text-Bereinigung</div>
         <div class="field">
@@ -849,9 +1117,9 @@
             <div class="field-desc" data-i18n="cleanup.mode.desc">Entfernt Füllwörter &amp; Versprecher nach dem Diktat</div>
           </div>
           <select id="cleanupSelect">
-            <option value="off" data-i18n="cleanup.off">Aus – Rohtext</option>
-            <option value="fast" data-i18n="cleanup.fast">Schnell – Regelbasiert</option>
-            <option value="ai" data-i18n="cleanup.ai">KI – Lokales LLM (Ollama)</option>
+            <option value="off" data-i18n="cleanup.off">Aus · Rohtext</option>
+            <option value="fast" data-i18n="cleanup.fast">Schnell · Regelbasiert</option>
+            <option value="ai" data-i18n="cleanup.ai">KI · Lokales LLM (Ollama)</option>
           </select>
         </div>
         <div class="field">
@@ -860,27 +1128,44 @@
             <div class="field-desc" data-i18n="cleanup.model.desc">Größer = bessere Korrekturen, aber langsamer. Antwortet das Modell nicht in 2,5 s, wird der regelbasierte Text eingefügt.</div>
           </div>
           <select id="llmModelSelect">
-            <option value="qwen3:4b-instruct" data-i18n="llm.qwen3_4b">Qwen 3 4B – Standard, ~2,5 GB, schnell &amp; wortgetreu</option>
-            <option value="qwen3.5:4b" data-i18n="llm.qwen35_4b">Qwen 3.5 4B – ~3,4 GB, freier formuliert, langsamer</option>
-            <option value="qwen3.5:9b" data-i18n="llm.qwen35_9b">Qwen 3.5 9B – ~6,6 GB, gründlicher (GPU ≥ 10 GB)</option>
-            <option value="gemma4:12b" data-i18n="llm.gemma4_12b">Gemma 4 12B – ~7,6 GB, stark in vielen Sprachen (GPU ≥ 12 GB)</option>
-            <option value="qwen2.5:3b-instruct" data-i18n="llm.qwen25_3b">Qwen 2.5 3B – ~1,9 GB, bisheriger Standard</option>
+            <option value="qwen3:4b-instruct" data-i18n="llm.qwen3_4b">Qwen 3 4B · Standard, ~2,5 GB, schnell &amp; wortgetreu</option>
+            <option value="qwen3.5:4b" data-i18n="llm.qwen35_4b">Qwen 3.5 4B · ~3,4 GB, freier formuliert, langsamer</option>
+            <option value="qwen3.5:9b" data-i18n="llm.qwen35_9b">Qwen 3.5 9B · ~6,6 GB, gründlicher (GPU ≥ 10 GB)</option>
+            <option value="gemma4:12b" data-i18n="llm.gemma4_12b">Gemma 4 12B · ~7,6 GB, stark in vielen Sprachen (GPU ≥ 12 GB)</option>
+            <option value="qwen2.5:3b-instruct" data-i18n="llm.qwen25_3b">Qwen 2.5 3B · ~1,9 GB, bisheriger Standard</option>
           </select>
         </div>
         <div class="field">
           <div>
             <div class="field-label" data-i18n="cleanup.engine">KI-Engine (Ollama)</div>
-            <div class="field-desc" id="ollamaDesc" data-i18n="cleanup.checking">Status wird geprüft...</div>
+            <div class="field-desc" id="ollamaDesc" data-i18n="cleanup.checking">Status wird geprüft …</div>
           </div>
           <button class="btn-sm" id="ollamaUpdBtn" style="display:none;" data-i18n="cleanup.update">Aktualisieren</button>
           <button class="btn-sm" id="ollamaBtn" style="display:none;" data-i18n="cleanup.install">Installieren</button>
           <span class="status-badge loading" id="ollamaBadge" style="display:none;">…</span>
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-title" data-i18n="spoken.title">Satzzeichen</div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="spoken.enable">Gesprochene Satzzeichen</div>
+            <div class="field-desc" data-i18n="spoken.enable.desc">Sag das Zeichen beim Diktieren und es wird eingesetzt. Klappt auf Deutsch, Englisch und Polnisch.</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="spokenToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <!-- What to say and what comes out (renderSpoken, per UI language). -->
+        <div class="spoken-examples" id="spokenExamples"></div>
+      </div>
     </section>
 
     <!-- ═══ Pane: Overlay ═══ -->
     <section class="pane" id="pane-overlay">
+      <header class="pane-head"><h2 data-i18n="nav.overlay">Overlay</h2><p data-i18n="pane.overlay">So sieht NoType aus, während es zuhört.</p></header>
       <div class="ovl-stage" id="ovlStage">
         <iframe id="ovlPreview" tabindex="-1" aria-hidden="true"></iframe>
         <span class="stage-tag" data-i18n="overlay.preview">Live-Vorschau</span>
@@ -934,6 +1219,7 @@
 
     <!-- ═══ Pane: System ═══ -->
     <section class="pane" id="pane-system">
+      <header class="pane-head"><h2 data-i18n="nav.system">System</h2><p data-i18n="pane.system">Mikrofon und Texteingabe, dazu ein paar Schalter für Neugierige.</p></header>
       <div class="card">
         <div class="card-title" data-i18n="system.audio">Audio</div>
         <div class="field">
@@ -951,7 +1237,7 @@
               <div class="field-label" data-i18n="system.mictest">Mikrofon-Test</div>
               <div class="field-desc" data-i18n="system.mictest.desc">Prüfe ob dein Mikrofon funktioniert</div>
             </div>
-            <button class="btn-sm" id="micTestBtn">🎤 Test</button>
+            <button class="btn-sm btn-ico" id="micTestBtn"></button>
           </div>
           <div style="background: var(--bar-track); border-radius: 6px; height: 8px; overflow: hidden; position: relative;">
             <div id="micTestBar" style="height: 100%; width: 0%; background: var(--meter); border-radius: 6px; transition: width 0.08s ease-out;"></div>
@@ -974,7 +1260,7 @@
         <div class="field">
           <div>
             <div class="field-label" data-i18n="system.method">Einfügemethode</div>
-            <div class="field-desc" data-i18n="system.method.desc">„Tippen" für Terminals/Apps, die Strg+V ignorieren</div>
+            <div class="field-desc" data-i18n="system.method.desc">„Tippen“ für Terminals und Apps, die Strg+V ignorieren</div>
           </div>
           <select id="insertMethodSelect">
             <option value="auto" data-i18n="system.method.auto">Automatisch (Strg+V, Fallback Tippen)</option>
@@ -1005,24 +1291,52 @@
   <button class="btn-save" id="saveBtn" data-i18n="save">Speichern</button>
 </div>
 
+<dialog class="confirm" id="unsavedDlg" aria-labelledby="unsavedTitle" aria-describedby="unsavedDesc">
+  <h2 id="unsavedTitle" data-i18n="unsaved.title">Änderungen speichern?</h2>
+  <p id="unsavedDesc" data-i18n="unsaved.desc">Du hast Einstellungen geändert, aber noch nicht gespeichert.</p>
+  <div class="confirm-actions">
+    <button class="btn-sm" id="unsavedDiscard" type="button" data-i18n="unsaved.discard">Verwerfen</button>
+    <span class="grow"></span>
+    <button class="btn-sm" id="unsavedKeep" type="button" data-i18n="unsaved.keep">Weiter bearbeiten</button>
+    <button class="btn-save" id="unsavedSave" type="button" data-i18n="save" autofocus>Speichern</button>
+  </div>
+</dialog>
+
 <script src="model-catalog.js"></script>
 <script src="sprites.js"></script>
 <script src="keycaps.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
+  // Drawn icons for the small row controls (remove, "heard → meant").
+  const ICON_X = '<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>';
+  const ICON_ARROW = '<svg width="14" height="10" viewBox="0 0 14 10" aria-hidden="true"><path d="M1.5 5h11M9 1.5 12.5 5 9 8.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
   // ── i18n ─────────────────────────────────────────────────────────
   const I18N = {
     de: {
       'nav.general': 'Allgemein', 'nav.speech': 'Sprache & Modell', 'nav.vocab': 'Wörterbuch',
       'nav.cleanup': 'Text-Bereinigung', 'nav.overlay': 'Overlay', 'nav.system': 'System',
+      'pane.general': 'Wie du NoType startest und was es nebenher kann.',
+      'pane.speech': 'Welche Sprachen NoType hört und welches Modell zuhört.',
+      'pane.vocab': 'Namen und Fachwörter, die NoType richtig schreiben soll.',
+      'pane.cleanup': 'Was mit dem Text passiert, bevor er erscheint.',
+      'pane.overlay': 'So sieht NoType aus, während es zuhört.',
+      'pane.system': 'Mikrofon und Texteingabe, dazu ein paar Schalter für Neugierige.',
       'general.app': 'App', 'general.applang': 'App-Sprache',
       'general.applang.desc': 'Sprache der Benutzeroberfläche',
       'general.toast': 'Erfolgs-Popup nach Diktat', 'general.toast.desc': 'Fehler werden immer angezeigt',
       'general.autostart': 'Mit Windows starten', 'general.autostart.desc': 'NoType läuft nach der Anmeldung im Tray, der Hotkey ist sofort da',
       'general.hotkey': 'Hotkey', 'general.combo': 'Tastenkombination',
-      'general.combo.desc': 'Drücke „Ändern" und dann deine gewünschte Kombination',
-      'general.change': 'Ändern', 'general.waiting': 'Warte auf Eingabe...',
+      'general.combo.desc': 'Drücke „Ändern“ und dann deine gewünschte Kombination',
+      'general.change': 'Ändern', 'general.waiting': 'Warte auf Eingabe …',
+      'hk.cancel': 'Abbrechen', 'hk.capture': 'Drück jetzt die Kombination. Esc bricht ab.',
+      'hk.needkey': 'Fehlt noch eine Taste, z. B. Leertaste oder ein Buchstabe.',
+      'hk.needmod': 'Nimm eine Zusatztaste dazu: Strg, Alt, Umschalt oder Win.',
+      'hk.onekey': 'Nur eine Taste neben Strg, Alt, Umschalt und Win.',
+      'hk.badkey': '{key} geht nicht als Hotkey. Nimm eine andere Taste.',
+      'hk.same.dict': 'Diese Kombination nutzt schon das Diktieren.',
+      'hk.same.cmd': 'Diese Kombination nutzt schon der Befehlsmodus.',
+      'hk.same.agent': 'Diese Kombination nutzt schon der Agent-Hotkey.',
       'general.mode': 'Modus', 'general.mode.desc': 'Wie die Aufnahme gesteuert wird. {esc} bricht ein Diktat ab.',
       'general.mode.hold': 'Halten zum Sprechen', 'general.mode.press': 'Drücken für Start/Stopp',
       'cmd.title': 'Befehlsmodus', 'cmd.enable': 'Text per Sprache umschreiben',
@@ -1031,7 +1345,7 @@
       'cmd.ex.1': '„Mach das förmlicher“', 'cmd.ex.2': '„Übersetz das ins Englische“',
       'cmd.ex.3': '„Als Stichpunkte“', 'cmd.ex.4': '„Kürzer und freundlicher“',
       'cmd.ex.5': 'Ohne Markierung: „Schreib eine kurze Absage für morgen“',
-      'cmd.note': 'Nutzt die lokale KI aus „Text-Bereinigung“ – auch wenn die Bereinigung selbst aus ist.',
+      'cmd.note': 'Nutzt die lokale KI aus „Text-Bereinigung“, auch wenn die Bereinigung selbst aus ist.',
       'cmd.same': 'Muss sich vom Diktier-Hotkey unterscheiden',
       'agent.title': 'Agent-Hotkey', 'agent.enable': 'Diktat an eine URL senden',
       'agent.enable.desc': 'Ein eigener Hotkey: Statt zu tippen, schickt NoType deinen Text an eine URL, zum Beispiel an einen n8n-Webhook oder dein eigenes Skript. Die Antwort erscheint kurz im Overlay.',
@@ -1041,7 +1355,7 @@
       'agent.context': 'App und Fenstertitel mitsenden',
       'agent.context.desc': 'Damit dein Agent weiß, wo du gerade bist. Kein Screenshot, keine Zwischenablage.',
       'agent.test': 'Verbindung testen', 'agent.test.desc': 'Schickt „NoType test“ an die URL, auch ungespeichert',
-      'agent.test.btn': 'Test senden', 'agent.test.sending': 'Sende…',
+      'agent.test.btn': 'Test senden', 'agent.test.sending': 'Sende …',
       'agent.test.ok': 'Angekommen (HTTP {status})', 'agent.test.reply': 'Angekommen (HTTP {status}): {msg}',
       'agent.err.no_url': 'Bitte zuerst eine URL eintragen',
       'agent.err.bad_url': 'Die URL muss mit http:// oder https:// beginnen',
@@ -1052,9 +1366,15 @@
       'ctx.title': 'KI-Kontext', 'ctx.enable': 'Kopiertes mitschicken',
       'ctx.enable.desc': 'Was du während des Diktats kopierst, kommt mit, wenn du in eine KI-App, ein Terminal oder den Browser sprichst. Einen Screenshot machst du mit {snip}.',
       'ctx.note': 'ChatGPT, Claude und Gemini bekommen Bilder direkt eingefügt und Text als Zitat unter deinem Satz. Im Terminal (Claude Code, Codex) steht der Dateipfad vor dem Satz. Bei KI-Apps und Terminals zählt auch, was du bis zu einer Minute vor dem Start kopiert hast.',
-      'speech.title': 'Sprache', 'speech.lang': 'Sprache', 'speech.lang.desc': '99 Sprachen verfügbar',
-      'speech.autodetect': 'Automatische Spracherkennung',
-      'speech.autodetect.desc': 'Erkennt die gesprochene Sprache automatisch',
+      'speech.title': 'Sprache', 'speech.langs': 'Meine Sprachen',
+      'speech.langs.desc': 'Die Sprachen, in denen du diktierst. Anteile sind optional und helfen, kurze Sätze richtig zuzuordnen.',
+      'speech.langs.add': 'Sprache hinzufügen', 'speech.langs.share': 'Anteil {lang} in Prozent',
+      'speech.langs.remove': '{lang} entfernen',
+      'speech.langs.sum': 'Zusammen {sum} %, wird auf 100 % umgerechnet',
+      'speech.other': 'Andere Sprachen auch erkennen',
+      'speech.other.desc': 'Nur wenn sie eindeutig klingen. Aus: NoType wählt nur zwischen deinen Sprachen.',
+      'spoken.title': 'Satzzeichen', 'spoken.enable': 'Gesprochene Satzzeichen',
+      'spoken.enable.desc': 'Sag das Zeichen beim Diktieren und es wird eingesetzt. Klappt auf Deutsch, Englisch und Polnisch.',
       'speech.model.title': 'Modell', 'speech.model': 'Spracherkennungs-Modell',
       'speech.model.desc': 'Größer = genauer. Einsprachige Modelle fixieren ihre Sprache.',
       'general.setup': 'Einrichtungsassistent',
@@ -1073,45 +1393,45 @@
       'update.installing': 'Wird installiert, NoType startet gleich neu',
       'update.error': 'GitHub war nicht erreichbar. Später noch einmal versuchen.',
       'update.dev': 'Updates gibt es nur in der installierten App',
-      'speech.status': 'Modell-Status', 'speech.status.loading': 'Laden...',
+      'speech.status': 'Modell-Status', 'speech.status.loading': 'Lädt …',
       'speech.perf': 'Performance', 'speech.beam.desc': 'Auto = dynamisch je nach Länge',
-      'speech.beam.auto': 'Auto (Empfohlen)', 'speech.beam.1': '1 – Schnellste',
-      'speech.beam.3': '3 – Balanciert', 'speech.beam.5': '5 – Höchste Qualität',
+      'speech.beam.auto': 'Auto (Empfohlen)', 'speech.beam.1': '1 · Schnellste',
+      'speech.beam.3': '3 · Balanciert', 'speech.beam.5': '5 · Höchste Qualität',
       'speech.quant': 'Quantisierung',
       'speech.quant.desc': 'float16 = sicher überall; int8_float16 nicht auf jeder GPU (autom. Fallback)',
       'speech.vad': 'VAD-Empfindlichkeit', 'speech.vad.desc': 'Niedrig = aggressiver Stille-Filter',
       'vocab.title': 'Eigene Begriffe',
-      'vocab.desc': 'Firmen-, Produkt- oder Eigennamen, damit sie korrekt geschrieben werden. Ein Begriff pro Eintrag – Enter oder „+" zum Hinzufügen.',
-      'vocab.placeholder': 'z.B. MetricDash, Supabase, Mijo …',
+      'vocab.desc': 'Firmen-, Produkt- oder Eigennamen, damit sie korrekt geschrieben werden. Ein Begriff pro Eintrag, mit Enter oder „+“ hinzufügen.',
+      'vocab.placeholder': 'z. B. MetricDash, Supabase, Kubernetes …',
       'dict.learn.title': 'Aus letzten Diktaten lernen',
-      'dict.learn.desc': 'Klicke auf ein falsch erkanntes Wort – oder ziehe über mehrere – und tippe die richtige Schreibweise ein. Ab dann korrigiert NoType es automatisch.',
+      'dict.learn.desc': 'Klicke auf ein falsch erkanntes Wort oder ziehe über mehrere und tippe die richtige Schreibweise ein. Ab dann korrigiert NoType es automatisch.',
       'dict.auto': 'Korrekturen automatisch vorschlagen',
-      'dict.auto.desc': 'Korrigierst du ein diktiertes Wort gleich danach, fragt NoType, ob es das lernen soll. Liest dafür kurz das Textfeld mit – nur lokal, nie Passwortfelder.',
-      'dict.learn.empty': 'Noch keine Diktate – sobald du diktierst, erscheinen sie hier.',
+      'dict.auto.desc': 'Korrigierst du ein diktiertes Wort gleich danach, fragt NoType, ob es das lernen soll. Liest dafür kurz das Textfeld mit (nur lokal, nie Passwortfelder).',
+      'dict.learn.empty': 'Noch keine Diktate. Sobald du diktierst, erscheinen sie hier.',
       'dict.learn.placeholder': 'Richtige Schreibweise', 'dict.learn.apply': 'Übernehmen',
       'dict.fix.title': 'Korrekturen',
-      'dict.fix.desc': 'Was die Spracherkennung falsch versteht → wie es geschrieben werden soll. Gilt für jedes Diktat, auch ohne KI – und die richtige Schreibweise hilft zusätzlich der Erkennung.',
+      'dict.fix.desc': 'Was die Spracherkennung falsch versteht → wie es geschrieben werden soll. Gilt für jedes Diktat, auch ohne KI. Die richtige Schreibweise hilft außerdem der Erkennung.',
       'dict.fix.from': 'Erkannt als …', 'dict.fix.to': 'Richtig geschrieben …',
       'dict.fix.empty': 'Noch keine Korrekturen.', 'dict.full': 'Wörterbuch voll',
       'cleanup.title': 'Text-Bereinigung', 'cleanup.mode': 'Bereinigungsmodus',
       'cleanup.mode.desc': 'Entfernt Füllwörter & Versprecher nach dem Diktat',
-      'cleanup.off': 'Aus – Rohtext', 'cleanup.fast': 'Schnell – Regelbasiert',
-      'cleanup.ai': 'KI – Lokales LLM (Ollama)',
+      'cleanup.off': 'Aus · Rohtext', 'cleanup.fast': 'Schnell · Regelbasiert',
+      'cleanup.ai': 'KI · Lokales LLM (Ollama)',
       'cleanup.model': 'KI-Modell',
       'cleanup.model.desc': 'Größer = bessere Korrekturen, aber langsamer. Antwortet das Modell nicht in 2,5 s, wird der regelbasierte Text eingefügt.',
-      'llm.qwen3_4b': 'Qwen 3 4B – Standard, ~2,5 GB, schnell & wortgetreu',
-      'llm.qwen35_4b': 'Qwen 3.5 4B – ~3,4 GB, freier formuliert, langsamer',
-      'llm.qwen35_9b': 'Qwen 3.5 9B – ~6,6 GB, gründlicher (GPU ≥ 10 GB)',
-      'llm.gemma4_12b': 'Gemma 4 12B – ~7,6 GB, stark in vielen Sprachen (GPU ≥ 12 GB)',
-      'llm.qwen25_3b': 'Qwen 2.5 3B – ~1,9 GB, bisheriger Standard',
-      'cleanup.engine': 'KI-Engine (Ollama)', 'cleanup.checking': 'Status wird geprüft...',
+      'llm.qwen3_4b': 'Qwen 3 4B · Standard, ~2,5 GB, schnell & wortgetreu',
+      'llm.qwen35_4b': 'Qwen 3.5 4B · ~3,4 GB, freier formuliert, langsamer',
+      'llm.qwen35_9b': 'Qwen 3.5 9B · ~6,6 GB, gründlicher (GPU ≥ 10 GB)',
+      'llm.gemma4_12b': 'Gemma 4 12B · ~7,6 GB, stark in vielen Sprachen (GPU ≥ 12 GB)',
+      'llm.qwen25_3b': 'Qwen 2.5 3B · ~1,9 GB, bisheriger Standard',
+      'cleanup.engine': 'KI-Engine (Ollama)', 'cleanup.checking': 'Status wird geprüft …',
       'cleanup.install': 'Installieren', 'cleanup.install.size': 'Installieren (~2,5 GB)',
       'cleanup.activate': 'Aktivieren', 'cleanup.loadmodel': 'KI-Modell laden',
-      'cleanup.running': 'Läuft...',
-      'cleanup.update': 'Aktualisieren', 'cleanup.update.title': 'Prüft bei GitHub auf eine neuere Ollama-Version und installiert sie – deine Modelle bleiben erhalten',
-      'cleanup.active': 'Aktiv ✓', 'cleanup.ready.desc': 'Lokales LLM bereit – Modus „KI" nutzt es automatisch',
+      'cleanup.running': 'Läuft …',
+      'cleanup.update': 'Aktualisieren', 'cleanup.update.title': 'Prüft bei GitHub auf eine neuere Ollama-Version und installiert sie. Deine Modelle bleiben erhalten.',
+      'cleanup.active': 'Aktiv', 'cleanup.ready.desc': 'Lokales LLM bereit. Der Modus „KI“ nutzt es automatisch',
       'cleanup.installed.desc': 'Installiert, aber noch nicht einsatzbereit',
-      'cleanup.notinstalled.desc': 'Einmaliger Download – danach läuft die KI-Bereinigung komplett lokal',
+      'cleanup.notinstalled.desc': 'Einmaliger Download, danach läuft die KI-Bereinigung komplett lokal',
       'general.design': 'Design', 'general.design.desc': 'Für Overlay, Einstellungen, Hinweise und Einrichtung',
       'general.design.system': 'Automatisch (wie Windows)', 'general.design.dark': 'Dark', 'general.design.sage': 'Salbei',
       'overlay.preview': 'Live-Vorschau', 'overlay.style': 'Stil', 'overlay.look': 'Darstellung',
@@ -1125,37 +1445,57 @@
       'ovl.matrix': 'Dot Matrix', 'ovl.matrix.desc': 'LED-Punkte mit Pixel-Timer im Nothing-Stil',
       'ovl.island': 'Island', 'ovl.island.desc': 'Kompakte Kapsel, die mit dem Text mitwächst',
       'ovl.halo': 'Halo', 'ovl.halo.desc': 'Leuchtender Farbrand, der auf deine Stimme reagiert',
-      'ovl.buddy': 'Buddy', 'ovl.buddy.desc': 'Pixel-Gesicht, das mitredet, mitdenkt und grinst',
+      'ovl.buddy': 'Buddy', 'ovl.buddy.desc': 'Pixel-Gesicht, das beim Diktieren mitredet und grinst, wenn der Text steht',
       'ovl.slime': 'Schleim', 'ovl.slime.desc': 'Wackelt bei jeder Silbe und hüpft, während er nachdenkt',
       'ovl.dragon': 'Drache', 'ovl.dragon.desc': 'Pixel-Drache, dessen Feueratem deiner Stimme folgt',
       'ovl.mimic': 'Mimic', 'ovl.mimic.desc': 'Lebendige Schatztruhe: Der Deckel redet mit, am Ende fliegt Gold',
       'ovl.line': 'Linie', 'ovl.line.desc': 'Deine Stimme als ruhige Linie mit Echo',
       'acc.mint': 'Mint', 'acc.mono': 'Mono', 'acc.aurora': 'Aurora', 'acc.blue': 'Blau',
       'acc.violet': 'Violett', 'acc.red': 'Rot', 'acc.amber': 'Bernstein',
-      'acc.own': 'In Salbei haben die Overlays eigene Farben. Die Akzentfarbe gilt für Dark.',
+      'acc.own': 'In Salbei haben die Overlays eigene Farben. Die Akzentfarbe gilt für Dark, dort färbt sie Overlay und Fenster.',
       'system.audio': 'Audio', 'system.mic': 'Mikrofon', 'system.mic.desc': 'Audioeingangsgerät auswählen',
       'system.mic.default': 'Standard (System)', 'system.mic.defaulttag': ' (Standard)',
       'system.mic.missing': ' (nicht verbunden)',
       'system.mictest': 'Mikrofon-Test', 'system.mictest.desc': 'Prüfe ob dein Mikrofon funktioniert',
+      'system.mictest.start': 'Testen', 'system.mictest.stop': 'Stopp',
+      'system.mictest.error': 'Kein Zugriff auf das Mikrofon. Prüfe die Windows-Datenschutzeinstellungen für Mikrofone.',
+      'a11y.close': 'Schließen', 'a11y.add': 'Hinzufügen', 'a11y.remove': '„{item}“ entfernen',
       'system.mute': 'Andere Wiedergabe stummschalten',
       'system.mute.desc': 'Musik und Videos sind still, solange du sprichst. Danach ist der Ton sofort wieder da.',
       'system.insert': 'Texteingabe', 'system.method': 'Einfügemethode',
-      'system.method.desc': '„Tippen" für Terminals/Apps, die Strg+V ignorieren',
+      'system.method.desc': '„Tippen“ für Terminals und Apps, die Strg+V ignorieren',
       'system.method.auto': 'Automatisch (Strg+V, Fallback Tippen)', 'system.method.type': 'Immer tippen',
       'system.advanced': 'Erweitert', 'system.gpusafe': 'GPU-Sicherheitsmodus',
       'system.gpusafe.desc': 'Bei Grafik-Abstürzen aktivieren. Deaktiviert Hardware-Beschleunigung (Neustart nötig).',
-      'save': 'Speichern', 'save.done': 'Gespeichert ✓',
+      'save': 'Speichern', 'save.done': 'Gespeichert',
+      'unsaved.title': 'Änderungen speichern?', 'unsaved.desc': 'Du hast Einstellungen geändert, aber noch nicht gespeichert.',
+      'unsaved.discard': 'Verwerfen', 'unsaved.keep': 'Weiter bearbeiten',
+      'cleanup.pending': 'Neues KI-Modell gewählt. Nach dem Speichern siehst du hier, ob es noch geladen werden muss.',
     },
     en: {
       'nav.general': 'General', 'nav.speech': 'Language & Model', 'nav.vocab': 'Dictionary',
       'nav.cleanup': 'Text Cleanup', 'nav.overlay': 'Overlay', 'nav.system': 'System',
+      'pane.general': 'How you start NoType and what it does on the side.',
+      'pane.speech': 'Which languages NoType hears and which model listens.',
+      'pane.vocab': 'Names and jargon NoType should spell right.',
+      'pane.cleanup': 'What happens to the text before it appears.',
+      'pane.overlay': 'What NoType looks like while it listens.',
+      'pane.system': 'Microphone and text input, plus a few switches for the curious.',
       'general.app': 'App', 'general.applang': 'App language',
       'general.applang.desc': 'Language of the user interface',
       'general.toast': 'Success popup after dictation', 'general.toast.desc': 'Errors are always shown',
       'general.autostart': 'Start with Windows', 'general.autostart.desc': 'NoType waits in the tray after you sign in, the hotkey works right away',
       'general.hotkey': 'Hotkey', 'general.combo': 'Key combination',
-      'general.combo.desc': 'Press "Change", then your desired combination',
-      'general.change': 'Change', 'general.waiting': 'Waiting for input...',
+      'general.combo.desc': 'Press “Change”, then your desired combination',
+      'general.change': 'Change', 'general.waiting': 'Waiting for input …',
+      'hk.cancel': 'Cancel', 'hk.capture': 'Press the combination now. Esc cancels.',
+      'hk.needkey': 'One more key needed, like Space or a letter.',
+      'hk.needmod': 'Add a modifier: Ctrl, Alt, Shift or Win.',
+      'hk.onekey': 'Only one key besides Ctrl, Alt, Shift and Win.',
+      'hk.badkey': '{key} can’t be part of a hotkey. Pick another key.',
+      'hk.same.dict': 'Dictation already uses this combination.',
+      'hk.same.cmd': 'Command mode already uses this combination.',
+      'hk.same.agent': 'The agent hotkey already uses this combination.',
       'general.mode': 'Mode', 'general.mode.desc': 'How recording is controlled. {esc} cancels a dictation.',
       'general.mode.hold': 'Hold to speak', 'general.mode.press': 'Press to start/stop',
       'cmd.title': 'Command mode', 'cmd.enable': 'Rewrite text by voice',
@@ -1164,7 +1504,7 @@
       'cmd.ex.1': '“Make this more formal”', 'cmd.ex.2': '“Translate this to German”',
       'cmd.ex.3': '“As bullet points”', 'cmd.ex.4': '“Shorter and friendlier”',
       'cmd.ex.5': 'Nothing selected: “Write a short decline for tomorrow”',
-      'cmd.note': 'Uses the local AI from “Text Cleanup” – even when cleanup itself is off.',
+      'cmd.note': 'Uses the local AI from “Text Cleanup”, even when cleanup itself is off.',
       'cmd.same': 'Must differ from the dictation hotkey',
       'agent.title': 'Agent hotkey', 'agent.enable': 'Send dictation to a URL',
       'agent.enable.desc': 'A hotkey of its own: instead of typing, NoType sends your text to a URL, for example an n8n webhook or your own script. The reply shows briefly in the overlay.',
@@ -1174,7 +1514,7 @@
       'agent.context': 'Include app and window title',
       'agent.context.desc': 'So your agent knows where you are. No screenshot, no clipboard.',
       'agent.test': 'Test the connection', 'agent.test.desc': 'Sends “NoType test” to the URL, saved or not',
-      'agent.test.btn': 'Send test', 'agent.test.sending': 'Sending…',
+      'agent.test.btn': 'Send test', 'agent.test.sending': 'Sending …',
       'agent.test.ok': 'Delivered (HTTP {status})', 'agent.test.reply': 'Delivered (HTTP {status}): {msg}',
       'agent.err.no_url': 'Enter a URL first',
       'agent.err.bad_url': 'The URL must start with http:// or https://',
@@ -1185,9 +1525,15 @@
       'ctx.title': 'AI context', 'ctx.enable': 'Send copied content along',
       'ctx.enable.desc': 'When you dictate into an AI app, a terminal or the browser, whatever you copy meanwhile goes along. Take a screenshot with {snip}.',
       'ctx.note': 'ChatGPT, Claude and Gemini get images pasted in and text quoted below your sentence. In a terminal (Claude Code, Codex) the file path goes before the sentence. For AI apps and terminals, anything copied up to a minute before you start counts too.',
-      'speech.title': 'Language', 'speech.lang': 'Language', 'speech.lang.desc': '99 languages available',
-      'speech.autodetect': 'Automatic language detection',
-      'speech.autodetect.desc': 'Detects the spoken language automatically',
+      'speech.title': 'Language', 'speech.langs': 'My languages',
+      'speech.langs.desc': 'The languages you dictate in. Shares are optional and help place short sentences.',
+      'speech.langs.add': 'Add language', 'speech.langs.share': '{lang} share in percent',
+      'speech.langs.remove': 'Remove {lang}',
+      'speech.langs.sum': 'Adds up to {sum} %, scaled to 100 %',
+      'speech.other': 'Also recognize other languages',
+      'speech.other.desc': 'Only when they are clear. Off: NoType picks only from your languages.',
+      'spoken.title': 'Punctuation', 'spoken.enable': 'Spoken punctuation',
+      'spoken.enable.desc': 'Say the mark while dictating and it gets typed. Works in German, English and Polish.',
       'speech.model.title': 'Model', 'speech.model': 'Speech recognition model',
       'speech.model.desc': 'Bigger = more accurate. Single-language models pin their language.',
       'general.setup': 'Setup assistant',
@@ -1206,45 +1552,45 @@
       'update.installing': 'Installing, NoType restarts in a moment',
       'update.error': 'Could not reach GitHub. Try again later.',
       'update.dev': 'Updates only work in the installed app',
-      'speech.status': 'Model status', 'speech.status.loading': 'Loading...',
+      'speech.status': 'Model status', 'speech.status.loading': 'Loading …',
       'speech.perf': 'Performance', 'speech.beam.desc': 'Auto = scales with clip length',
-      'speech.beam.auto': 'Auto (recommended)', 'speech.beam.1': '1 – fastest',
-      'speech.beam.3': '3 – balanced', 'speech.beam.5': '5 – highest quality',
+      'speech.beam.auto': 'Auto (recommended)', 'speech.beam.1': '1 · fastest',
+      'speech.beam.3': '3 · balanced', 'speech.beam.5': '5 · highest quality',
       'speech.quant': 'Quantization',
       'speech.quant.desc': 'float16 = safe everywhere; int8_float16 not on every GPU (auto fallback)',
       'speech.vad': 'VAD sensitivity', 'speech.vad.desc': 'Low = more aggressive silence filter',
       'vocab.title': 'Custom Vocabulary',
-      'vocab.desc': 'Company, product or personal names so they are spelled correctly. One term per entry – Enter or "+" to add.',
-      'vocab.placeholder': 'e.g. MetricDash, Supabase, Mijo …',
+      'vocab.desc': 'Company, product or personal names so they are spelled correctly. One term per entry, add with Enter or “+”.',
+      'vocab.placeholder': 'e.g. MetricDash, Supabase, Kubernetes …',
       'dict.learn.title': 'Learn from recent dictations',
-      'dict.learn.desc': 'Click a misrecognized word – or drag across several – and type the correct spelling. From then on NoType fixes it automatically.',
+      'dict.learn.desc': 'Click a misrecognized word or drag across several, then type the correct spelling. From then on NoType fixes it automatically.',
       'dict.auto': 'Suggest corrections automatically',
-      'dict.auto.desc': 'When you fix a dictated word right afterwards, NoType asks whether to learn it. It briefly reads the text field for that – locally only, never password fields.',
-      'dict.learn.empty': 'No dictations yet – they show up here as soon as you dictate.',
+      'dict.auto.desc': 'When you fix a dictated word right afterwards, NoType asks whether to learn it. It briefly reads the text field for that (locally only, never password fields).',
+      'dict.learn.empty': 'No dictations yet. They show up here as soon as you dictate.',
       'dict.learn.placeholder': 'Correct spelling', 'dict.learn.apply': 'Apply',
       'dict.fix.title': 'Corrections',
-      'dict.fix.desc': 'What speech recognition gets wrong → how it should be written. Applies to every dictation, even without AI – and the correct spelling also helps recognition.',
+      'dict.fix.desc': 'What speech recognition gets wrong → how it should be written. Applies to every dictation, even without AI. The correct spelling also helps recognition.',
       'dict.fix.from': 'Heard as …', 'dict.fix.to': 'Correct spelling …',
       'dict.fix.empty': 'No corrections yet.', 'dict.full': 'Dictionary full',
       'cleanup.title': 'Text Cleanup', 'cleanup.mode': 'Cleanup mode',
       'cleanup.mode.desc': 'Removes filler words & stutters after dictation',
-      'cleanup.off': 'Off – raw text', 'cleanup.fast': 'Fast – rule-based',
-      'cleanup.ai': 'AI – local LLM (Ollama)',
+      'cleanup.off': 'Off · raw text', 'cleanup.fast': 'Fast · rule-based',
+      'cleanup.ai': 'AI · local LLM (Ollama)',
       'cleanup.model': 'AI model',
       'cleanup.model.desc': 'Bigger = better corrections but slower. If the model does not answer within 2.5 s, the rule-cleaned text is inserted.',
-      'llm.qwen3_4b': 'Qwen 3 4B – default, ~2.5 GB, fast & faithful',
-      'llm.qwen35_4b': 'Qwen 3.5 4B – ~3.4 GB, freer wording, slower',
-      'llm.qwen35_9b': 'Qwen 3.5 9B – ~6.6 GB, more thorough (GPU ≥ 10 GB)',
-      'llm.gemma4_12b': 'Gemma 4 12B – ~7.6 GB, strong across languages (GPU ≥ 12 GB)',
-      'llm.qwen25_3b': 'Qwen 2.5 3B – ~1.9 GB, previous default',
-      'cleanup.engine': 'AI engine (Ollama)', 'cleanup.checking': 'Checking status...',
+      'llm.qwen3_4b': 'Qwen 3 4B · default, ~2.5 GB, fast & faithful',
+      'llm.qwen35_4b': 'Qwen 3.5 4B · ~3.4 GB, freer wording, slower',
+      'llm.qwen35_9b': 'Qwen 3.5 9B · ~6.6 GB, more thorough (GPU ≥ 10 GB)',
+      'llm.gemma4_12b': 'Gemma 4 12B · ~7.6 GB, strong across languages (GPU ≥ 12 GB)',
+      'llm.qwen25_3b': 'Qwen 2.5 3B · ~1.9 GB, previous default',
+      'cleanup.engine': 'AI engine (Ollama)', 'cleanup.checking': 'Checking status …',
       'cleanup.install': 'Install', 'cleanup.install.size': 'Install (~2.5 GB)',
       'cleanup.activate': 'Activate', 'cleanup.loadmodel': 'Download AI model',
-      'cleanup.running': 'Working...',
-      'cleanup.update': 'Update', 'cleanup.update.title': 'Checks GitHub for a newer Ollama and installs it – your models are kept',
-      'cleanup.active': 'Active ✓', 'cleanup.ready.desc': 'Local LLM ready – "AI" mode uses it automatically',
+      'cleanup.running': 'Working …',
+      'cleanup.update': 'Update', 'cleanup.update.title': 'Checks GitHub for a newer Ollama and installs it. Your models are kept.',
+      'cleanup.active': 'Active', 'cleanup.ready.desc': 'Local LLM ready. “AI” mode uses it automatically',
       'cleanup.installed.desc': 'Installed, but not ready yet',
-      'cleanup.notinstalled.desc': 'One-time download – afterwards AI cleanup runs fully local',
+      'cleanup.notinstalled.desc': 'One-time download, afterwards AI cleanup runs fully locally',
       'general.design': 'Design', 'general.design.desc': 'For the overlay, settings, notifications and setup',
       'general.design.system': 'Automatic (like Windows)', 'general.design.dark': 'Dark', 'general.design.sage': 'Sage',
       'overlay.preview': 'Live preview', 'overlay.style': 'Style', 'overlay.look': 'Appearance',
@@ -1258,26 +1604,32 @@
       'ovl.matrix': 'Dot Matrix', 'ovl.matrix.desc': 'LED dots with a pixel timer, Nothing style',
       'ovl.island': 'Island', 'ovl.island.desc': 'Compact capsule that grows with your text',
       'ovl.halo': 'Halo', 'ovl.halo.desc': 'Glowing color rim that reacts to your voice',
-      'ovl.buddy': 'Buddy', 'ovl.buddy.desc': 'Pixel face that talks along, thinks and grins',
+      'ovl.buddy': 'Buddy', 'ovl.buddy.desc': 'Pixel face that talks along as you dictate and grins when the text lands',
       'ovl.slime': 'Slime', 'ovl.slime.desc': 'Jiggles with every syllable and hops while it thinks',
       'ovl.dragon': 'Dragon', 'ovl.dragon.desc': 'Pixel dragon whose fire breath follows your voice',
       'ovl.mimic': 'Mimic', 'ovl.mimic.desc': 'A living treasure chest: the lid talks along, gold flies at the end',
       'ovl.line': 'Line', 'ovl.line.desc': 'Your voice as a calm line with an echo',
       'acc.mint': 'Mint', 'acc.mono': 'Mono', 'acc.aurora': 'Aurora', 'acc.blue': 'Blue',
       'acc.violet': 'Violet', 'acc.red': 'Red', 'acc.amber': 'Amber',
-      'acc.own': 'In Sage the overlays bring their own colors. The accent applies to Dark.',
+      'acc.own': 'In Sage the overlays bring their own colors. The accent applies to Dark, where it colors the overlay and the windows.',
       'system.audio': 'Audio', 'system.mic': 'Microphone', 'system.mic.desc': 'Select the audio input device',
       'system.mic.default': 'Default (system)', 'system.mic.defaulttag': ' (default)',
       'system.mic.missing': ' (not connected)',
       'system.mictest': 'Microphone test', 'system.mictest.desc': 'Check that your microphone works',
+      'system.mictest.start': 'Test', 'system.mictest.stop': 'Stop',
+      'system.mictest.error': 'No access to the microphone. Check the Windows privacy settings for microphones.',
+      'a11y.close': 'Close', 'a11y.add': 'Add', 'a11y.remove': 'Remove “{item}”',
       'system.mute': 'Mute other audio while dictating',
       'system.mute.desc': 'Music and videos go quiet while you speak and come back right after.',
       'system.insert': 'Text insertion', 'system.method': 'Insert method',
-      'system.method.desc': '"Type" for terminals/apps that ignore Ctrl+V',
+      'system.method.desc': '“Type” for terminals and apps that ignore Ctrl+V',
       'system.method.auto': 'Automatic (Ctrl+V, typing fallback)', 'system.method.type': 'Always type',
       'system.advanced': 'Advanced', 'system.gpusafe': 'GPU safe mode',
       'system.gpusafe.desc': 'Enable on graphics crashes. Disables hardware acceleration (restart required).',
-      'save': 'Save', 'save.done': 'Saved ✓',
+      'save': 'Save', 'save.done': 'Saved',
+      'unsaved.title': 'Save changes?', 'unsaved.desc': 'You changed settings but haven’t saved them yet.',
+      'unsaved.discard': 'Discard', 'unsaved.keep': 'Keep editing',
+      'cleanup.pending': 'New AI model picked. After saving, this shows whether it still needs to download.',
     },
   };
 
@@ -1307,15 +1659,40 @@
     if (recordingHotkey !== 'cmdHotkey') showHotkey('cmdHotkey', hotkeyOf('cmdHotkey'));
     if (recordingHotkey !== 'agentHotkey') showHotkey('agentHotkey', hotkeyOf('agentHotkey'));
     $('agentTestDesc').classList.remove('ok', 'warn');   // its text was just reset
+    $('closeBtn').setAttribute('aria-label', t('a11y.close'));
+    for (const id of ['dictAddBtn', 'vocabAddBtn']) $(id).setAttribute('aria-label', t('a11y.add'));
     renderUpdate();
   }
+
+  // Screen readers: every control in a row is named by the row's label and
+  // described by its text. Ids are added once; the texts follow the language.
+  (function labelControls() {
+    let n = 0;
+    const idOf = (el) => el.id || (el.id = 'a11y-' + (++n));
+    document.querySelectorAll('.field').forEach(field => {
+      const label = field.querySelector('.field-label');
+      if (!label) return;
+      const desc = field.querySelector('.field-desc');
+      field.querySelectorAll('select, input, textarea, button').forEach(c => {
+        if (c.hasAttribute('aria-label') || c.hasAttribute('aria-labelledby')) return;
+        // A button keeps its own text first ("Ändern", then what it changes).
+        c.setAttribute('aria-labelledby', c.tagName === 'BUTTON' ? idOf(c) + ' ' + idOf(label) : idOf(label));
+        if (desc) c.setAttribute('aria-describedby', idOf(desc));
+      });
+    });
+  })();
 
   // ── Sidebar navigation ──
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.onclick = () => {
-      document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b === btn));
+      document.querySelectorAll('.nav-item').forEach(b => {
+        b.classList.toggle('active', b === btn);
+        if (b === btn) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+      });
       document.querySelectorAll('.pane').forEach(p =>
         p.classList.toggle('active', p.id === 'pane-' + btn.dataset.pane));
+      document.querySelector('.panes').scrollTop = 0;   // a new section starts at its top
+      ignite(btn.querySelector('[data-i18n]'));
       if (btn.dataset.pane === 'overlay') showPreview();
       else pushPreview();   // pauses the demo loop
     };
@@ -1328,21 +1705,63 @@
   // that silently threw away e.g. a freshly picked model right before Save.
   let dirty = false;
   let configApplied = false;
-  const markDirty = () => { dirty = true; $('saveBtn').classList.add('dirty'); };
+  // Typing into an "add" field or the history editor isn't a setting yet;
+  // adding the entry marks the form itself.
+  const NOT_A_SETTING = '#dictFrom, #dictTo, #vocabInput, .hist-edit';
+  // Dark's ignition: a tube that just lit flickers once (CSS decides whether
+  // and how; Salbei ignores the class).
+  function ignite(el) {
+    if (!el) return;
+    el.classList.remove('ignite');
+    void el.offsetWidth;
+    el.classList.add('ignite');
+  }
+  document.addEventListener('animationend', (e) => {
+    if (e.animationName === 'ignite') e.target.classList.remove('ignite');
+  });
+  document.addEventListener('change', (e) => {
+    if (e.target.matches('.toggle input') && e.target.checked) ignite(e.target.nextElementSibling);
+  });
+
+  const markDirty = (e) => {
+    if (e && e.target && e.target.closest && e.target.closest(NOT_A_SETTING)) return;
+    if (!dirty) ignite($('saveBtn'));
+    dirty = true; $('saveBtn').classList.add('dirty');
+  };
   document.addEventListener('change', markDirty, true);
   document.addEventListener('input', markDirty, true);
 
   let recordingHotkey = false;
-  let hotkeyParts = new Set();
 
   // ── Close ──
+  // ✕, Esc and Alt+F4 all pass through beforeunload: with unsaved changes it
+  // keeps the window open and asks. Quitting NoType skips the question
+  // (main.js, 'will-prevent-unload').
+  const unsavedDlg = $('unsavedDlg');
+  let discardOK = false;
   $('closeBtn').onclick = () => window.notype.closeSettings();
+  window.addEventListener('beforeunload', (e) => {
+    if (!dirty || discardOK) return;
+    e.preventDefault();
+    e.returnValue = '';
+    setTimeout(() => { if (!unsavedDlg.open) unsavedDlg.showModal(); }, 0);
+  });
+  $('unsavedKeep').onclick = () => unsavedDlg.close();
+  $('unsavedDiscard').onclick = () => { discardOK = true; unsavedDlg.close(); window.notype.closeSettings(); };
+  $('unsavedSave').onclick = () => { unsavedDlg.close(); $('saveBtn').click(); window.notype.closeSettings(); };
 
-  // Keyboard: Esc closes, Ctrl+S saves (not while capturing a hotkey).
+  // Keyboard: Esc closes, Ctrl+S saves (not while capturing a hotkey; inside
+  // the question, Esc means "keep editing" and is the dialog's own).
   document.addEventListener('keydown', (e) => {
-    if (recordingHotkey) return;
+    if (recordingHotkey || unsavedDlg.open) return;
     if (e.key === 'Escape') { e.preventDefault(); window.notype.closeSettings(); }
     else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); $('saveBtn').click(); }
+  });
+
+  // A toast's "open" button lands on its section.
+  if (window.notype.onShowPane) window.notype.onShowPane((pane) => {
+    const btn = document.querySelector(`.nav-item[data-pane="${CSS.escape(pane)}"]`);
+    if (btn) btn.click();
   });
 
   // ── Model cards ──
@@ -1380,20 +1799,94 @@
   showHotkey('hotkey', hotkeyOf('hotkey'));
   showHotkey('cmdHotkey', hotkeyOf('cmdHotkey'));
   showHotkey('agentHotkey', hotkeyOf('agentHotkey'));
+  // Capture rules (same as the setup wizard): one gesture is everything
+  // pressed until all keys are up. Releasing the main (non-modifier) key
+  // commits the modifiers seen so far plus that key. Valid: at least one
+  // modifier plus exactly one main key, or a lone F1 to F24. Tab and
+  // Backspace never count, Esc or the button cancels. Invalid combos and
+  // clashes keep the old hotkey and keep waiting, with the reason in the
+  // row's description.
+  const HK_MODS = ['ctrl', 'shift', 'alt', 'win'];
+  const HK_BAD_MAIN = ['tab', 'escape', 'backspace'];
+  const HK_KEY_MAP = {
+    'control': 'ctrl', 'shift': 'shift', 'alt': 'alt', 'meta': 'win', ' ': 'space',
+    'enter': 'enter', 'tab': 'tab', 'backspace': 'backspace', 'delete': 'delete',
+    'escape': 'escape', '<': 'less', '>': 'greater',
+  };
+  // Keys that can't be part of an accelerator: not collected at all.
+  const HK_SKIP = ['altgraph', 'capslock', 'numlock', 'scrolllock', 'dead', 'unidentified'];
+  const hkName = (e) => {
+    const key = e.key.toLowerCase();
+    return HK_KEY_MAP[key] || (e.code.startsWith('Key') ? e.code.slice(3).toLowerCase() : key);
+  };
+  // { held: Set<code>, mods: Set<name>, mains: Map<code, name>, tried } while capturing.
+  let hkGesture = null;
+  const hkDesc = (which) => $(which + 'Value').closest('.field').querySelector('.field-desc');
+  function hotkeyNote(which, text, kind) {
+    const desc = hkDesc(which);
+    desc.textContent = text != null ? text : t(desc.dataset.i18n);
+    desc.classList.toggle('hint', kind === 'hint');
+    desc.classList.toggle('warn', kind === 'warn');
+  }
+  function renderCapture() {
+    const g = hkGesture;
+    const keys = HK_MODS.filter(m => g.mods.has(m)).concat(Array.from(g.mains.values()));
+    if (keys.length) window.NoTypeKeys.render($(recordingHotkey + 'Value'), keys.join('+'), uiLang);
+    else $(recordingHotkey + 'Value').textContent = t('general.waiting');
+  }
+  function resetGesture() {
+    hkGesture.held.clear(); hkGesture.mods.clear(); hkGesture.mains.clear(); hkGesture.tried = false;
+  }
   function startHotkeyCapture(which) {
-    if (recordingHotkey) return;
+    if (recordingHotkey) cancelHotkeyCapture();
     recordingHotkey = which;
     hotkeyBefore = hotkeyOf(which);
+    hkGesture = { held: new Set(), mods: new Set(), mains: new Map(), tried: false };
     // Park the global shortcut so pressing the new combo can't start a dictation.
     if (window.notype.setHotkeyCapture) window.notype.setHotkeyCapture(true);
-    hotkeyParts.clear();
-    $(which + 'Value').textContent = t('general.waiting');
     $(which + 'Value').classList.add('recording');
-    $(which + 'Btn').textContent = '...';
+    $(which + 'Btn').textContent = t('hk.cancel');
+    hotkeyNote(which, t('hk.capture'));
+    renderCapture();
   }
-  $('hotkeyBtn').onclick = () => startHotkeyCapture('hotkey');
-  $('cmdHotkeyBtn').onclick = () => startHotkeyCapture('cmdHotkey');
-  $('agentHotkeyBtn').onclick = () => startHotkeyCapture('agentHotkey');
+  function endHotkeyCapture(combo) {
+    const which = recordingHotkey;
+    recordingHotkey = false;
+    hkGesture = null;
+    if (window.notype.setHotkeyCapture) window.notype.setHotkeyCapture(false);
+    $(which + 'Value').classList.remove('recording');
+    $(which + 'Btn').textContent = t('general.change');
+    hotkeyNote(which, null);
+    if (combo !== hotkeyBefore) markDirty();
+    showHotkey(which, combo);
+  }
+  // Esc or a second click: the previous hotkey stays as it was.
+  function cancelHotkeyCapture() { endHotkeyCapture(hotkeyBefore); }
+  // Why these keys can't be this hotkey ({ text, kind }), or null. Dictation
+  // and command mode always count (command mode even while off); the agent
+  // hotkey only while it is switched on.
+  function hotkeyProblem(which, mods, mains) {
+    const main = mains[0];
+    if (mains.length === 1 && HK_BAD_MAIN.includes(main)) {
+      return { text: t('hk.badkey').replace('{key}', window.NoTypeKeys.text(main, uiLang)), kind: 'hint' };
+    }
+    if (mains.length !== 1) return { text: t('hk.onekey'), kind: 'hint' };
+    if (!mods.length && !/^f([1-9]|1[0-9]|2[0-4])$/.test(main)) return { text: t('hk.needmod'), kind: 'hint' };
+    const combo = canonHotkey(mods.concat(main).join('+'));
+    const taken = (other) => canonHotkey(hotkeyOf(other)) === combo;
+    if (which !== 'hotkey' && taken('hotkey')) return { text: t('hk.same.dict'), kind: 'warn' };
+    if (which !== 'cmdHotkey' && taken('cmdHotkey')) return { text: t('hk.same.cmd'), kind: 'warn' };
+    if (which !== 'agentHotkey' && $('agentToggle').checked && taken('agentHotkey')) {
+      return { text: t('hk.same.agent'), kind: 'warn' };
+    }
+    return null;
+  }
+  for (const which of ['hotkey', 'cmdHotkey', 'agentHotkey']) {
+    $(which + 'Btn').onclick = () => {
+      if (recordingHotkey === which) cancelHotkeyCapture();
+      else startHotkeyCapture(which);
+    };
+  }
   const renderCmdCard = () =>
     $('cmdToggle').closest('.card').classList.toggle('off', !$('cmdToggle').checked);
   $('cmdToggle').addEventListener('change', renderCmdCard);
@@ -1410,7 +1903,9 @@
 
   // Same keys in any order count as the same combo (the agent hotkey is
   // compared that way; dictation vs. command keeps its exact comparison).
-  const canonHotkey = (h) => String(h || '').toLowerCase().split('+').filter(Boolean).sort().join('+');
+  const HK_ALIASES = { control: 'ctrl', meta: 'win', super: 'win', esc: 'escape', del: 'delete', return: 'enter' };
+  const canonHotkey = (h) => String(h || '').toLowerCase().split('+').map(k => k.trim()).filter(Boolean)
+    .map(k => HK_ALIASES[k] || k).sort().join('+');
   function agentHotkeyClash(combo) {
     // Command mode counts even while off, as it does for dictation.
     return [hotkeyOf('hotkey'), hotkeyOf('cmdHotkey')]
@@ -1422,56 +1917,59 @@
     const descText = desc.textContent;
     desc.textContent = t(key);
     desc.classList.add('warn');
-    $(which + 'Value').classList.add('recording');
+    $(which + 'Value').classList.add('clash');
     setTimeout(() => {
-      $(which + 'Value').classList.remove('recording');
+      $(which + 'Value').classList.remove('clash');
       desc.classList.remove('warn');
       if (desc.textContent === t(key)) desc.textContent = descText;
     }, 2200);
   }
 
+  // Capture phase: while waiting, no key reaches the page (Tab doesn't move
+  // focus, Space/Enter don't press the focused button).
   document.addEventListener('keydown', (e) => {
     if (!recordingHotkey) return;
     e.preventDefault();
-
-    const key = e.key.toLowerCase();
-    const map = {
-      'control': 'ctrl', 'shift': 'shift', 'alt': 'alt',
-      'meta': 'win', ' ': 'space', 'enter': 'enter',
-      'tab': 'tab', 'backspace': 'backspace', 'delete': 'delete',
-      'escape': 'escape', '<': 'less', '>': 'greater',
-    };
-
-    const mapped = map[key] || (e.code.startsWith('Key') ? e.code.slice(3).toLowerCase() : key);
-    hotkeyParts.add(mapped);
-    window.NoTypeKeys.render($(recordingHotkey + 'Value'), Array.from(hotkeyParts).join('+'), uiLang);
-  });
+    e.stopPropagation();
+    if (e.repeat) return;
+    const g = hkGesture;
+    const name = hkName(e);
+    if (name === 'escape') { cancelHotkeyCapture(); return; }
+    if (HK_SKIP.includes(name)) return;
+    if (!g.held.size) resetGesture();
+    g.held.add(e.code);
+    if (HK_MODS.includes(name)) g.mods.add(name);
+    else g.mains.set(e.code, name);
+    renderCapture();
+  }, true);
 
   document.addEventListener('keyup', (e) => {
     if (!recordingHotkey) return;
-    if (hotkeyParts.size > 0) {
-      const which = recordingHotkey;
-      recordingHotkey = false;
-      if (window.notype.setHotkeyCapture) window.notype.setHotkeyCapture(false);
-      $(which + 'Value').classList.remove('recording');
-      $(which + 'Btn').textContent = t('general.change');
-      let combo = Array.from(hotkeyParts).join('+');
-      // Two hotkeys on one combo can't work – keep the previous one and say
-      // why inline. The agent hotkey only counts while it is switched on.
-      const other = hotkeyOf(which === 'hotkey' ? 'cmdHotkey' : 'hotkey');
-      if (which !== 'agentHotkey' && combo.toLowerCase() === other.toLowerCase()) {
-        combo = hotkeyBefore;
-        warnHotkey(which, 'cmd.same');
-      } else if (which === 'agentHotkey' ? agentHotkeyClash(combo)
-          : $('agentToggle').checked && canonHotkey(combo) === canonHotkey(hotkeyOf('agentHotkey'))) {
-        combo = hotkeyBefore;
-        warnHotkey(which, 'agent.same');
-      } else {
-        markDirty();
-      }
-      showHotkey(which, combo);
+    e.preventDefault();
+    e.stopPropagation();
+    const g = hkGesture;
+    // Keys that went down before the capture started (the Enter that
+    // pressed "Ändern") are not part of the gesture.
+    if (!g.held.delete(e.code)) return;
+    if (g.mains.has(e.code)) {
+      const mods = HK_MODS.filter(m => g.mods.has(m));
+      const problem = hotkeyProblem(recordingHotkey, mods, Array.from(g.mains.values()));
+      if (!problem) { endHotkeyCapture(mods.concat(g.mains.get(e.code)).join('+')); return; }
+      // Keep the old hotkey and keep waiting; held modifiers still count
+      // for the next main key.
+      hotkeyNote(recordingHotkey, problem.text, problem.kind);
+      g.mains.clear();
+      g.tried = true;
+      if (!g.held.size) resetGesture();
+    } else if (!g.held.size) {
+      // Only modifiers went down and up: never a hotkey on its own.
+      if (!g.tried && g.mods.size) hotkeyNote(recordingHotkey, t('hk.needkey'), 'hint');
+      resetGesture();
     }
-  });
+    renderCapture();
+  }, true);
+  // Keyups that happen in another window never arrive: start the gesture over.
+  window.addEventListener('blur', () => { if (recordingHotkey) { resetGesture(); renderCapture(); } });
 
   // ── Languages ──
   // Every language Whisper actually supports (large models, 99 languages).
@@ -1505,17 +2003,159 @@
     ['uz', 'Oʻzbek'], ['vi', 'Tiếng Việt'], ['cy', 'Cymraeg'], ['yi', 'ייִדיש'],
     ['yo', 'Yorùbá'],
   ];
-  {
-    const sel = $('langSelect');
-    const pinned = WHISPER_LANGUAGES.slice(0, 4);
-    const rest = WHISPER_LANGUAGES.slice(4).sort((a, b) => a[1].localeCompare(b[1]));
-    for (const [code, name] of [...pinned, ...rest]) {
+  const LANG_ORDER = [
+    ...WHISPER_LANGUAGES.slice(0, 4),
+    ...WHISPER_LANGUAGES.slice(4).sort((a, b) => a[1].localeCompare(b[1])),
+  ];
+  const LANG_NAMES = Object.fromEntries(WHISPER_LANGUAGES);
+  const langName = (code) => LANG_NAMES[code] || code;
+
+  // ── My languages ──
+  // [{code, share}] in the user's order. A share is a percentage or null:
+  // empty ones split what's left of 100 (80 + 15 + empty → 5), at least 1
+  // each, then everything is scaled to 100. Same rule as the backend's
+  // normalize_languages().
+  let myLangs = [];
+  const MIX_OPACITY = [1, 0.62, 0.42, 0.28, 0.2, 0.14];
+  const mixOpacity = (i) => MIX_OPACITY[Math.min(i, MIX_OPACITY.length - 1)];
+
+  function rawShares() {
+    const given = myLangs.filter(l => l.share != null);
+    const missing = myLangs.length - given.length;
+    const fill = missing ? Math.max((100 - given.reduce((s, l) => s + l.share, 0)) / missing, 1) : 0;
+    return myLangs.map(l => (l.share != null ? l.share : fill));
+  }
+  function effectiveShares() {
+    const raw = rawShares();
+    const total = raw.reduce((s, v) => s + v, 0) || 1;
+    return raw.map(v => (v / total) * 100);
+  }
+  const parseShare = (v) => {
+    const n = Math.round(parseFloat(v));
+    return Number.isFinite(n) ? Math.min(100, Math.max(1, n)) : null;
+  };
+
+  function langsFromConfig(cfg) {
+    const out = [];
+    for (const e of Array.isArray(cfg.languages) ? cfg.languages : []) {
+      const code = String((e && typeof e === 'object' ? e.code : e) || '').trim().toLowerCase();
+      if (!code || out.some(l => l.code === code)) continue;
+      out.push({ code, share: e && typeof e === 'object' ? parseShare(e.share) : null });
+    }
+    return out.length ? out : [{ code: cfg.language || 'de', share: null }];
+  }
+
+  // The bar and the empty fields' placeholders follow every keystroke; the
+  // rows themselves are only rebuilt when a language comes or goes.
+  function updateMix() {
+    const eff = effectiveShares();
+    const mix = $('langMix');
+    mix.hidden = myLangs.length < 2;
+    while (mix.children.length > myLangs.length) mix.lastChild.remove();
+    let grown = false;
+    while (mix.children.length < myLangs.length) {
+      const seg = document.createElement('span');
+      seg.style.flexGrow = 0;
+      mix.appendChild(seg);
+      grown = true;
+    }
+    if (grown) void mix.offsetWidth;   // new segments grow in from zero
+    [...mix.children].forEach((seg, i) => {
+      seg.style.flexGrow = eff[i];
+      seg.style.opacity = mixOpacity(i);
+    });
+    $('langList').querySelectorAll('input').forEach((inp, i) => {
+      inp.placeholder = Math.round(eff[i]);
+    });
+    const sum = Math.round(rawShares().reduce((s, v) => s + v, 0));
+    $('langSum').hidden = myLangs.length < 2 || sum === 100;
+    $('langSum').textContent = t('speech.langs.sum').replace('{sum}', sum);
+  }
+
+  function renderLangs(focusCode) {
+    const list = $('langList');
+    list.innerHTML = '';
+    const solo = myLangs.length === 1;
+    myLangs.forEach((l, i) => {
+      const row = document.createElement('div');
+      row.className = 'lang-row' + (solo ? ' solo' : '');
+      row.style.setProperty('--o', mixOpacity(i));
+      const dot = document.createElement('span'); dot.className = 'dot';
+      const name = document.createElement('span'); name.className = 'name'; name.textContent = langName(l.code);
+      const share = document.createElement('label'); share.className = 'share';
+      const input = document.createElement('input');
+      input.type = 'number'; input.min = 1; input.max = 100; input.step = 1;
+      input.value = l.share != null ? l.share : '';
+      input.setAttribute('aria-label', t('speech.langs.share').replace('{lang}', langName(l.code)));
+      input.oninput = () => { l.share = parseShare(input.value); updateMix(); };
+      input.onchange = () => { input.value = l.share != null ? l.share : ''; };
+      share.append(input, '%');
+      const del = document.createElement('button'); del.className = 'x-btn'; del.innerHTML = ICON_X;
+      del.title = t('speech.langs.remove').replace('{lang}', langName(l.code));
+      del.setAttribute('aria-label', del.title);
+      del.onclick = () => { myLangs.splice(i, 1); renderLangs(); markDirty(); };
+      row.append(dot, name, share, del);
+      list.appendChild(row);
+      if (l.code === focusCode) setTimeout(() => input.focus(), 0);
+    });
+
+    const add = $('langAdd');
+    add.innerHTML = '';
+    const ph = document.createElement('option');
+    ph.value = ''; ph.textContent = t('speech.langs.add'); ph.hidden = true; ph.selected = true;
+    add.appendChild(ph);
+    for (const [code, name] of LANG_ORDER) {
+      if (myLangs.some(l => l.code === code)) continue;
       const opt = document.createElement('option');
-      opt.value = code;
-      opt.textContent = name;
-      sel.appendChild(opt);
+      opt.value = code; opt.textContent = name;
+      add.appendChild(opt);
+    }
+    add.value = '';
+    add.setAttribute('aria-label', t('speech.langs.add'));
+    updateMix();
+  }
+  $('langAdd').onchange = () => {
+    const code = $('langAdd').value;
+    if (!code || myLangs.some(l => l.code === code)) return;
+    myLangs.push({ code, share: null });
+    renderLangs(code);
+  };
+  // The language with the biggest share; the backend's fallback and what
+  // older versions read.
+  function mainLanguage() {
+    if (!myLangs.length) return currentConfig.language || 'de';
+    const eff = effectiveShares();
+    return myLangs[eff.indexOf(Math.max(...eff))].code;
+  }
+
+  // ── Spoken punctuation examples ──
+  const SPOKEN_ICONS = {
+    line: '<svg viewBox="0 0 24 24"><path d="M20 4v7a4 4 0 0 1-4 4H4"/><path d="M9 10l-5 5 5 5"/></svg>',
+    para: '<svg viewBox="0 0 24 24"><path d="M13 4v16M17 4v16M19 4H9.5a4.5 4.5 0 0 0 0 9H13"/></svg>',
+  };
+  const SPOKEN_EXAMPLES = {
+    de: [['Fragezeichen', '?'], ['Ausrufezeichen', '!'], ['Komma', ','], ['Punkt', '.'],
+         ['Doppelpunkt', ':'], ['Klammer auf … zu', '( )'], ['Anführungszeichen unten … oben', '„ “'],
+         ['neue Zeile', 'line'], ['neuer Absatz', 'para']],
+    en: [['question mark', '?'], ['exclamation mark', '!'], ['comma', ','], ['period', '.'],
+         ['colon', ':'], ['open … close bracket', '( )'], ['open … close quote', '“ ”'],
+         ['new line', 'line'], ['new paragraph', 'para']],
+  };
+  function renderSpoken() {
+    const box = $('spokenExamples');
+    box.innerHTML = '';
+    for (const [say, out] of SPOKEN_EXAMPLES[uiLang] || SPOKEN_EXAMPLES.de) {
+      const chip = document.createElement('span');
+      const word = document.createElement('span'); word.textContent = say;
+      chip.appendChild(word);
+      if (SPOKEN_ICONS[out]) chip.insertAdjacentHTML('beforeend', SPOKEN_ICONS[out]);
+      else { const b = document.createElement('b'); b.textContent = out; chip.appendChild(b); }
+      box.appendChild(chip);
     }
   }
+  const renderSpokenCard = () =>
+    $('spokenToggle').closest('.card').classList.toggle('off', !$('spokenToggle').checked);
+  $('spokenToggle').addEventListener('change', renderSpokenCard);
 
   // ── Vocabulary (chip table) ──
   const VOCAB_BUDGET = 850;  // Whisper's 224-token initial-prompt budget
@@ -1532,7 +2172,8 @@
       const label = document.createElement('span');
       label.textContent = term;
       const del = document.createElement('button');
-      del.textContent = '✕';
+      del.innerHTML = ICON_X;
+      del.setAttribute('aria-label', t('a11y.remove').replace('{item}', term));
       del.onclick = () => { vocabTerms.splice(i, 1); renderVocab(); markDirty(); };
       chip.appendChild(label);
       chip.appendChild(del);
@@ -1541,6 +2182,7 @@
     const used = vocabJoined().length;
     const budget = $('vocabBudget');
     budget.textContent = `${used} / ${VOCAB_BUDGET}`;
+    budget.style.setProperty('--fill', Math.min(1, used / VOCAB_BUDGET));
     budget.classList.toggle('full', used > VOCAB_BUDGET - 40);
   }
 
@@ -1590,9 +2232,10 @@
       const row = document.createElement('div');
       row.className = 'dict-row' + (flashNewest && i === dictEntries.length - 1 ? ' flash' : '');
       const from = document.createElement('span'); from.className = 'from'; from.textContent = e.from;
-      const arrow = document.createElement('span'); arrow.className = 'arrow'; arrow.textContent = '→';
+      const arrow = document.createElement('span'); arrow.className = 'arrow'; arrow.innerHTML = ICON_ARROW;
       const to = document.createElement('span'); to.className = 'to'; to.textContent = e.to;
-      const del = document.createElement('button'); del.className = 'x-btn'; del.textContent = '✕';
+      const del = document.createElement('button'); del.className = 'x-btn'; del.innerHTML = ICON_X;
+      del.setAttribute('aria-label', t('a11y.remove').replace('{item}', `${e.from} → ${e.to}`));
       del.onclick = () => { dictEntries.splice(i, 1); renderDict(); markDirty(); };
       row.append(from, arrow, to, del);
       list.appendChild(row);
@@ -1601,6 +2244,7 @@
     count.textContent = dictEntries.length >= DICT_MAX
       ? `${t('dict.full')} · ${DICT_MAX} / ${DICT_MAX}` : `${dictEntries.length} / ${DICT_MAX}`;
     count.classList.toggle('full', dictEntries.length >= DICT_MAX);
+    count.style.setProperty('--fill', Math.min(1, dictEntries.length / DICT_MAX));
   }
 
   function addDictEntry(from, to) {
@@ -1698,6 +2342,7 @@
         tok.dataset.s = m.index;
         tok.dataset.e = end;
         tok.textContent = m[0];
+        tok.tabIndex = tok.dataset.k === '0' ? 0 : -1;
         text.appendChild(tok);
         last = end;
       }
@@ -1746,7 +2391,7 @@
     heard.title = heardText;
     const arrow = document.createElement('span');
     arrow.className = 'dict-arrow';
-    arrow.textContent = '→';
+    arrow.innerHTML = ICON_ARROW;
     const input = document.createElement('input');
     input.type = 'text';
     input.maxLength = 80;
@@ -1757,7 +2402,9 @@
     ok.textContent = t('dict.learn.apply');
     const cancel = document.createElement('button');
     cancel.className = 'x-btn';
-    cancel.textContent = '✕';
+    cancel.innerHTML = ICON_X;
+    cancel.setAttribute('aria-label', t('a11y.close'));
+    input.setAttribute('aria-label', heardText + ' →');
     const apply = () => {
       const to = input.value.trim();
       if (!to || to === heardText) { closeHistEditor(); return; }
@@ -1809,6 +2456,38 @@
     histSel.b = Math.min(Math.max(histSel.anchor, k), histSel.anchor + HIST_MAX_WORDS - 1);
     paintHistSel(tok.closest('.hist-item'));
   });
+  // Keyboard: arrows walk the words, Shift+arrows widen the pick, Enter or
+  // Space opens the correction for the picked words.
+  $('histList').addEventListener('keydown', (ev) => {
+    const tok = ev.target.closest && ev.target.closest('.tok');
+    if (!tok) return;
+    const item = tok.closest('.hist-item');
+    const toks = [...item.querySelectorAll('.hist-text .tok')];
+    const time = +item.dataset.time, k = +tok.dataset.k;
+    const step = ev.key === 'ArrowRight' ? 1 : ev.key === 'ArrowLeft' ? -1 : 0;
+    if (step) {
+      ev.preventDefault();
+      const next = toks[Math.max(0, Math.min(toks.length - 1, k + step))];
+      if (ev.shiftKey) {
+        if (!histSel || histSel.time !== time) histSel = { time, anchor: k, a: k, b: k };
+        const nk = +next.dataset.k;
+        histSel.a = Math.max(Math.min(histSel.anchor, nk), histSel.anchor - HIST_MAX_WORDS + 1);
+        histSel.b = Math.min(Math.max(histSel.anchor, nk), histSel.anchor + HIST_MAX_WORDS - 1);
+        document.querySelectorAll('#histList .hist-edit').forEach(el => el.remove());
+        document.querySelectorAll('#histList .hist-item').forEach(paintHistSel);
+      }
+      tok.tabIndex = -1; next.tabIndex = 0; next.focus();
+    } else if (ev.key === 'Enter' || ev.key === ' ') {
+      ev.preventDefault();
+      if (!histSel || histSel.time !== time || k < histSel.a || k > histSel.b) {
+        histSel = { time, anchor: k, a: k, b: k };
+      }
+      document.querySelectorAll('#histList .hist-edit').forEach(el => el.remove());
+      document.querySelectorAll('#histList .hist-item').forEach(paintHistSel);
+      openHistEditor(item);
+    }
+  });
+
   document.addEventListener('mouseup', () => {
     if (!histDragging) return;
     histDragging = false;
@@ -1819,8 +2498,20 @@
   // ── Ollama (KI-Bereinigung) ──
   let ollamaBusy = false;   // true while an in-app setup is running
 
+  // A model picked but not saved yet: the backend still reports the old one,
+  // so say what happens instead of showing its status.
+  const llmPending = () => configApplied &&
+    $('llmModelSelect').value !== (currentConfig.llm_model || 'qwen3:4b-instruct');
+
   function renderOllamaStatus(s) {
     const btn = $('ollamaBtn'), badge = $('ollamaBadge'), desc = $('ollamaDesc');
+    if (llmPending()) {
+      badge.style.display = 'none';
+      btn.style.display = 'none';
+      $('ollamaUpdBtn').style.display = 'none';
+      desc.textContent = t('cleanup.pending');
+      return;
+    }
     // Only NoType's own portable copy is ours to update; a system-wide
     // Ollama updates itself.
     const upd = $('ollamaUpdBtn');
@@ -1846,12 +2537,12 @@
     }
   }
 
-  // A different LLM → the status badge must reflect THAT model (pulled or
-  // not). Refresh right away instead of after save so the button reads
-  // "KI-Modell laden" when a download is needed.
+  // A different LLM is a setting like any other: it waits for Save (and
+  // nothing downloads before the user asks). Until then the status line
+  // says so; picking the saved one again shows its real status.
   $('llmModelSelect').addEventListener('change', () => {
-    window.notype.saveConfig({ llm_model: $('llmModelSelect').value });
-    setTimeout(() => window.notype.ollamaStatus(), 150);
+    if (llmPending()) renderOllamaStatus({});
+    else window.notype.ollamaStatus();
   });
 
   $('ollamaBtn').onclick = () => {
@@ -1887,6 +2578,11 @@
     violet: ['#bf5af2', '#a472ff', '#7d7aff'],
     red:    ['#ff453a', '#ff5e6c', '#ff8a80'],
     amber:  ['#ffb340', '#ffa21a', '#ffd60a'],
+  };
+  // The gas each accent fills Dark's tubes with (mirrors GAS in main.js).
+  const OVL_GAS = {
+    mint: '#00d4aa', mono: '#f4f1ea', aurora: '#ff4fb4', blue: '#409cff',
+    violet: '#bf5af2', red: '#ff5a4e', amber: '#ffb340',
   };
   // Salbei's own palette (mirrors SAGE_PAL in overlay.html).
   const OVL_SAGE = ['#56663a', '#6b7f45', '#86a062'];
@@ -2029,6 +2725,7 @@
     const grid = $('styleGrid');
     const sage = ovlWorld() === 'sage';
     (sage ? OVL_SAGE : OVL_ACCENTS[ovlAccent]).forEach((c, i) => grid.style.setProperty('--g' + (i + 1), c));
+    document.documentElement.style.setProperty('--gas', OVL_GAS[ovlAccent]);
     grid.innerHTML = '';
     for (const id of OVL_STYLES) {
       const card = document.createElement('button');
@@ -2040,6 +2737,7 @@
       card.onclick = () => {
         if (id === ovlStyle) return;
         ovlStyle = id; markDirty(); renderOverlayPicker(); pushPreview();
+        ignite(grid.querySelector('.style-card.active'));
       };
       grid.appendChild(card);
     }
@@ -2052,9 +2750,13 @@
       b.style.background = `linear-gradient(135deg, ${c[0]}, ${c[2]})`;
       if (id === 'mono') b.style.outline = '1px solid rgba(128,128,128,.35)';
       b.title = t('acc.' + id);
+      b.setAttribute('aria-label', t('acc.' + id));
+      b.setAttribute('aria-pressed', String(id === ovlAccent));
+      b.disabled = sage;
       b.onclick = () => {
         if (id === ovlAccent) return;
         ovlAccent = id; markDirty(); renderOverlayPicker(); pushPreview();
+        ignite(sw.querySelector('.swatch.active'));
       };
       sw.appendChild(b);
     }
@@ -2151,8 +2853,12 @@
     $('agentToken').value = cfg.agent_token || '';
     $('agentContextToggle').checked = cfg.agent_send_context !== false;
     renderAgentCard();
-    $('langSelect').value = cfg.language || 'de';
+    myLangs = langsFromConfig(cfg);
+    renderLangs();
     $('autoLangToggle').checked = cfg.auto_language_detect !== false;
+    $('spokenToggle').checked = cfg.spoken_punctuation !== false;
+    renderSpoken();
+    renderSpokenCard();
     selectedModel = cfg.model_size || 'small';
     renderModels();
     window.notype.listModels();
@@ -2213,7 +2919,7 @@
   $('appLangSelect').onchange = () => {
     applyI18n($('appLangSelect').value);
     renderModels(); renderOverlayPicker(); pushPreview();
-    renderDict(); renderHist();
+    renderDict(); renderHist(); renderLangs(); renderSpoken();
   };
 
   // ── Save ──
@@ -2232,8 +2938,10 @@
       agent_url: $('agentUrl').value.trim(),
       agent_token: $('agentToken').value.trim(),
       agent_send_context: $('agentContextToggle').checked,
-      language: $('langSelect').value,
+      languages: myLangs.map(l => (l.share != null ? { code: l.code, share: l.share } : { code: l.code })),
+      language: mainLanguage(),
       auto_language_detect: $('autoLangToggle').checked,
+      spoken_punctuation: $('spokenToggle').checked,
       model_size: selectedModel,
       overlay_theme: $('designSelect').value,
       overlay_style: ovlStyle,
@@ -2261,16 +2969,22 @@
       first_run_complete: true,
     };
     window.notype.saveConfig(newConfig);
+    currentConfig = { ...currentConfig, ...newConfig };
     dirty = false;
     $('saveBtn').classList.remove('dirty');
+    // A newly picked AI model: now the status can say whether it's there.
+    setTimeout(() => window.notype.ollamaStatus(), 150);
     // Honest confirmation: the main process writes settings.json synchronously
-    // on 'save-config', so by the time this renders the save is on disk –
-    // even if the backend is down and can't be told yet.
+    // on 'save-config', so by the time this renders the save is on disk,
+    // even if the backend is down and can't be told yet. The window stays.
     const btn = $('saveBtn');
     btn.textContent = t('save.done');
+    btn.classList.add('saved');
     btn.disabled = true;
-    setTimeout(() => window.notype.closeSettings(), 550);
+    clearTimeout(saveDoneTimer);
+    saveDoneTimer = setTimeout(() => { btn.textContent = t('save'); btn.classList.remove('saved'); btn.disabled = false; }, 1600);
   };
+  let saveDoneTimer = null;
 
   // VAD slider live value
   $('vadSlider').oninput = () => {
@@ -2445,6 +3159,13 @@
   let micTestStream = null;
   let micTestContext = null;
   let micTestAnimId = null;
+  const MIC_ICO = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
+  const STOP_ICO = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>';
+  function micTestLabel(on) {
+    const key = on ? 'system.mictest.stop' : 'system.mictest.start';
+    $('micTestBtn').innerHTML = (on ? STOP_ICO : MIC_ICO) + `<span data-i18n="${key}">${t(key)}</span>`;
+  }
+  micTestLabel(false);
 
   $('micTestBtn').onclick = async () => {
     if (micTestStream) {
@@ -2462,7 +3183,7 @@
       source.connect(analyser);
 
       const dataArray = new Float32Array(analyser.fftSize);
-      $('micTestBtn').textContent = '⏹ Stop';
+      micTestLabel(true);
       $('micTestBtn').style.borderColor = 'var(--ok)';
       $('micTestBtn').style.color = 'var(--ok)';
 
@@ -2477,12 +3198,17 @@
       }
       updateMeter();
     } catch (e) {
-      $('micTestBar').style.background = '#ef4444';
-      $('micTestBar').style.width = '100%';
+      stopMicTest();
+      // Say why, in the row itself, for a few seconds.
+      const desc = $('micTestBtn').closest('.field').querySelector('.field-desc');
+      desc.textContent = t('system.mictest.error');
+      desc.classList.add('warn');
+      desc.setAttribute('role', 'alert');
       setTimeout(() => {
-        $('micTestBar').style.background = 'var(--meter)';
-        $('micTestBar').style.width = '0%';
-      }, 1500);
+        desc.classList.remove('warn');
+        desc.removeAttribute('role');
+        desc.textContent = t(desc.dataset.i18n);
+      }, 6000);
     }
   };
 
@@ -2494,13 +3220,13 @@
     micTestContext = null;
     micTestAnimId = null;
     $('micTestBar').style.width = '0%';
-    $('micTestBtn').textContent = '🎤 Test';
+    micTestLabel(false);
     $('micTestBtn').style.borderColor = '';
     $('micTestBtn').style.color = '';
   }
 
   // Cleanup on close
-  window.addEventListener('beforeunload', stopMicTest);
+  window.addEventListener('pagehide', stopMicTest);   // not beforeunload: that one may be cancelled
   // Another mic picked mid-test: listen to that one.
   $('micSelect').addEventListener('change', () => {
     if (!micTestStream) return;

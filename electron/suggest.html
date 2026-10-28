@@ -7,24 +7,32 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   :root {
+    --gas: #00d4aa;   /* the overlay colour; main.js sends the user's pick */
     --bg: rgba(245, 242, 233, 0.96);
     --fg: #2b3123;
-    --sub: rgba(43, 49, 35, 0.64);
+    --sub: rgba(43, 49, 35, 0.72);
     --shadow: rgba(32, 36, 24, 0.22);
     --border: rgba(70, 82, 48, 0.16);
     --accent: #56663a;
     --on-accent: #f9f7f0;
     --ghost-hover: rgba(86, 102, 58, 0.1);
   }
+  /* Dark: Neon-Werkstatt. A soot pill with a glass rim; „Lernen“ is the
+     lit tube, the book lights once the word is learned. */
   [data-theme="dark"] {
-    --bg: rgba(28, 28, 30, 0.94);
-    --fg: #f5f5f5;
-    --sub: rgba(255, 255, 255, 0.55);
+    --bg: #171513;
+    --fg: #f1ebe1;
+    --sub: #a39a8c;
     --shadow: rgba(0, 0, 0, 0.5);
-    --border: rgba(255, 255, 255, 0.08);
-    --accent: #00d4aa;
-    --on-accent: #06251e;
-    --ghost-hover: rgba(255, 255, 255, 0.08);
+    --border: rgba(241, 235, 225, 0.28);
+    --accent: var(--gas);
+    --on-accent: #0f0e0d;
+    --ghost-hover: rgba(241, 235, 225, 0.08);
+    --glass: rgba(241, 235, 225, 0.42);
+    --core: color-mix(in srgb, var(--gas) 45%, #fff);
+    --halo: 0 0 2px color-mix(in srgb, var(--gas) 90%, transparent), 0 0 9px color-mix(in srgb, var(--gas) 55%, transparent), 0 0 22px color-mix(in srgb, var(--gas) 22%, transparent);
+    --halo-text: 0 0 6px color-mix(in srgb, var(--gas) 70%, transparent),
+                 0 0 16px color-mix(in srgb, var(--gas) 30%, transparent);
   }
 
   html, body { background: transparent; }
@@ -79,7 +87,7 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .pairs .heard { color: var(--sub); text-decoration: line-through; text-decoration-thickness: 1px; }
-  .pairs .arrow { color: var(--sub); margin: 0 5px; font-weight: 400; }
+  .pairs .arrow { display: inline-flex; vertical-align: -1px; color: var(--sub); margin: 0 5px; }
   .pairs .sep { color: var(--sub); margin: 0 8px; font-weight: 400; }
   .sub { font-size: 11px; color: var(--sub); font-weight: 500; white-space: nowrap; }
 
@@ -103,6 +111,30 @@
   .dismiss svg { width: 10px; height: 10px; }
   .learned .actions { display: none; }
   .learned { padding-right: 18px; }
+
+  /* ── Dark: unlit glass until something is on ── */
+  [data-theme="dark"] .pill { backdrop-filter: none; }
+  [data-theme="dark"] .icon { background: transparent; color: var(--sub); box-shadow: inset 0 0 0 1.5px var(--glass); }
+  [data-theme="dark"] .learned .icon { color: var(--core); box-shadow: inset 0 0 0 1.5px var(--gas), var(--halo); }
+  [data-theme="dark"] .learn {
+    background: transparent; color: var(--core); text-shadow: var(--halo-text);
+    box-shadow: inset 0 0 0 1.5px var(--gas), inset 0 0 10px color-mix(in srgb, var(--gas) 20%, transparent), var(--halo);
+  }
+  [data-theme="dark"] .learn:hover {
+    filter: none;
+    box-shadow: inset 0 0 0 1.5px var(--gas), inset 0 0 14px color-mix(in srgb, var(--gas) 32%, transparent), var(--halo);
+  }
+  [data-theme="dark"] button:focus-visible { outline: 2px solid var(--gas); outline-offset: 2px; }
+
+  /* Ignition: „Lernen“ flickers on as the pill arrives, the book when it is learned. */
+  @keyframes ignite {
+    0% { opacity: 0.35; } 18% { opacity: 1; } 30% { opacity: 0.45; }
+    46% { opacity: 1; } 58% { opacity: 0.8; } 100% { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-theme="dark"] .learn { animation: ignite 0.3s steps(1, end) 140ms both; }
+    [data-theme="dark"] .learned .icon { animation: ignite 0.3s steps(1, end); }
+  }
 </style>
 </head>
 <body>
@@ -120,23 +152,25 @@
   </div>
   <div class="actions">
     <button class="learn" id="learn"></button>
-    <button class="dismiss" id="dismiss">
-      <svg viewBox="0 0 10 10" fill="none"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    <button class="dismiss" id="dismiss" aria-label="Schließen" title="Schließen">
+      <svg viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
     </button>
   </div>
 </div>
 
 <script>
   const I18N = {
-    de: { ask: 'Ins Wörterbuch aufnehmen?', learn: 'Lernen', done: 'Gelernt – ab jetzt automatisch korrigiert', close: 'Schließen' },
-    en: { ask: 'Add to your dictionary?', learn: 'Learn', done: 'Learned – fixed automatically from now on', close: 'Dismiss' },
+    de: { ask: 'Ins Wörterbuch aufnehmen?', learn: 'Lernen', done: 'Gelernt: ab jetzt automatisch korrigiert', close: 'Schließen' },
+    en: { ask: 'Add to your dictionary?', learn: 'Learn', done: 'Learned: fixed automatically from now on', close: 'Dismiss' },
   };
   const $ = (id) => document.getElementById(id);
+  const ARROW = '<svg width="13" height="10" viewBox="0 0 14 10" aria-hidden="true"><path d="M1.5 5h11M9 1.5 12.5 5 9 8.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   let L = I18N.de;
 
   if (window.notype) {
-    window.notype.onSetTheme((theme) => {
+    window.notype.onSetTheme((theme, gas) => {
       document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : '';
+      if (gas) document.documentElement.style.setProperty('--gas', gas);
     });
     window.notype.onSuggestData((data) => {
       L = I18N[data.lang] || I18N.de;
@@ -146,13 +180,15 @@
         if (i) pairs.append(Object.assign(document.createElement('span'), { className: 'sep', textContent: '·' }));
         pairs.append(
           Object.assign(document.createElement('span'), { className: 'heard', textContent: it.from }),
-          Object.assign(document.createElement('span'), { className: 'arrow', textContent: '→' }),
+          Object.assign(document.createElement('span'), { className: 'arrow', innerHTML: ARROW }),
           Object.assign(document.createElement('span'), { textContent: it.to }),
         );
       });
       $('sub').textContent = L.ask;
       $('learn').textContent = L.learn;
       $('dismiss').title = L.close;
+      $('dismiss').setAttribute('aria-label', L.close);
+      document.documentElement.lang = data.lang === 'en' ? 'en' : 'de';
     });
     $('pill').addEventListener('mouseenter', () => window.notype.suggestHover(true));
     $('pill').addEventListener('mouseleave', () => window.notype.suggestHover(false));

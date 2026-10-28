@@ -33,16 +33,16 @@
       tight: 'Braucht mehr VRAM als deine GPU hat',
       hw_gpu: 'Grafikkarte', hw_cpu: 'Keine NVIDIA-GPU erkannt · CPU-Modus', hw_unknown: 'Hardware wird erkannt …',
       desc: {
-        'tiny': 'Sehr schnell, Basis-Qualität – für alte Rechner und kurze Notizen.',
-        'base': 'Schnell, brauchbar für kurze Sätze – gut auf CPU-Laptops.',
-        'medium': 'Deutlich genauer, aber langsam – für Mittelklasse-GPUs.',
+        'tiny': 'Sehr schnell, Basis-Qualität. Für alte Rechner und kurze Notizen.',
+        'base': 'Schnell und brauchbar für kurze Sätze. Gut auf CPU-Laptops.',
+        'medium': 'Deutlich genauer, aber langsam. Für Mittelklasse-GPUs.',
         'small': 'Solide Allround-Wahl auf CPU und älteren GPUs.',
         'large-v2': 'Volle Größe, in manchen Sprachen weniger Halluzinationen als v3.',
-        'large-v3': 'Maximale Genauigkeit – braucht eine High-End-GPU.',
+        'large-v3': 'Maximale Genauigkeit, braucht aber eine High-End-GPU.',
         'large-v3-turbo': 'Fast Large-v3-Qualität bei einem Bruchteil der Zeit. Empfehlung für jede moderne NVIDIA-GPU.',
-        'distil-large-v3': 'Destilliertes Large v3 – sehr schnell, nur Englisch.',
-        'distil-large-v3.5': 'Neueste Distil-Version – beste schnelle Wahl für Englisch.',
-        'german-turbo': 'Auf Deutsch feinjustiert – für rein deutsche Diktate (kein Mixed-English).',
+        'distil-large-v3': 'Destilliertes Large v3: sehr schnell, nur Englisch.',
+        'distil-large-v3.5': 'Neueste Distil-Version und die beste schnelle Wahl für Englisch.',
+        'german-turbo': 'Auf Deutsch feinjustiert. Für rein deutsche Diktate (kein Mixed-English).',
       },
       dec: ',',
     },
@@ -54,25 +54,27 @@
       tight: 'Needs more VRAM than your GPU has',
       hw_gpu: 'Graphics card', hw_cpu: 'No NVIDIA GPU detected · CPU mode', hw_unknown: 'Detecting hardware …',
       desc: {
-        'tiny': 'Very fast, basic quality – old machines and quick notes.',
-        'base': 'Fast, fine for short sentences – good on CPU-only laptops.',
+        'tiny': 'Very fast, basic quality. For old machines and quick notes.',
+        'base': 'Fast and fine for short sentences. Good on CPU-only laptops.',
         'small': 'Solid all-round pick on CPU and older GPUs.',
-        'medium': 'Noticeably more accurate but slow – for mid-range GPUs.',
+        'medium': 'Noticeably more accurate, but slow. For mid-range GPUs.',
         'large-v2': 'Full size; fewer hallucinations than v3 in some languages.',
-        'large-v3': 'Maximum accuracy – needs a high-end GPU.',
+        'large-v3': 'Maximum accuracy, but needs a high-end GPU.',
         'large-v3-turbo': 'Near Large-v3 quality in a fraction of the time. Recommended for any modern NVIDIA GPU.',
-        'distil-large-v3': 'Distilled Large v3 – very fast, English only.',
-        'distil-large-v3.5': 'Latest distil release – best fast pick for English.',
-        'german-turbo': 'Fine-tuned for German – pure-German dictation (no mixed English).',
+        'distil-large-v3': 'Distilled Large v3: very fast, English only.',
+        'distil-large-v3.5': 'Latest distil release and the best fast pick for English.',
+        'german-turbo': 'Fine-tuned for German. For pure-German dictation (no mixed English).',
       },
       dec: '.',
     },
   };
 
+  // Colors come from the host page's tokens (settings.html, onboarding.html),
+  // so each design world shows its own accent. --warn is optional per host.
   const CSS = `
   .model-cards { display: flex; flex-direction: column; gap: 14px; }
   .model-cards .mgrp-title {
-    font-size: 10.5px; font-weight: 700; letter-spacing: 0.9px; text-transform: uppercase;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.9px; text-transform: uppercase;
     color: var(--fg-dim); margin: 2px 0 -4px 2px;
   }
   .model-cards .mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 10px; }
@@ -87,38 +89,42 @@
   .mcard:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
   .mcard.selected {
     border-color: var(--accent);
-    box-shadow: 0 0 0 1px var(--accent), 0 6px 18px rgba(0, 184, 148, 0.12);
+    box-shadow: 0 0 0 1px var(--accent), 0 6px 18px color-mix(in srgb, var(--accent) 12%, transparent);
   }
   .mcard.selected::after {
     content: ''; position: absolute; top: 12px; right: 12px;
     width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
-    box-shadow: 0 0 0 3px rgba(0, 184, 148, 0.18);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
   }
   .mcard-head { display: flex; align-items: center; gap: 8px; padding-right: 16px; flex-wrap: wrap; }
   .mcard-name { font-size: 13px; font-weight: 600; color: var(--fg); }
   .mbadge {
-    font-size: 9.5px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
     padding: 2px 7px; border-radius: 99px; white-space: nowrap;
   }
-  .mbadge.rec { background: rgba(0, 184, 148, 0.14); color: #059669; }
-  .mbadge.active { background: rgba(59, 130, 246, 0.14); color: #2563eb; }
+  /* Active (loaded now) is solid, Recommended a tint, Offline neutral. */
+  .mbadge.rec { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+  .mbadge.active { background: var(--accent); color: var(--save-fg, #fff); }
   .mbadge.offline { background: var(--hover-bg); color: var(--fg-muted); }
-  [data-theme="dark"] .mbadge.rec { background: rgba(0, 212, 170, 0.18); color: #34d399; }
-  [data-theme="dark"] .mbadge.active { background: rgba(96, 165, 250, 0.18); color: #93c5fd; }
-  .mcard-desc { font-size: 11.5px; line-height: 1.4; color: var(--fg-dim); }
+  .mcard-desc { font-size: 12px; line-height: 1.4; color: var(--fg-dim); }
   .mcard-meta { display: flex; flex-wrap: wrap; gap: 6px; }
   .mcard-meta span {
-    font-size: 10.5px; color: var(--fg-muted);
+    font-size: 11.5px; color: var(--fg-muted);
     background: var(--hover-bg); border-radius: 6px; padding: 2px 7px;
   }
-  .mcard-meta span.tight { color: #d97706; }
-  [data-theme="dark"] .mcard-meta span.tight { color: #fbbf24; }
-  .mcard-rating { display: flex; align-items: center; gap: 14px; font-size: 10.5px; color: var(--fg-dim); }
+  .mcard-meta span.tight { color: var(--warn, #8f5418); }
+  [data-theme="dark"] .mcard-meta span.tight { color: var(--warn, #fbbf24); }
+  .mcard-rating { display: flex; align-items: center; gap: 14px; font-size: 11.5px; color: var(--fg-dim); }
   .mcard-rating .rt { display: inline-flex; align-items: center; gap: 5px; }
   .mcard-rating .dots { display: inline-flex; gap: 3px; }
   .mcard-rating .dots b { width: 6px; height: 6px; border-radius: 50%; background: var(--toggle-off); }
   .mcard-rating .dots b.on { background: var(--accent); }
-  .mcard-note { font-size: 10.5px; color: var(--fg-dim); }
+  .mcard-note { font-size: 11.5px; color: var(--fg-dim); }
+  /* Settings stacks the cards on two translucent layers; plain --fg-dim lands
+     at 4.3:1 there, so dark lifts it a step toward --fg-muted. */
+  [data-theme="dark"] .mcard-desc, [data-theme="dark"] .mcard-rating, [data-theme="dark"] .mcard-note {
+    color: color-mix(in srgb, var(--fg-dim) 75%, var(--fg-muted));
+  }
   .hw-badge {
     font-size: 11px; color: var(--fg-muted); white-space: nowrap; flex-shrink: 0;
     background: var(--hover-bg); border-radius: 8px; padding: 5px 10px;

@@ -3,11 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NoType – Einrichtung</title>
+<title>NoType · Einrichtung</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
+  /* Quicksand (OFL), display type of the Dark world. */
+  @font-face {
+    font-family: 'Quicksand'; font-style: normal; font-weight: 500 700; font-display: swap;
+    src: url('assets/fonts/quicksand-latin-ext.woff2') format('woff2');
+    unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  @font-face {
+    font-family: 'Quicksand'; font-style: normal; font-weight: 500 700; font-display: swap;
+    src: url('assets/fonts/quicksand-latin.woff2') format('woff2');
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+
   :root {
+    --gas: #00d4aa;   /* the overlay colour; main.js sends the user's pick */
     --bg: #f3f0e6;
     --fg: #262b1f;
     --fg-muted: #383e2f;
@@ -28,30 +41,41 @@
     --bar-track: rgba(70, 82, 48, 0.12);
     --meter: linear-gradient(90deg, #6b7f45, #93ab78);
     --ok-text: #46552c;
+    --warn: #8f5418;
+    --danger: #a63d24;
     --shadow: rgba(32, 36, 24, 0.22);
   }
+  /* Dark: Neon-Werkstatt. A flat soot wall; what is on glows like a tube in
+     the overlay's gas colour, what is off is cold, pale glass. */
   [data-theme="dark"] {
-    --bg: rgba(28, 28, 30, 0.0);
-    --fg: #f5f5f5;
-    --fg-muted: #d4d4d4;
-    --fg-dim: #999999;
-    --accent: #00d4aa;
-    --card-bg: rgba(255, 255, 255, 0.04);
-    --card-border: rgba(255, 255, 255, 0.08);
-    --input-bg: rgba(255, 255, 255, 0.06);
-    --input-border: rgba(255, 255, 255, 0.12);
-    --input-border-hover: rgba(255, 255, 255, 0.30);
-    --input-focus: #ffffff;
-    --hover-bg: rgba(255, 255, 255, 0.08);
-    --toggle-off: rgba(255, 255, 255, 0.15);
-    --toggle-knob: #ffffff;
-    --save-bg: #00d4aa;
-    --save-bg-hover: #1fdcb4;
-    --save-fg: #062018;
-    --bar-track: rgba(255, 255, 255, 0.10);
-    --meter: linear-gradient(90deg, #22c55e, #4ade80);
-    --ok-text: #34d399;
+    --bg: #0f0e0d;
+    --fg: #f1ebe1;
+    --fg-muted: #d6cec1;
+    --fg-dim: #a39a8c;
+    --accent: var(--gas);
+    --card-bg: #171513;
+    --card-border: rgba(241, 235, 225, 0.08);
+    --input-bg: #1d1a17;
+    --input-border: rgba(241, 235, 225, 0.14);
+    --input-border-hover: rgba(241, 235, 225, 0.30);
+    --input-focus: var(--gas);
+    --hover-bg: rgba(241, 235, 225, 0.06);
+    --toggle-off: rgba(241, 235, 225, 0.16);
+    --toggle-knob: var(--core);
+    --save-bg: transparent;
+    --save-bg-hover: transparent;
+    --save-fg: var(--core);
+    --bar-track: rgba(241, 235, 225, 0.08);
+    --meter: var(--core);
+    --ok-text: #4ade80;
+    --warn: #ffb547;
+    --danger: #ff6b5e;
     --shadow: rgba(0,0,0,0.4);
+    --glass: rgba(241, 235, 225, 0.42);
+    --core: color-mix(in srgb, var(--gas) 45%, #fff);
+    --halo: 0 0 2px color-mix(in srgb, var(--gas) 90%, transparent), 0 0 9px color-mix(in srgb, var(--gas) 55%, transparent), 0 0 22px color-mix(in srgb, var(--gas) 22%, transparent);
+    --halo-text: 0 0 6px color-mix(in srgb, var(--gas) 70%, transparent),
+                 0 0 16px color-mix(in srgb, var(--gas) 30%, transparent);
   }
 
   body {
@@ -115,18 +139,18 @@
   .field:last-child { border-bottom: none; }
   .field > div:first-child { flex: 1 1 auto; min-width: 0; }
   .field-label { font-size: 13px; font-weight: 500; color: var(--fg-muted); }
-  .field-desc { font-size: 11px; color: var(--fg-dim); margin-top: 2px; overflow-wrap: anywhere; }
+  .field-desc { font-size: 12px; color: var(--fg-dim); margin-top: 2px; overflow-wrap: anywhere; }
   select {
     appearance: none; background-color: var(--input-bg);
     border: 1px solid var(--input-border); border-radius: 8px;
     padding: 8px 32px 8px 12px; font-size: 13px; font-family: inherit;
     color: var(--fg); cursor: pointer; outline: none; width: 300px; max-width: 100%;
     text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
-    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23999' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%235f6652' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
     background-repeat: no-repeat; background-position: right 12px center;
   }
   select:hover { border-color: var(--input-border-hover); }
-  [data-theme="dark"] select option { background: #1f1f1f; color: #f5f5f5; }
+  [data-theme="dark"] select option { background: #1d1a17; color: #f1ebe1; }
   .btn-sm {
     padding: 8px 14px; border: 1px solid var(--input-border); background: var(--input-bg);
     border-radius: 8px; font-size: 12px; font-family: inherit; cursor: pointer;
@@ -149,7 +173,7 @@
   /* ── Mic ── */
   .meter { background: var(--bar-track); border-radius: 6px; height: 10px; overflow: hidden; }
   .meter > div { height: 100%; width: 0%; background: var(--meter); border-radius: 6px; transition: width 0.08s ease-out; }
-  .meter.err > div { background: #ef4444; }
+  .meter.err > div { background: var(--danger); }
 
   /* ── Hotkey ── */
   .hotkey-display { display: flex; align-items: center; gap: 8px; flex-shrink: 1; min-width: 0; }
@@ -160,11 +184,16 @@
     font-size: 12px; color: var(--fg-dim);
     white-space: nowrap; overflow: hidden;
   }
-  .hotkey-value.recording { border-color: #ef4444; color: #ef4444; padding: 0 10px; animation: hotkey-pulse 1s infinite; }
+  /* Waiting for a combo: accent, not red (nothing is wrong yet). */
+  .hotkey-value.recording { border-color: var(--accent); color: var(--accent); padding: 0 10px; animation: hotkey-pulse 1.2s infinite; }
   @keyframes hotkey-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.2); }
-    50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1); }
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 22%, transparent); }
+    50% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent); }
   }
+  @media (prefers-reduced-motion: reduce) { .hotkey-value.recording { animation: none; } }
+  /* The row's description carries the capture hints. */
+  .field-desc.hint { color: var(--accent); }
+  .field-desc.warn { color: var(--warn); }
   .mode-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .mode-card {
     border: 1px solid var(--input-border); background: var(--input-bg); border-radius: 12px;
@@ -179,7 +208,7 @@
     background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
   }
   .mode-card b { font-size: 13px; font-weight: 600; padding-right: 16px; }
-  .mode-card span { font-size: 11.5px; color: var(--fg-dim); line-height: 1.45; }
+  .mode-card span { font-size: 12px; color: var(--fg-dim); line-height: 1.45; }
 
   /* ── Test ── */
   .status-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -188,11 +217,11 @@
     padding: 6px 12px; border-radius: 99px; background: var(--hover-bg); color: var(--fg-muted);
   }
   .status-pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--fg-dim); flex: 0 0 auto; }
-  .status-pill.loading i { background: #d97706; animation: blink 1s infinite; }
-  .status-pill.ready i { background: #22c55e; }
-  .status-pill.recording i { background: #ef4444; animation: blink 0.8s infinite; }
-  .status-pill.processing i { background: #3b82f6; animation: blink 0.6s infinite; }
-  .status-pill.done i { background: #22c55e; }
+  .status-pill.loading i { background: var(--warn); animation: blink 1s infinite; }
+  .status-pill.ready i { background: var(--accent); }
+  .status-pill.recording i { background: var(--danger); animation: blink 0.8s infinite; }
+  .status-pill.processing i { background: var(--accent); animation: blink 0.6s infinite; }
+  .status-pill.done i { background: var(--accent); }
   @keyframes blink { 50% { opacity: 0.3; } }
   textarea {
     width: 100%; min-height: 128px; resize: none; font: inherit; font-size: 14px; line-height: 1.5;
@@ -201,6 +230,7 @@
     transition: border-color 0.15s, box-shadow 0.15s;
   }
   textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  textarea::placeholder { color: var(--fg-dim); }
   kbd {
     display: inline-block; min-width: 26px; padding: 5px 8px;
     font-family: inherit; font-size: 12px; font-weight: 600; line-height: 1;
@@ -240,12 +270,124 @@
   .toggle input:checked + .slider { background: var(--accent); }
   .toggle input:checked + .slider::before { transform: translateX(20px); }
   .toggle input:focus-visible + .slider { box-shadow: 0 0 0 2px var(--card-bg), 0 0 0 4px var(--accent); }
+
+  /* ── Dark: lit tubes and unlit glass ── */
+  [data-theme="dark"] .titlebar h1,
+  [data-theme="dark"] h2 { font-family: 'Quicksand', -apple-system, 'Segoe UI', system-ui, sans-serif; }
+  [data-theme="dark"] .titlebar h1 { font-size: 16px; letter-spacing: 0.2px; }
+  [data-theme="dark"] .titlebar h1 .lit { color: var(--core); text-shadow: var(--halo); }
+  [data-theme="dark"] h2 { font-size: 26px; font-weight: 600; letter-spacing: -0.3px; }
+  [data-theme="dark"] button:focus-visible { outline: 2px solid var(--gas); outline-offset: 2px; }
+
+  /* Progress and dots: the lit length is how far along the setup is. */
+  [data-theme="dark"] .progress > div { background: var(--core); box-shadow: var(--halo); }
+  [data-theme="dark"] .steps-nav i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--glass); }
+  [data-theme="dark"] .steps-nav i.done { background: color-mix(in srgb, var(--gas) 55%, transparent); box-shadow: none; opacity: 1; }
+  [data-theme="dark"] .steps-nav i.on { background: var(--core); box-shadow: var(--halo); }
+
+  [data-theme="dark"] .btn { background: transparent; border: 1.5px solid var(--input-border); color: var(--fg-muted); }
+  [data-theme="dark"] .btn:hover { background: transparent; border-color: var(--input-border-hover); color: var(--fg); }
+  /* The way on is glass until the step is done (mic heard, no capture
+     running, test dictated), then it lights, like Speichern in settings. */
+  [data-theme="dark"] .btn.primary { border-color: var(--glass); color: var(--fg); }
+  [data-theme="dark"] .btn.primary.ready {
+    border-color: var(--gas); color: var(--core); text-shadow: var(--halo-text);
+    box-shadow: var(--halo), inset 0 0 10px color-mix(in srgb, var(--gas) 20%, transparent);
+  }
+  [data-theme="dark"] .btn.primary.ready:hover:not(:disabled) {
+    box-shadow: var(--halo), inset 0 0 14px color-mix(in srgb, var(--gas) 32%, transparent);
+  }
+  [data-theme="dark"] .btn:disabled { opacity: 1; border-color: var(--input-border); color: var(--fg-dim); text-shadow: none; box-shadow: none; }
+  [data-theme="dark"] .btn-sm { background: transparent; }
+  [data-theme="dark"] .btn-sm:hover { border-color: var(--input-border-hover); background: transparent; color: var(--fg); }
+  [data-theme="dark"] select { background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23a39a8c' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E"); }
+  [data-theme="dark"] select:focus-visible { border-color: var(--gas); box-shadow: var(--halo); }
+
+  [data-theme="dark"] .hero img { box-shadow: none; }
+  [data-theme="dark"] .privacy svg { stroke: var(--fg-dim); }
+  [data-theme="dark"] .seg { background: transparent; }
+  [data-theme="dark"] .seg button:hover { color: var(--fg); }
+  [data-theme="dark"] .seg button.on {
+    background: transparent; color: var(--core); text-shadow: var(--halo-text);
+    box-shadow: inset 0 0 0 1.5px var(--gas), var(--halo);
+  }
+
+  /* The mic level is a tube: its lit length is the level. drop-shadow, not
+     box-shadow, so silence leaves no glowing stub. */
+  [data-theme="dark"] .meter { background: transparent; box-shadow: inset 0 0 0 1.5px var(--glass); }
+  [data-theme="dark"] .meter > div {
+    filter: drop-shadow(0 0 2px color-mix(in srgb, var(--gas) 90%, transparent)) drop-shadow(0 0 5px color-mix(in srgb, var(--gas) 55%, transparent));
+  }
+  /* A mic that can't be opened is a cracked tube: dashed red, no glow. */
+  [data-theme="dark"] .meter.err { box-shadow: none; border: 1.5px dashed var(--danger); }
+  [data-theme="dark"] .meter.err > div { display: none; }
+
+  [data-theme="dark"] .hotkey-value.recording {
+    border: 1.5px solid var(--gas); color: var(--core); text-shadow: var(--halo-text);
+    box-shadow: var(--halo), inset 0 0 10px color-mix(in srgb, var(--gas) 18%, transparent);
+    animation: none;
+  }
+  [data-theme="dark"] .field-desc.hint { color: var(--core); text-shadow: 0 0 8px color-mix(in srgb, var(--gas) 35%, transparent); }
+  [data-theme="dark"] kbd { background: transparent; border-color: var(--glass); box-shadow: none; }
+
+  /* Options are glass until picked; the picked one lights in place. */
+  [data-theme="dark"] .mode-card,
+  [data-theme="dark"] .mcard { background: transparent; border-width: 1.5px; }
+  [data-theme="dark"] .mode-card.selected,
+  [data-theme="dark"] .mcard.selected { border-color: transparent; box-shadow: none; }
+  [data-theme="dark"] .mode-card.selected::before,
+  [data-theme="dark"] .mcard.selected::before {
+    content: ''; position: absolute; inset: -1.5px; border-radius: inherit; pointer-events: none;
+    border: 1.5px solid var(--gas);
+    box-shadow: var(--halo), inset 0 0 14px color-mix(in srgb, var(--gas) 14%, transparent);
+  }
+  [data-theme="dark"] .mode-card.selected::after,
+  [data-theme="dark"] .mcard.selected::after { background: var(--core); box-shadow: var(--halo); }
+  [data-theme="dark"] .mode-card:focus-visible,
+  [data-theme="dark"] .mcard:focus-visible { box-shadow: none; outline: 2px solid var(--gas); outline-offset: 3px; }
+  [data-theme="dark"] .mbadge.rec { background: transparent; color: var(--fg-muted); box-shadow: inset 0 0 0 1px var(--glass); }
+  [data-theme="dark"] .mbadge.active {
+    background: transparent; color: var(--core); text-shadow: var(--halo-text);
+    box-shadow: inset 0 0 0 1px var(--gas), 0 0 8px color-mix(in srgb, var(--gas) 40%, transparent);
+  }
+
+  [data-theme="dark"] .status-pill { background: transparent; box-shadow: inset 0 0 0 1px var(--input-border); }
+  [data-theme="dark"] .status-pill.loading i { background: var(--warn); }
+  [data-theme="dark"] .status-pill.ready i,
+  [data-theme="dark"] .status-pill.done i { background: var(--ok-text); }
+  [data-theme="dark"] .status-pill.recording i { background: var(--danger); }
+  [data-theme="dark"] .status-pill.processing i { background: var(--core); box-shadow: var(--halo); }
+  [data-theme="dark"] textarea:focus { border-color: var(--gas); box-shadow: var(--halo); }
+
+  /* Toggle: off is a hollow glass ring, on is a lit tube with a white-hot knob. */
+  [data-theme="dark"] .toggle input + .slider { background: transparent; box-shadow: inset 0 0 0 1.5px var(--glass); }
+  [data-theme="dark"] .toggle input + .slider::before { background: transparent; box-shadow: inset 0 0 0 1.5px var(--glass); }
+  [data-theme="dark"] .toggle input:checked + .slider {
+    box-shadow: inset 0 0 0 1.5px var(--gas), inset 0 0 8px color-mix(in srgb, var(--gas) 25%, transparent), var(--halo);
+  }
+  [data-theme="dark"] .toggle input:checked + .slider::before { background: var(--core); box-shadow: var(--halo); }
+  [data-theme="dark"] .toggle input:focus-visible + .slider { outline: 2px solid var(--gas); outline-offset: 3px; }
+
+  /* Ignition: a tube the user just lit flickers on once. */
+  @keyframes ignite {
+    0% { opacity: 0.35; } 18% { opacity: 1; } 30% { opacity: 0.45; }
+    46% { opacity: 1; } 58% { opacity: 0.8; } 100% { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-theme="dark"] .hotkey-value.recording,
+    [data-theme="dark"] .steps-nav i.ignite,
+    [data-theme="dark"] .seg button.ignite,
+    [data-theme="dark"] .btn.primary.ready.ignite,
+    [data-theme="dark"] .ignite.selected::before,
+    [data-theme="dark"] .ignite.selected::after,
+    [data-theme="dark"] .toggle input.ignite + .slider { animation: ignite 0.3s steps(1, end); }
+  }
 </style>
 </head>
 <body>
 
 <div class="titlebar">
-  <h1>NoType</h1>
+  <h1>No<span class="lit">Type</span></h1>
   <button class="skip" id="skipBtn" data-i18n="skip">Überspringen</button>
 </div>
 <div class="progress"><div id="progressBar" style="width: 16%"></div></div>
@@ -258,13 +400,13 @@
     <div class="hero">
       <img src="assets/icon.png" alt="">
       <h2 data-i18n="w.title">Willkommen bei NoType</h2>
-      <p class="lead" data-i18n="w.lead">Diktieren statt tippen – in jeder App. Die Spracherkennung läuft komplett auf deinem PC.</p>
-      <div class="seg" id="langSeg">
-        <button data-lang="de" class="on">Deutsch</button>
-        <button data-lang="en">English</button>
+      <p class="lead" data-i18n="w.lead">Diktieren statt tippen, in jeder App. Die Spracherkennung läuft komplett auf deinem PC.</p>
+      <div class="seg" id="langSeg" role="group" data-i18n-aria="w.lang" aria-label="Sprache">
+        <button data-lang="de" class="on" aria-pressed="true" lang="de">Deutsch</button>
+        <button data-lang="en" aria-pressed="false" lang="en">English</button>
       </div>
       <div class="privacy">
-        <svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
         <span data-i18n="w.privacy">Kein Cloud-Dienst, kein Konto. Audio und Text verlassen deinen Rechner nie.</span>
       </div>
     </div>
@@ -273,7 +415,7 @@
   <!-- 1 · Microphone -->
   <section class="step" data-step="1">
     <h2 data-i18n="m.title">Mikrofon</h2>
-    <p class="lead" data-i18n="m.lead">Wähle das Mikrofon, mit dem du diktieren willst, und sprich kurz – der Balken sollte ausschlagen.</p>
+    <p class="lead" data-i18n="m.lead">Wähle das Mikrofon, mit dem du diktieren willst, und sprich kurz. Der Balken sollte ausschlagen.</p>
     <div class="card">
       <div class="field">
         <div>
@@ -293,12 +435,12 @@
   <!-- 2 · Hotkey & mode -->
   <section class="step" data-step="2">
     <h2 data-i18n="h.title">Hotkey &amp; Modus</h2>
-    <p class="lead" data-i18n="h.lead">Mit dieser Tastenkombination startest du ein Diktat – egal in welcher App du gerade bist.</p>
+    <p class="lead" data-i18n="h.lead">Mit dieser Tastenkombination startest du ein Diktat, egal in welcher App du gerade bist.</p>
     <div class="card">
       <div class="field">
         <div>
           <div class="field-label" data-i18n="h.combo">Tastenkombination</div>
-          <div class="field-desc" data-i18n="h.combo.desc">„Ändern" drücken, dann die gewünschte Kombination.</div>
+          <div class="field-desc" id="hotkeyDesc" aria-live="polite" data-i18n="h.combo.desc">„Ändern“ drücken, dann die gewünschte Kombination.</div>
         </div>
         <div class="hotkey-display">
           <div class="hotkey-value" id="hotkeyValue"></div>
@@ -309,7 +451,7 @@
     <div class="mode-cards">
       <div class="mode-card selected" data-mode="hold_to_speak" tabindex="0">
         <b data-i18n="h.hold">Halten zum Sprechen</b>
-        <span data-i18n="h.hold.desc">Taste gedrückt halten, sprechen, loslassen – der Text erscheint. Empfohlen.</span>
+        <span data-i18n="h.hold.desc">Taste gedrückt halten und sprechen. Beim Loslassen erscheint der Text. Empfohlen.</span>
       </div>
       <div class="mode-card" data-mode="press_to_speak" tabindex="0">
         <b data-i18n="h.press">Drücken für Start/Stopp</b>
@@ -328,7 +470,7 @@
       <span class="hw-badge" id="hwBadge" style="margin-top: 6px;"></span>
     </div>
     <div id="modelCards"></div>
-    <p class="field-desc" data-i18n="mo.note">Das Modell wird beim ersten Laden einmalig heruntergeladen – danach läuft alles offline.</p>
+    <p class="field-desc" data-i18n="mo.note">Das Modell wird beim ersten Laden einmalig heruntergeladen. Danach läuft alles offline.</p>
   </section>
 
   <!-- 4 · Test -->
@@ -342,7 +484,7 @@
       </div>
       <textarea id="testArea" data-i18n-placeholder="t.placeholder" placeholder="Klick hier rein und sprich …"></textarea>
       <div class="success-box" id="successBox">
-        <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
         <span data-i18n="t.success">Perfekt! Genau so funktioniert NoType überall, wo du tippen kannst.</span>
       </div>
     </div>
@@ -351,7 +493,7 @@
   <!-- 5 · Done -->
   <section class="step" data-step="5">
     <h2 data-i18n="d.title">Fertig!</h2>
-    <p class="lead" data-i18n="d.lead">NoType läuft ab jetzt im Hintergrund – du findest es unten rechts im Tray.</p>
+    <p class="lead" data-i18n="d.lead">NoType läuft ab jetzt im Hintergrund. Du findest es unten rechts im Tray.</p>
     <div class="card summary">
       <div><span data-i18n="d.mic">Mikrofon</span><span id="sumMic"></span></div>
       <div><span data-i18n="d.hotkey">Hotkey</span><span id="sumHotkey"></span></div>
@@ -361,13 +503,13 @@
     <div class="card solo">
       <div class="field">
         <div>
-          <div class="field-label" data-i18n="d.autostart">Mit Windows starten</div>
-          <div class="field-desc" data-i18n="d.autostart.desc">Nach jedem Neustart sofort bereit, ohne NoType selbst zu öffnen. Lässt sich in den Einstellungen jederzeit ändern.</div>
+          <div class="field-label" id="autostartLabel" data-i18n="d.autostart">Mit Windows starten</div>
+          <div class="field-desc" id="autostartDesc" data-i18n="d.autostart.desc">Nach jedem Neustart sofort bereit, ohne NoType selbst zu öffnen. Lässt sich in den Einstellungen jederzeit ändern.</div>
         </div>
-        <label class="toggle"><input type="checkbox" id="autostartToggle" checked><span class="slider"></span></label>
+        <label class="toggle"><input type="checkbox" id="autostartToggle" checked aria-labelledby="autostartLabel" aria-describedby="autostartDesc"><span class="slider"></span></label>
       </div>
     </div>
-    <p class="tips" data-i18n="d.tips">Tipp: Im Overlay-Tab der Einstellungen wählst du das Aussehen der Aufnahme-Anzeige, unter „Eigene Begriffe" hinterlegst du Namen und Fachwörter, damit sie richtig geschrieben werden.</p>
+    <p class="tips" data-i18n="d.tips">Tipp: Im Overlay-Tab der Einstellungen wählst du das Aussehen der Aufnahme-Anzeige, unter „Eigene Begriffe“ hinterlegst du Namen und Fachwörter, damit sie richtig geschrieben werden.</p>
   </section>
 
 </div>
@@ -385,31 +527,50 @@
 <script>
   const $ = (id) => document.getElementById(id);
 
+  // Dark world: a tube the user just lit flickers on once (the CSS runs it
+  // only in Dark and without reduced motion).
+  function ignite(el) {
+    if (!el) return;
+    el.classList.remove('ignite');
+    void el.offsetWidth;
+    el.classList.add('ignite');
+    clearTimeout(el.igniteTimer);
+    el.igniteTimer = setTimeout(() => el.classList.remove('ignite'), 400);
+  }
+
   // ── i18n ──
   const I18N = {
     de: {
       'skip': 'Überspringen', 'back': 'Zurück', 'next': 'Weiter', 'start': 'Los geht\'s', 'finish': 'Fertig',
       'w.title': 'Willkommen bei NoType',
-      'w.lead': 'Diktieren statt tippen – in jeder App. Die Spracherkennung läuft komplett auf deinem PC.',
+      'w.lead': 'Diktieren statt tippen, in jeder App. Die Spracherkennung läuft komplett auf deinem PC.',
       'w.privacy': 'Kein Cloud-Dienst, kein Konto. Audio und Text verlassen deinen Rechner nie.',
+      'w.lang': 'Sprache',
       'm.title': 'Mikrofon',
-      'm.lead': 'Wähle das Mikrofon, mit dem du diktieren willst, und sprich kurz – der Balken sollte ausschlagen.',
+      'm.lead': 'Wähle das Mikrofon, mit dem du diktieren willst, und sprich kurz. Der Balken sollte ausschlagen.',
       'm.device': 'Eingabegerät', 'm.device.desc': 'Headset-Mikrofone liefern die beste Erkennung',
       'm.default': 'Standard (System)', 'm.defaulttag': ' (Standard)', 'm.level': 'Pegel',
       'm.missing': ' (nicht verbunden)',
-      'm.hint': 'Sag ein paar Worte …', 'm.ok': 'Klingt gut – dein Mikrofon funktioniert.',
+      'm.hint': 'Sag ein paar Worte …', 'm.ok': 'Klingt gut. Dein Mikrofon funktioniert.',
       'm.error': 'Kein Zugriff auf das Mikrofon. Prüfe die Windows-Datenschutzeinstellungen für Mikrofone.',
       'h.title': 'Hotkey & Modus',
-      'h.lead': 'Mit dieser Tastenkombination startest du ein Diktat – egal in welcher App du gerade bist.',
-      'h.combo': 'Tastenkombination', 'h.combo.desc': '„Ändern" drücken, dann die gewünschte Kombination.',
-      'h.change': 'Ändern', 'h.waiting': 'Warte auf Eingabe …',
+      'h.lead': 'Mit dieser Tastenkombination startest du ein Diktat, egal in welcher App du gerade bist.',
+      'h.combo': 'Tastenkombination', 'h.combo.desc': '„Ändern“ drücken, dann die gewünschte Kombination.',
+      'h.change': 'Ändern', 'h.cancel': 'Abbrechen', 'h.waiting': 'Warte auf Eingabe …',
+      'h.capture': 'Drück jetzt die Kombination. Esc bricht ab.',
+      'h.needkey': 'Fehlt noch eine Taste, z. B. Leertaste oder ein Buchstabe.',
+      'h.needmod': 'Nimm eine Zusatztaste dazu: Strg, Alt, Umschalt oder Win.',
+      'h.onekey': 'Nur eine Taste neben Strg, Alt, Umschalt und Win.',
+      'h.badkey': '{key} geht nicht als Hotkey. Nimm eine andere Taste.',
+      'h.same.cmd': 'Diese Kombination nutzt schon der Befehlsmodus.',
+      'h.same.agent': 'Diese Kombination nutzt schon der Agent-Hotkey.',
       'h.hold': 'Halten zum Sprechen',
-      'h.hold.desc': 'Taste gedrückt halten, sprechen, loslassen – der Text erscheint. Empfohlen.',
+      'h.hold.desc': 'Taste gedrückt halten und sprechen. Beim Loslassen erscheint der Text. Empfohlen.',
       'h.press': 'Drücken für Start/Stopp',
       'h.press.desc': 'Einmal drücken: Aufnahme läuft. Nochmal drücken: fertig. Für längere Texte.',
       'mo.title': 'Modell',
       'mo.lead': 'Das Erkennungsmodell bestimmt Tempo und Genauigkeit. Für deine Hardware ist eines vorausgewählt.',
-      'mo.note': 'Das Modell wird beim ersten Laden einmalig heruntergeladen – danach läuft alles offline.',
+      'mo.note': 'Das Modell wird beim ersten Laden einmalig heruntergeladen. Danach läuft alles offline.',
       't.title': 'Probediktat',
       't.lead.hold': 'Klick in das Feld, halte {hotkey} gedrückt und sprich einen Satz. Beim Loslassen erscheint der Text. {esc} bricht ab.',
       't.lead.press': 'Klick in das Feld, drücke {hotkey}, sprich einen Satz und drücke die Kombination erneut. {esc} bricht ab.',
@@ -419,38 +580,46 @@
       's.processing': 'Wird verarbeitet', 's.done': 'Text eingefügt',
       's.loading.detail': 'Beim ersten Mal kann das ein paar Minuten dauern (Download).',
       's.ready.detail': 'Halte {hotkey} und sprich.', 's.ready.detail.press': 'Drücke {hotkey} und sprich.',
-      's.short': 'Zu kurz – halte die Taste, während du sprichst.',
+      's.short': 'Zu kurz. Halte die Taste, während du sprichst.',
       'd.title': 'Fertig!',
-      'd.lead': 'NoType läuft ab jetzt im Hintergrund – du findest es unten rechts im Tray.',
+      'd.lead': 'NoType läuft ab jetzt im Hintergrund. Du findest es unten rechts im Tray.',
       'd.mic': 'Mikrofon', 'd.hotkey': 'Hotkey', 'd.mode': 'Modus', 'd.model': 'Modell',
       'd.settings': 'Einstellungen öffnen',
       'd.autostart': 'Mit Windows starten',
       'd.autostart.desc': 'Nach jedem Neustart sofort bereit, ohne NoType selbst zu öffnen. Lässt sich in den Einstellungen jederzeit ändern.',
-      'd.tips': 'Tipp: Im Overlay-Tab der Einstellungen wählst du das Aussehen der Aufnahme-Anzeige, unter „Eigene Begriffe" hinterlegst du Namen und Fachwörter, damit sie richtig geschrieben werden.',
+      'd.tips': 'Tipp: Im Overlay-Tab der Einstellungen wählst du das Aussehen der Aufnahme-Anzeige, unter „Eigene Begriffe“ hinterlegst du Namen und Fachwörter, damit sie richtig geschrieben werden.',
     },
     en: {
       'skip': 'Skip', 'back': 'Back', 'next': 'Next', 'start': 'Let\'s go', 'finish': 'Done',
       'w.title': 'Welcome to NoType',
-      'w.lead': 'Dictate instead of typing – in any app. Speech recognition runs entirely on your PC.',
+      'w.lead': 'Dictate instead of typing, in any app. Speech recognition runs entirely on your PC.',
       'w.privacy': 'No cloud service, no account. Audio and text never leave your machine.',
+      'w.lang': 'Language',
       'm.title': 'Microphone',
-      'm.lead': 'Pick the microphone you want to dictate with and say a few words – the bar should move.',
+      'm.lead': 'Pick the microphone you want to dictate with and say a few words. The bar should move.',
       'm.device': 'Input device', 'm.device.desc': 'Headset microphones give the best recognition',
       'm.default': 'Default (system)', 'm.defaulttag': ' (default)', 'm.level': 'Level',
       'm.missing': ' (not connected)',
-      'm.hint': 'Say a few words …', 'm.ok': 'Sounds good – your microphone works.',
+      'm.hint': 'Say a few words …', 'm.ok': 'Sounds good. Your microphone works.',
       'm.error': 'No access to the microphone. Check the Windows privacy settings for microphones.',
       'h.title': 'Hotkey & mode',
-      'h.lead': 'This key combination starts a dictation – no matter which app you are in.',
+      'h.lead': 'This key combination starts a dictation, no matter which app you are in.',
       'h.combo': 'Key combination', 'h.combo.desc': 'Press "Change", then your combination.',
-      'h.change': 'Change', 'h.waiting': 'Waiting for input …',
+      'h.change': 'Change', 'h.cancel': 'Cancel', 'h.waiting': 'Waiting for input …',
+      'h.capture': 'Press the combination now. Esc cancels.',
+      'h.needkey': 'One more key needed, like Space or a letter.',
+      'h.needmod': 'Add a modifier: Ctrl, Alt, Shift or Win.',
+      'h.onekey': 'Only one key besides Ctrl, Alt, Shift and Win.',
+      'h.badkey': '{key} can\'t be part of a hotkey. Pick another key.',
+      'h.same.cmd': 'Command mode already uses this combination.',
+      'h.same.agent': 'The agent hotkey already uses this combination.',
       'h.hold': 'Hold to speak',
-      'h.hold.desc': 'Hold the key, speak, release – the text appears. Recommended.',
+      'h.hold.desc': 'Hold the key and speak. The text appears when you let go. Recommended.',
       'h.press': 'Press to start/stop',
       'h.press.desc': 'Press once: recording. Press again: done. For longer texts.',
       'mo.title': 'Model',
       'mo.lead': 'The recognition model sets speed and accuracy. One is preselected for your hardware.',
-      'mo.note': 'The model is downloaded once on first load – after that everything runs offline.',
+      'mo.note': 'The model is downloaded once on first load. After that, everything runs offline.',
       't.title': 'Test dictation',
       't.lead.hold': 'Click into the field, hold {hotkey} and say a sentence. The text appears when you release. {esc} cancels.',
       't.lead.press': 'Click into the field, press {hotkey}, say a sentence and press the combination again. {esc} cancels.',
@@ -460,9 +629,9 @@
       's.processing': 'Processing', 's.done': 'Text inserted',
       's.loading.detail': 'The first time can take a few minutes (download).',
       's.ready.detail': 'Hold {hotkey} and speak.', 's.ready.detail.press': 'Press {hotkey} and speak.',
-      's.short': 'Too short – keep holding the key while you speak.',
+      's.short': 'Too short. Keep holding the key while you speak.',
       'd.title': 'All set!',
-      'd.lead': 'NoType now runs in the background – find it in the tray at the bottom right.',
+      'd.lead': 'NoType now runs in the background. Find it in the tray at the bottom right.',
       'd.mic': 'Microphone', 'd.hotkey': 'Hotkey', 'd.mode': 'Mode', 'd.model': 'Model',
       'd.settings': 'Open settings',
       'd.autostart': 'Start with Windows',
@@ -476,7 +645,8 @@
     document.documentElement.lang = uiLang;
     document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
-    if (!recordingHotkey) renderHotkeyBox();
+    document.querySelectorAll('[data-i18n-aria]').forEach(el => { el.setAttribute('aria-label', t(el.dataset.i18nAria)); });
+    if (!capture) renderHotkeyBox();
     renderTestLead();
     renderModels();
     renderDevices();
@@ -519,10 +689,27 @@
     $('nextBtn').textContent = step === 0 ? t('start') : step === STEPS - 1 ? t('finish') : t('next');
     $('settingsBtn').style.display = step === STEPS - 1 ? '' : 'none';
     $('skipBtn').style.visibility = step === STEPS - 1 ? 'hidden' : 'visible';
+    updateReady();
+  }
+
+  // Dark world: the next button lights once the step is done. It works
+  // either way; the light only says "this step is set".
+  function stepReady() {
+    if (capture) return false;
+    if (step === 1) return meterPeak > 18;
+    if (step === 4) return testState === 'done';
+    return true;
+  }
+  function updateReady() {
+    const btn = $('nextBtn'), ready = stepReady();
+    if (ready && !btn.classList.contains('ready')) ignite(btn);
+    btn.classList.toggle('ready', ready);
   }
 
   function showStep(n) {
     if (step === 1 && n !== 1) stopMeter();
+    if (capture) cancelHotkeyCapture();
+    const prev = step;
     step = Math.max(0, Math.min(STEPS - 1, n));
     document.querySelectorAll('.step').forEach(s => s.classList.toggle('active', Number(s.dataset.step) === step));
     $('progressBar').style.width = ((step + 1) / STEPS * 100) + '%';
@@ -530,6 +717,7 @@
       dot.classList.toggle('on', i === step);
       dot.classList.toggle('done', i < step);
     });
+    if (step !== prev) ignite($('stepsNav').children[step]);
     updateNavButtons();
     document.querySelector('.content').scrollTop = 0;
     if (step === 1) startMeter();
@@ -555,6 +743,7 @@
 
   function finish() {
     stopMeter();
+    if (capture) cancelHotkeyCapture();
     save({ first_run_complete: true });
     window.notype.closeOnboarding();
   }
@@ -569,12 +758,20 @@
   $('settingsBtn').onclick = () => { commitStep(step); window.notype.openSettings(); finish(); };
 
   // ── 0 · Language ──
+  function markLang() {
+    $('langSeg').querySelectorAll('button').forEach(b => {
+      b.classList.toggle('on', b.dataset.lang === uiLang);
+      b.setAttribute('aria-pressed', b.dataset.lang === uiLang ? 'true' : 'false');
+    });
+  }
   $('langSeg').querySelectorAll('button').forEach(btn => {
     btn.onclick = () => {
+      const lit = btn.classList.contains('on');
       state.app_language = btn.dataset.lang;
       uiLang = I18N[state.app_language] ? state.app_language : 'de';
-      $('langSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', b === btn));
+      markLang();
       applyI18n();
+      if (!lit) ignite(btn);
     };
   });
 
@@ -652,8 +849,10 @@
         for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
         const level = Math.min(100, Math.sqrt(sum / buf.length) * 400);
         $('micMeter').style.width = level + '%';
-        if (level > 18 && meterPeak <= 18) $('micHint').textContent = t('m.ok');
+        const heard = level > 18 && meterPeak <= 18;
+        if (heard) $('micHint').textContent = t('m.ok');
         meterPeak = Math.max(meterPeak, level);
+        if (heard) updateReady();
         meterAnim = requestAnimationFrame(tick);
       };
       tick();
@@ -673,45 +872,147 @@
   window.addEventListener('beforeunload', stopMeter);
 
   // ── 2 · Hotkey & mode ──
-  let recordingHotkey = false;
-  const hotkeyParts = new Set();
-  $('hotkeyBtn').onclick = () => {
-    if (recordingHotkey) return;
-    recordingHotkey = true;
-    hotkeyParts.clear();
-    if (window.notype.setHotkeyCapture) window.notype.setHotkeyCapture(true);
-    $('hotkeyValue').textContent = t('h.waiting');
-    $('hotkeyValue').classList.add('recording');
-    $('hotkeyBtn').textContent = '...';
+  // Capture rules (same as settings): one gesture is everything pressed
+  // until all keys are up. Releasing the main (non-modifier) key commits
+  // the modifiers seen so far plus that key. Valid: at least one modifier
+  // plus exactly one main key, or a lone F1 to F24. Tab and Backspace never
+  // count, Esc cancels. Invalid combos and clashes keep the old hotkey and
+  // keep waiting, with the reason in the row's description.
+  const MODS = ['ctrl', 'shift', 'alt', 'win'];
+  const BAD_MAIN = ['tab', 'escape', 'backspace'];
+  const KEY_MAP = {
+    'control': 'ctrl', 'shift': 'shift', 'alt': 'alt', 'meta': 'win', ' ': 'space',
+    'enter': 'enter', 'tab': 'tab', 'backspace': 'backspace', 'delete': 'delete',
+    'escape': 'escape', '<': 'less', '>': 'greater',
   };
-  document.addEventListener('keydown', (e) => {
-    if (!recordingHotkey) return;
-    e.preventDefault();
+  // Keys that can't be part of an accelerator: not collected at all.
+  const SKIP_KEYS = ['altgraph', 'capslock', 'numlock', 'scrolllock', 'dead', 'unidentified'];
+  const keyName = (e) => {
     const key = e.key.toLowerCase();
-    const map = {
-      'control': 'ctrl', 'shift': 'shift', 'alt': 'alt', 'meta': 'win', ' ': 'space',
-      'enter': 'enter', 'tab': 'tab', 'backspace': 'backspace', 'delete': 'delete',
-      'escape': 'escape', '<': 'less', '>': 'greater',
-    };
-    const mapped = map[key] || (e.code.startsWith('Key') ? e.code.slice(3).toLowerCase() : key);
-    hotkeyParts.add(mapped);
-    window.NoTypeKeys.render($('hotkeyValue'), Array.from(hotkeyParts).join('+'), uiLang);
-  });
-  document.addEventListener('keyup', () => {
-    if (!recordingHotkey || hotkeyParts.size === 0) return;
-    recordingHotkey = false;
+    return KEY_MAP[key] || (e.code.startsWith('Key') ? e.code.slice(3).toLowerCase() : key);
+  };
+  const KEY_ALIASES = { control: 'ctrl', meta: 'win', super: 'win', esc: 'escape', del: 'delete', return: 'enter' };
+  // Same keys in any order count as the same combo.
+  const canonHotkey = (h) => String(h || '').toLowerCase().split('+').map(k => k.trim()).filter(Boolean)
+    .map(k => KEY_ALIASES[k] || k).sort().join('+');
+
+  // null, or { prev, held: Set<code>, mods: Set<name>, mains: Map<code, name>, tried }
+  let capture = null;
+  const hotkeyDesc = $('hotkeyDesc');
+
+  function hotkeyNote(text, kind) {
+    hotkeyDesc.textContent = text;
+    hotkeyDesc.classList.toggle('hint', kind === 'hint');
+    hotkeyDesc.classList.toggle('warn', kind === 'warn');
+  }
+  function renderCapture() {
+    const keys = MODS.filter(m => capture.mods.has(m)).concat(Array.from(capture.mains.values()));
+    if (keys.length) window.NoTypeKeys.render($('hotkeyValue'), keys.join('+'), uiLang);
+    else $('hotkeyValue').textContent = t('h.waiting');
+  }
+  function resetGesture() {
+    capture.held.clear(); capture.mods.clear(); capture.mains.clear(); capture.tried = false;
+  }
+  function startHotkeyCapture() {
+    capture = { prev: state.hotkey, held: new Set(), mods: new Set(), mains: new Map(), tried: false };
+    // Park the global shortcut so pressing the new combo can't start a dictation.
+    if (window.notype.setHotkeyCapture) window.notype.setHotkeyCapture(true);
+    $('hotkeyValue').classList.add('recording');
+    $('hotkeyBtn').textContent = t('h.cancel');
+    hotkeyNote(t('h.capture'));
+    renderCapture();
+    updateReady();
+  }
+  function endHotkeyCapture() {
+    capture = null;
     if (window.notype.setHotkeyCapture) window.notype.setHotkeyCapture(false);
-    state.hotkey = Array.from(hotkeyParts).join('+');
     $('hotkeyValue').classList.remove('recording');
-    renderHotkeyBox();
     $('hotkeyBtn').textContent = t('h.change');
+    hotkeyNote(t('h.combo.desc'));
+    renderHotkeyBox();
     renderTestLead();
+    updateReady();
+  }
+  // Esc or a second click: the previous hotkey stays as it was.
+  function cancelHotkeyCapture() {
+    state.hotkey = capture.prev;
+    endHotkeyCapture();
+  }
+  // Why these keys can't be the dictation hotkey ({ text, kind }), or null.
+  function hotkeyProblem(mods, mains) {
+    const main = mains[0];
+    if (mains.length === 1 && BAD_MAIN.includes(main)) {
+      return { text: t('h.badkey').replace('{key}', window.NoTypeKeys.text(main, uiLang)), kind: 'hint' };
+    }
+    if (mains.length !== 1) return { text: t('h.onekey'), kind: 'hint' };
+    if (!mods.length && !/^f([1-9]|1[0-9]|2[0-4])$/.test(main)) return { text: t('h.needmod'), kind: 'hint' };
+    const combo = canonHotkey(mods.concat(main).join('+'));
+    if (cfg.command_enabled !== false && cfg.command_hotkey && combo === canonHotkey(cfg.command_hotkey)) {
+      return { text: t('h.same.cmd'), kind: 'warn' };
+    }
+    if (cfg.agent_enabled === true && cfg.agent_hotkey && combo === canonHotkey(cfg.agent_hotkey)) {
+      return { text: t('h.same.agent'), kind: 'warn' };
+    }
+    return null;
+  }
+
+  $('hotkeyBtn').onclick = () => { if (capture) cancelHotkeyCapture(); else startHotkeyCapture(); };
+  // Capture phase: while waiting, no key reaches the page (Tab doesn't move
+  // focus, Space/Enter don't press the focused button).
+  document.addEventListener('keydown', (e) => {
+    if (!capture) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.repeat) return;
+    const name = keyName(e);
+    if (name === 'escape') { cancelHotkeyCapture(); return; }
+    if (SKIP_KEYS.includes(name)) return;
+    if (!capture.held.size) resetGesture();
+    capture.held.add(e.code);
+    if (MODS.includes(name)) capture.mods.add(name);
+    else capture.mains.set(e.code, name);
+    renderCapture();
+  }, true);
+  document.addEventListener('keyup', (e) => {
+    if (!capture) return;
+    e.preventDefault();
+    e.stopPropagation();
+    // Keys that went down before the capture started (the Enter that
+    // pressed "Ändern") are not part of the gesture.
+    if (!capture.held.delete(e.code)) return;
+    if (capture.mains.has(e.code)) {
+      const mods = MODS.filter(m => capture.mods.has(m));
+      const problem = hotkeyProblem(mods, Array.from(capture.mains.values()));
+      if (!problem) {
+        state.hotkey = mods.concat(capture.mains.get(e.code)).join('+');
+        endHotkeyCapture();
+        return;
+      }
+      // Keep the old hotkey and keep waiting; held modifiers still count
+      // for the next main key.
+      hotkeyNote(problem.text, problem.kind);
+      capture.mains.clear();
+      capture.tried = true;
+      if (!capture.held.size) resetGesture();
+    } else if (!capture.held.size) {
+      // Only modifiers went down and up: never a hotkey on its own.
+      if (!capture.tried && capture.mods.size) hotkeyNote(t('h.needkey'), 'hint');
+      resetGesture();
+    }
+    renderCapture();
+  }, true);
+  // Keyups that happen in another window never arrive: start the gesture over.
+  window.addEventListener('blur', () => { if (capture) { resetGesture(); renderCapture(); } });
+  window.addEventListener('beforeunload', () => {
+    if (capture && window.notype.setHotkeyCapture) window.notype.setHotkeyCapture(false);
   });
   document.querySelectorAll('.mode-card').forEach(card => {
     const pick = () => {
+      const lit = card.classList.contains('selected');
       state.mode = card.dataset.mode;
       document.querySelectorAll('.mode-card').forEach(c => c.classList.toggle('selected', c === card));
       renderTestLead();
+      if (!lit) ignite(card);
     };
     card.onclick = pick;
     card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } };
@@ -729,7 +1030,11 @@
     if (!window.NoTypeModels) return;
     window.NoTypeModels.render($('modelCards'), {
       lang: uiLang, selected: state.model_size, active: activeModel, info: modelsInfo,
-      onSelect: (id) => { state.model_size = id; userPickedModel = true; renderModels(); },
+      onSelect: (id) => {
+        const lit = id === state.model_size;
+        state.model_size = id; userPickedModel = true; renderModels();
+        if (!lit) ignite($('modelCards').querySelector('.mcard.selected'));
+      },
     });
     window.NoTypeModels.renderHardwareBadge($('hwBadge'), modelsInfo, uiLang);
   }
@@ -754,7 +1059,7 @@
     }
     $('statusDetail').textContent = detail || '';
   }
-  function setTest(s, detail) { testState = s; testDetail = detail || ''; refreshStatus(); }
+  function setTest(s, detail) { testState = s; testDetail = detail || ''; refreshStatus(); updateReady(); }
 
   // ── 5 · Summary ──
   function fillSummary() {
@@ -763,11 +1068,13 @@
     $('sumMode').textContent = t(state.mode === 'press_to_speak' ? 'h.press' : 'h.hold');
     $('sumModel').textContent = window.NoTypeModels ? window.NoTypeModels.nameOf(state.model_size) : state.model_size;
   }
+  $('autostartToggle').addEventListener('change', (e) => { if (e.target.checked) ignite(e.target); });
 
   // ── IPC ──
   if (window.notype) {
-    window.notype.onSetTheme((theme) => {
+    window.notype.onSetTheme((theme, gas) => {
       document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : '';
+      if (gas) document.documentElement.style.setProperty('--gas', gas);
     });
     window.notype.onConfig((c) => {
       if (configApplied) return;   // later pushes must not reset the wizard
@@ -782,7 +1089,7 @@
       // First run suggests autostart; a rerun of the wizard shows the real state.
       $('autostartToggle').checked = cfg.first_run_complete ? cfg.autostart === true : true;
       uiLang = state.app_language;
-      $('langSeg').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.lang === uiLang));
+      markLang();
       renderHotkeyBox();
       document.querySelectorAll('.mode-card').forEach(c => c.classList.toggle('selected', c.dataset.mode === state.mode));
       applyI18n();

@@ -35,8 +35,8 @@
     user-select: none;
     /* world tokens, Dark (mirrored in WORLDS for the canvases) */
     --surf: #000; --ink: 255, 255, 255;
-    --t1: rgba(255, 255, 255, 0.95); --t2: rgba(255, 255, 255, 0.46); --t3: rgba(255, 255, 255, 0.42);
-    --t-busy: rgba(255, 255, 255, 0.55); --shim: 0.34;
+    --t1: rgba(255, 255, 255, 0.95); --t2: rgba(255, 255, 255, 0.46); --t3: rgba(255, 255, 255, 0.55);
+    --t-busy: rgba(255, 255, 255, 0.55); --shim: 0.5;
     --hair: rgba(255, 255, 255, 0.085); --sep: rgba(255, 255, 255, 0.08); --edge: rgba(255, 255, 255, 0.05);
     --lift: 0 0 transparent;
     /* accent tokens (mirrored in ACCENTS for the canvases) */
@@ -54,8 +54,8 @@
      inside every window's 14 px margin. */
   body[data-world="sage"] {
     --surf: #f5f2e9; --ink: 43, 49, 35;
-    --t1: #2b3123; --t2: rgba(43, 49, 35, 0.64); --t3: #646b55;
-    --t-busy: rgba(43, 49, 35, 0.66); --shim: 0.46;
+    --t1: #2b3123; --t2: rgba(43, 49, 35, 0.7); --t3: #646b55;
+    --t-busy: rgba(43, 49, 35, 0.74); --shim: 0.7;
     --hair: rgba(70, 82, 48, 0.16); --sep: rgba(70, 82, 48, 0.16); --edge: rgba(255, 255, 255, 0.7);
     --lift: 0 5px 14px -6px rgba(32, 36, 24, 0.32), 0 1px 3px rgba(32, 36, 24, 0.1);
     --a1: #56663a; --a2: #6b7f45; --a3: #93ab78; --glow: 93, 115, 64; --rec: #b0563d;
@@ -179,7 +179,7 @@
   .mx-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
   .mx-head {
     display: flex; align-items: center; gap: 8px;
-    font: 600 10.5px/1 'Cascadia Mono', 'Cascadia Code', Consolas, monospace;
+    font: 600 11px/1 'Cascadia Mono', 'Cascadia Code', Consolas, monospace;
     letter-spacing: 0.18em; text-transform: uppercase; color: rgba(var(--ink), 0.5);
   }
   body[data-world="sage"] .mx-head { color: var(--t3); }

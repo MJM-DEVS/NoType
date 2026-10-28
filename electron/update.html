@@ -7,26 +7,34 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   :root {
+    --gas: #00d4aa;   /* the overlay colour; main.js sends the user's pick */
     --bg: rgba(245, 242, 233, 0.96);
     --fg: #2b3123;
-    --sub: rgba(43, 49, 35, 0.64);
+    --sub: rgba(43, 49, 35, 0.72);
     --shadow: rgba(32, 36, 24, 0.22);
     --border: rgba(70, 82, 48, 0.16);
     --accent: #56663a;
     --on-accent: #f9f7f0;
-    --warn: #a8661c;
+    --warn: #8f5418;
     --ghost-hover: rgba(86, 102, 58, 0.1);
   }
+  /* Dark: Neon-Werkstatt. A soot pill with a glass rim; the update button
+     is the lit tube, the icon lights while the update runs. */
   [data-theme="dark"] {
-    --bg: rgba(28, 28, 30, 0.94);
-    --fg: #f5f5f5;
-    --sub: rgba(255, 255, 255, 0.55);
+    --bg: #171513;
+    --fg: #f1ebe1;
+    --sub: #a39a8c;
     --shadow: rgba(0, 0, 0, 0.5);
-    --border: rgba(255, 255, 255, 0.08);
-    --accent: #00d4aa;
-    --on-accent: #06251e;
-    --warn: #f59e0b;
-    --ghost-hover: rgba(255, 255, 255, 0.08);
+    --border: rgba(241, 235, 225, 0.28);
+    --accent: var(--gas);
+    --on-accent: #0f0e0d;
+    --warn: #ffb547;
+    --ghost-hover: rgba(241, 235, 225, 0.08);
+    --glass: rgba(241, 235, 225, 0.42);
+    --core: color-mix(in srgb, var(--gas) 45%, #fff);
+    --halo: 0 0 2px color-mix(in srgb, var(--gas) 90%, transparent), 0 0 9px color-mix(in srgb, var(--gas) 55%, transparent), 0 0 22px color-mix(in srgb, var(--gas) 22%, transparent);
+    --halo-text: 0 0 6px color-mix(in srgb, var(--gas) 70%, transparent),
+                 0 0 16px color-mix(in srgb, var(--gas) 30%, transparent);
   }
 
   html, body { background: transparent; }
@@ -108,6 +116,31 @@
   button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .busy .actions { display: none; }
   .busy { padding-right: 18px; }
+
+  /* ── Dark: unlit glass until something is on ── */
+  [data-theme="dark"] .pill { backdrop-filter: none; }
+  [data-theme="dark"] .icon { background: transparent; color: var(--sub); box-shadow: inset 0 0 0 1.5px var(--glass); }
+  [data-theme="dark"] .busy .icon { color: var(--core); box-shadow: inset 0 0 0 1.5px var(--gas), var(--halo); }
+  /* A failed update is a cracked tube: dashed amber, no glow. */
+  [data-theme="dark"] .error .icon { color: var(--warn); box-shadow: none; border: 1.5px dashed var(--warn); }
+  [data-theme="dark"] .go {
+    background: transparent; color: var(--core); text-shadow: var(--halo-text);
+    box-shadow: inset 0 0 0 1.5px var(--gas), inset 0 0 10px color-mix(in srgb, var(--gas) 20%, transparent), var(--halo);
+  }
+  [data-theme="dark"] .go:hover {
+    filter: none;
+    box-shadow: inset 0 0 0 1.5px var(--gas), inset 0 0 14px color-mix(in srgb, var(--gas) 32%, transparent), var(--halo);
+  }
+
+  /* Ignition: the update button flickers on as the pill arrives, the icon when the update starts. */
+  @keyframes ignite {
+    0% { opacity: 0.35; } 18% { opacity: 1; } 30% { opacity: 0.45; }
+    46% { opacity: 1; } 58% { opacity: 0.8; } 100% { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-theme="dark"] .go { animation: ignite 0.3s steps(1, end) 140ms both; }
+    [data-theme="dark"] .busy .icon { animation: ignite 0.3s steps(1, end); }
+  }
 </style>
 </head>
 <body>
@@ -198,8 +231,9 @@
   }
 
   if (window.notype) {
-    window.notype.onSetTheme((theme) => {
+    window.notype.onSetTheme((theme, gas) => {
       document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : '';
+      if (gas) document.documentElement.style.setProperty('--gas', gas);
     });
     let data = {};
     window.notype.onUpdateData((d) => {

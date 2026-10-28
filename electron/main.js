@@ -180,34 +180,35 @@ function currentTheme() {
   return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
 }
 
-// Mica (settings, setup) tints itself after Electron's theme, so pin that to
-// the user's choice: Dark on a light Windows must not get a pale backdrop.
+// Native parts (context menus, select popups) follow Electron's theme, so pin
+// that to the user's choice: Dark on a light Windows must not get pale menus.
 function syncThemeSource() {
   const o = config.overlay_theme;
   const src = o === 'dark' || o === 'light' ? o : 'system';
   if (nativeTheme.themeSource !== src) nativeTheme.themeSource = src;
 }
 
+// The Dark world lights its controls in the overlay's accent, like a neon
+// tube filled with that gas. Salbei ignores it.
+const GAS = {
+  mint: '#00d4aa', mono: '#f4f1ea', aurora: '#ff4fb4', blue: '#409cff',
+  violet: '#bf5af2', red: '#ff5a4e', amber: '#ffb340',
+};
+function currentGas() { return GAS[config.overlay_accent] || GAS.mint; }
+
+// Settings and setup paint an opaque wall in both designs; the window gets
+// the same colour so opening or resizing never flashes another one.
+function wallColor() { return currentTheme() === 'dark' ? '#0f0e0d' : '#f3f0e6'; }
+
 function broadcastTheme() {
   const theme = currentTheme();
-  for (const w of [settingsWin, overlayWin, toastWin, onboardingWin]) {
+  for (const w of [settingsWin, overlayWin, toastWin, onboardingWin, suggestWin, updateWin]) {
     if (w && !w.isDestroyed()) {
-      try { w.webContents.send('set-theme', theme); } catch (_) {}
+      try { w.webContents.send('set-theme', theme, currentGas()); } catch (_) {}
     }
   }
-}
-
-// Mica/Acrylic backdrop on Windows 11. Silently a no-op elsewhere.
-// `backgroundMaterial` was added in Electron 31.4; we're on 33+.
-function applyMica(win) {
-  if (!win || win.isDestroyed()) return;
-  try {
-    if (typeof win.setBackgroundMaterial === 'function') {
-      // 'mica' = subtle, 'acrylic' = stronger blur. Mica is the Win11 default for app surfaces.
-      win.setBackgroundMaterial('mica');
-    }
-  } catch (e) {
-    // Older Windows or unsupported configuration – ignore.
+  for (const w of [settingsWin, onboardingWin]) {
+    if (w && !w.isDestroyed()) w.setBackgroundColor(wallColor());
   }
 }
 
@@ -229,6 +230,7 @@ function loadConfig() {
     autostart: false,
     update_check: true,
     auto_language_detect: true,
+    spoken_punctuation: true,
     overlay_enabled: true,
     overlay_style: 'amoled',
     overlay_accent: 'mint',
@@ -383,7 +385,7 @@ function startPython() {
       backendGaveUp = true;
       console.error('Backend crash-looping – giving up auto-restart');
       if (!crashToastShown) {
-        showToast(trayT().backendDead, 'error');
+        showToast(trayT().backendDead, 'error', null, 'restart');
         crashToastShown = true;
       }
       updateTray('loading');
@@ -502,7 +504,8 @@ function handlePythonMessage(line) {
         break;
 
       case 'mic_fallback':
-        showToast(trayT().micFallback.replace('{name}', (data && data.name) || ''), 'warning');
+        const [micTitle, micSub] = trayT().micFallback;
+        showToast([micTitle.replace('{name}', (data && data.name) || ''), micSub], 'warning', null, 'settings:system');
         break;
 
       case 'amplitude':
@@ -539,7 +542,7 @@ function handlePythonMessage(line) {
         if (data && data.command) {
           // Command mode: the result is LLM output, not a dictation – it
           // stays out of the history (that's for learning recognition errors).
-          if (data.reason === 'command_no_llm') showToast(trayT().commandNoLlm, 'warning');
+          if (data.reason === 'command_no_llm') showToast(trayT().commandNoLlm, 'warning', null, 'settings:cleanup');
           else if (data.reason === 'command_failed') showToast(trayT().commandFailed, 'error');
           else if (data.reason === 'too_short') showToast(trayT().tooShort, 'warning');
         } else if (data && data.text && !data.empty) {
@@ -678,7 +681,7 @@ function handlePythonMessage(line) {
         if (isRecording || isTranscribing) {
           finishTranscription();
         }
-        showToast(data.message, 'error');
+        showBackendError(String((data && data.message) || ''));
         break;
     }
   } catch (e) {
@@ -838,7 +841,7 @@ function pushOverlayState(agentHint = null) {
       sounds: config.overlay_sounds !== false,
       strip: chipStrip() > 0,
     });
-    overlayWin.webContents.send('set-theme', currentTheme());
+    overlayWin.webContents.send('set-theme', currentTheme(), currentGas());
     if (agentHint) { overlayWin.webContents.send('agent-result', agentHint); return; }
     overlayWin.webContents.send('recording-started', { command: commandActive, agent: agentActive });
     // Copies that came in before the window had loaded (look-back at start).
@@ -1240,7 +1243,7 @@ function createTrayImage(color = '#00d4aa', recording = false) {
 function createTray() {
   const icon = createTrayImage('#00d4aa');
   tray = new Tray(icon);
-  tray.setToolTip('NoType – Bereit');
+  tray.setToolTip('NoType · Bereit');
   tray.setContextMenu(buildTrayMenu('ready'));
 }
 
@@ -1279,7 +1282,7 @@ function updateTray(status) {
     tray.setImage(createTrayImage(colors[status] || '#00d4aa', status === 'recording'));
     const hotkeyLabel = config.hotkey || 'Ctrl+Shift+Space';
     const upd = update.state === 'downloading' ? ` · ${T.updLoading.replace('{p}', update.percent)}` : '';
-    tray.setToolTip(`NoType – ${labels[status] || T.ready} (${hotkeyLabel})${upd}`);
+    tray.setToolTip(`NoType · ${labels[status] || T.ready} (${hotkeyLabel})${upd}`);
     tray.setContextMenu(buildTrayMenu(status));
   } catch (e) {
     console.error('Tray update error:', e);
@@ -1289,49 +1292,60 @@ function updateTray(status) {
 // Minimal tray/toast i18n – the settings window has its own dictionary.
 function trayT() {
   const de = {
-    ready: '✓ Bereit', recording: '● Aufnahme...', processing: '⟳ Transkribiere...',
-    loading: '⏳ Modell lädt...', paused: '⏸ Pausiert',
+    ready: '✓ Bereit', recording: '● Aufnahme …', processing: '⟳ Transkribiere …',
+    loading: '⏳ Modell lädt …', paused: '⏸ Pausiert',
     today: 'Heute', words: 'Wörter', transcriptions: 'Transkriptionen',
     last7: 'Letzte 7 Tage', last30: 'Letzte 30 Tage',
     history: 'Letzte Transkriptionen', settings: '⚙  Einstellungen', setup: '✦  Einrichtung', autostart: 'Mit Windows starten', quit: '✕  Beenden',
-    tooShort: 'Aufnahme zu kurz – verworfen',
-    backendCrashed: 'Backend abgestürzt – starte neu',
-    backendDead: 'Backend startet nicht – bitte NoType neu starten',
+    // Warnings and errors: [what happened, what to do now].
+    tooShort: ['Aufnahme zu kurz', 'Nichts eingefügt. Einfach etwas länger sprechen.'],
+    backendCrashed: ['Spracherkennung abgestürzt', 'NoType startet sie gerade neu. Gleich geht es weiter.'],
+    backendDead: ['Spracherkennung startet nicht', 'Mehrere Versuche sind gescheitert. NoType einmal neu starten.'],
     modelLoading: 'Lade Modell {model} …', modelReady: '{model} ist bereit',
-    modelNotReady: 'Modell lädt noch – bitte kurz warten',
-    transcribeStuck: 'Transkription hängt – Status zurückgesetzt',
+    modelNotReady: ['Modell lädt noch', 'In ein paar Sekunden noch einmal versuchen.'],
+    modelFailed: ['Modell lässt sich nicht laden', 'Unter „Sprache & Modell“ ein anderes Modell wählen.'],
+    transcribeStuck: ['Diktat hat zu lange gedauert', 'Abgebrochen. Du kannst sofort neu diktieren.'],
+    transcribeFailed: ['Diktat ließ sich nicht umwandeln', 'Bitte noch einmal diktieren.'],
+    devicesFailed: ['Mikrofone nicht lesbar', 'Mikrofon-Verbindung prüfen und die Einstellungen neu öffnen.'],
+    unknownError: 'Etwas ist schiefgelaufen',
     bootReady: 'NoType bereit · {model} · {device}',
-    commandNoLlm: 'Befehlsmodus braucht die lokale KI – Einstellungen → Text-Bereinigung',
-    commandFailed: 'Befehl fehlgeschlagen – die KI hat nicht rechtzeitig geantwortet',
+    commandNoLlm: ['Befehlsmodus braucht die lokale KI', 'Unter „Text-Bereinigung“ einrichten.'],
+    commandFailed: ['Befehl ohne Antwort', 'Die lokale KI hat nicht rechtzeitig geantwortet. Noch einmal versuchen.'],
     bootUpdated: 'Auf {v} aktualisiert, NoType ist bereit',
-    micFallback: 'Mikrofon „{name}“ nicht gefunden. NoType nimmt mit dem Standardmikrofon auf.',
+    micFallback: ['Mikrofon „{name}“ nicht gefunden', 'NoType nimmt mit dem Standardmikrofon auf.'],
+    actRestart: 'Neu starten', actSetup: 'Einrichten', actOpen: 'Öffnen', actChange: 'Ändern',
     updCheck: 'Nach Updates suchen', updChecking: 'Suche nach Updates …',
     updInstall: '↑  Auf {v} aktualisieren', updDownload: '↑  NoType {v} herunterladen',
     updLoading: 'Update wird geladen: {p} %', updInstalling: 'Update wird installiert …',
-    updCurrent: 'NoType {v} ist aktuell', updFailed: 'Keine Verbindung zu GitHub, später noch einmal versuchen',
+    updCurrent: 'NoType {v} ist aktuell', updFailed: ['Keine Verbindung zu GitHub', 'Später noch einmal nach Updates suchen.'],
     locale: 'de-DE',
   };
   const en = {
-    ready: '✓ Ready', recording: '● Recording...', processing: '⟳ Transcribing...',
-    loading: '⏳ Loading model...', paused: '⏸ Paused',
+    ready: '✓ Ready', recording: '● Recording …', processing: '⟳ Transcribing …',
+    loading: '⏳ Loading model …', paused: '⏸ Paused',
     today: 'Today', words: 'words', transcriptions: 'transcriptions',
     last7: 'Last 7 days', last30: 'Last 30 days',
     history: 'Recent transcriptions', settings: '⚙  Settings', setup: '✦  Setup', autostart: 'Start with Windows', quit: '✕  Quit',
-    tooShort: 'Recording too short – discarded',
-    backendCrashed: 'Backend crashed – restarting',
-    backendDead: 'Backend won\'t start – please restart NoType',
+    tooShort: ['Recording too short', 'Nothing was inserted. Just speak a little longer.'],
+    backendCrashed: ['Speech recognition crashed', 'NoType is restarting it. Back in a moment.'],
+    backendDead: ['Speech recognition won’t start', 'Several attempts failed. Restart NoType once.'],
     modelLoading: 'Loading model {model} …', modelReady: '{model} is ready',
-    modelNotReady: 'Model still loading – one moment',
-    transcribeStuck: 'Transcription stalled – state reset',
+    modelNotReady: ['Model still loading', 'Try again in a few seconds.'],
+    modelFailed: ['Model could not be loaded', 'Pick another model under “Language & Model”.'],
+    transcribeStuck: ['Dictation took too long', 'Cancelled. You can dictate again right away.'],
+    transcribeFailed: ['Dictation could not be transcribed', 'Please dictate again.'],
+    devicesFailed: ['Could not list microphones', 'Check the microphone connection and reopen settings.'],
+    unknownError: 'Something went wrong',
     bootReady: 'NoType ready · {model} · {device}',
-    commandNoLlm: 'Command mode needs the local AI – Settings → Text Cleanup',
-    commandFailed: 'Command failed – the AI did not answer in time',
+    commandNoLlm: ['Command mode needs the local AI', 'Set it up under “Text Cleanup”.'],
+    commandFailed: ['Command got no answer', 'The local AI did not answer in time. Try again.'],
     bootUpdated: 'Updated to {v}, NoType is ready',
-    micFallback: 'Microphone "{name}" not found. NoType is recording with the default microphone.',
+    micFallback: ['Microphone “{name}” not found', 'NoType is recording with the default microphone.'],
+    actRestart: 'Restart', actSetup: 'Set up', actOpen: 'Open', actChange: 'Change',
     updCheck: 'Check for updates', updChecking: 'Checking for updates …',
     updInstall: '↑  Update to {v}', updDownload: '↑  Download NoType {v}',
     updLoading: 'Downloading update: {p} %', updInstalling: 'Installing update …',
-    updCurrent: 'NoType {v} is up to date', updFailed: 'Could not reach GitHub, try again later',
+    updCurrent: 'NoType {v} is up to date', updFailed: ['Could not reach GitHub', 'Check for updates again later.'],
     locale: 'en-US',
   };
   return config.app_language === 'en' ? en : de;
@@ -1378,7 +1392,7 @@ function buildTrayMenu(status = 'ready') {
   const w30 = sumRange(30);
 
   const items = [
-    { label: `NoType – ${labels[status] || T.ready}`, enabled: false },
+    { label: `NoType · ${labels[status] || T.ready}`, enabled: false },
     { label: `Hotkey: ${hotkeyLabel}`, enabled: false },
     {
       label: `${T.today}: ${todayStats.count} · ~${todayStats.words} ${T.words}`,
@@ -1428,8 +1442,10 @@ function buildTrayMenu(status = 'ready') {
 }
 
 // ── Settings Window ──
-function openSettings() {
+// pane: optional section to land on ('speech', 'cleanup', 'system', …).
+function openSettings(pane) {
   if (settingsWin && !settingsWin.isDestroyed()) {
+    if (pane) settingsWin.webContents.send('show-pane', pane);
     settingsWin.focus();
     return;
   }
@@ -1442,9 +1458,7 @@ function openSettings() {
     show: false,
     resizable: true,
     frame: false,
-    // Transparent backgroundColor lets the Mica material show through on Win11.
-    backgroundColor: '#00000000',
-    backgroundMaterial: 'mica',  // Win11 only, ignored elsewhere
+    backgroundColor: wallColor(),
     webPreferences: {
       preload: PRELOAD,
       contextIsolation: true,
@@ -1453,15 +1467,18 @@ function openSettings() {
   });
 
   settingsWin.loadFile(path.join(__dirname, 'settings.html'));
+  // With unsaved changes the page holds the window open and asks (its
+  // beforeunload). Quitting NoType must not wait for that answer.
+  settingsWin.webContents.on('will-prevent-unload', (e) => { if (quitRequested) e.preventDefault(); });
   settingsWin.once('ready-to-show', () => {
-    settingsWin.webContents.send('set-theme', currentTheme());
+    settingsWin.webContents.send('set-theme', currentTheme(), currentGas());
     settingsWin.show();
-    applyMica(settingsWin);
     pushConfigToSettings();
     // Sync model status
     if (modelLoaded && modelInfo) {
       settingsWin.webContents.send('model-ready', modelInfo);
     }
+    if (pane) settingsWin.webContents.send('show-pane', pane);
   });
 
   settingsWin.on('closed', () => {
@@ -1488,8 +1505,7 @@ function openOnboarding() {
     show: false,
     resizable: true,
     frame: false,
-    backgroundColor: '#00000000',
-    backgroundMaterial: 'mica',
+    backgroundColor: wallColor(),
     webPreferences: {
       preload: PRELOAD,
       contextIsolation: true,
@@ -1499,9 +1515,8 @@ function openOnboarding() {
   onboardingWin.loadFile(path.join(__dirname, 'onboarding.html'));
   onboardingWin.once('ready-to-show', () => {
     if (!onboardingWin || onboardingWin.isDestroyed()) return;
-    onboardingWin.webContents.send('set-theme', currentTheme());
+    onboardingWin.webContents.send('set-theme', currentTheme(), currentGas());
     onboardingWin.show();
-    applyMica(onboardingWin);
     onboardingWin.webContents.send('config', configForSettings(config));
     if (modelLoaded && modelInfo) onboardingWin.webContents.send('model-ready', modelInfo);
   });
@@ -1542,9 +1557,10 @@ ipcMain.on('save-config', (_, newConfig) => {
   const prevKeys = hotkeySignature(config);
   const autostartChanged = typeof newConfig.autostart === 'boolean' && newConfig.autostart !== autostartEnabled();
   const prevTheme = currentTheme();
+  const prevGas = currentGas();
   config = { ...config, ...newConfig };
   syncThemeSource();
-  if (currentTheme() !== prevTheme) broadcastTheme();
+  if (currentTheme() !== prevTheme || currentGas() !== prevGas) broadcastTheme();
   if (autostartChanged) {
     setAutostart(newConfig.autostart);
     updateTray(trayStatus);   // the tray menu's checkbox
@@ -1661,7 +1677,7 @@ function showSuggestion(items) {
     const { x, y, width, height } = display.workArea;
     const b = win.getBounds();
     win.setPosition(x + Math.round((width - b.width) / 2), y + height - b.height - 44);
-    win.webContents.send('set-theme', currentTheme());
+    win.webContents.send('set-theme', currentTheme(), currentGas());
     win.webContents.send('suggest-data', { items, lang: config.app_language === 'en' ? 'en' : 'de' });
     win.showInactive();
   });
@@ -1728,16 +1744,51 @@ function pushHistoryToSettings() {
 }
 
 // ── Toast Notification ──
-function showToast(text, type = 'success', stats = null) {
+// Success toasts are a glance: 3 s, click-through. Warnings and errors say
+// what happened and what to do, stay longer, hold still while the mouse is on
+// them and can carry one button (action: 'restart' | 'settings:<pane>').
+const TOAST_DWELL = { success: 3000, warning: 6000, error: 9000 };
+let toastTimer = null;
+
+function armToastTimer(ms) {
+  if (toastTimer) clearTimeout(toastTimer);
+  const win = toastWin;
+  toastTimer = setTimeout(() => {
+    toastTimer = null;
+    if (win && !win.isDestroyed()) win.close();
+  }, ms);
+}
+
+// Backend errors arrive as English developer text; the user gets the cause
+// and the next step instead. Unknown messages keep their text as the detail.
+function showBackendError(message) {
+  const T = trayT();
+  if (message === 'Not recording') return;   // stray stop, nothing for the user to do
+  if (message === 'Model not loaded yet') showToast(T.modelNotReady, 'warning');
+  else if (/^(Model load|CPU fallback) failed/.test(message)) showToast(T.modelFailed, 'error', null, 'settings:speech');
+  else if (message.startsWith('Transcription failed')) showToast(T.transcribeFailed, 'error');
+  else if (message.startsWith('Device listing failed')) showToast(T.devicesFailed, 'error');
+  else showToast([T.unknownError, message], 'error');
+}
+
+function showToast(msg, type = 'success', stats = null, action = null) {
   if (toastWin && !toastWin.isDestroyed()) toastWin.close();
+  // msg: the dictated text (success), a one-liner, or [title, sub].
+  const [title, sub] = Array.isArray(msg) ? msg : [String(msg || ''), ''];
+  const T = trayT();
+  const actionLabel = !action ? '' : action === 'restart' ? T.actRestart
+    : action === 'settings:cleanup' ? T.actSetup
+    : action === 'settings:system' ? T.actChange : T.actOpen;
+  const calm = type === 'success';
+  const dwell = TOAST_DWELL[type] || TOAST_DWELL.success;
 
   // Local reference for all handlers below. The global `toastWin` can be
   // nulled/replaced while this window is still loading (a newer toast closes
   // this one; the async 'closed' handler then nulls the global) – handlers
   // touching the global raced that and crashed with "getBounds of null".
   const win = new BrowserWindow({
-    width: 520,
-    height: 56,
+    width: calm ? 520 : 580,
+    height: calm ? 56 : 96,
     show: false,
     frame: false,
     transparent: true,
@@ -1756,7 +1807,10 @@ function showToast(text, type = 'success', stats = null) {
   });
 
   toastWin = win;
-  win.setIgnoreMouseEvents(true);
+  // Errors and warnings forward the mouse so the page can tell when it's
+  // hovered; only then does the window take clicks (see 'toast-hover').
+  if (calm) win.setIgnoreMouseEvents(true);
+  else win.setIgnoreMouseEvents(true, { forward: true });
   win.loadFile(path.join(__dirname, 'toast.html'));
 
   win.once('ready-to-show', () => {
@@ -1769,18 +1823,36 @@ function showToast(text, type = 'success', stats = null) {
       x + Math.round((width - b.width) / 2),
       y + height - b.height - 50
     );
-    win.webContents.send('set-theme', currentTheme());
+    win.webContents.send('set-theme', currentTheme(), currentGas());
     win.showInactive();
-    win.webContents.send('toast-data', { text, type, stats, lang: config.app_language === 'en' ? 'en' : 'de' });
+    win.webContents.send('toast-data', {
+      text: title, sub, type, stats, action, actionLabel, dwell,
+      lang: config.app_language === 'en' ? 'en' : 'de',
+    });
   });
 
-  // Auto-close after 3 seconds
-  setTimeout(() => {
-    if (!win.isDestroyed()) win.close();
-  }, 3000);
+  // The page fades itself out after `dwell`; this is the backstop.
+  armToastTimer(dwell + 1500);
 
-  win.on('closed', () => { if (toastWin === win) toastWin = null; });
+  win.on('closed', () => {
+    if (toastWin !== win) return;
+    toastWin = null;
+    if (toastTimer) { clearTimeout(toastTimer); toastTimer = null; }
+  });
 }
+
+ipcMain.on('toast-hover', (_, hovering) => {
+  if (!toastWin || toastWin.isDestroyed()) return;
+  toastWin.setIgnoreMouseEvents(!hovering, { forward: true });
+  if (hovering) { if (toastTimer) clearTimeout(toastTimer); toastTimer = null; }
+  else armToastTimer(4000);
+});
+
+ipcMain.on('toast-action', (_, action) => {
+  if (toastWin && !toastWin.isDestroyed()) toastWin.close();
+  if (action === 'restart') { app.relaunch(); quitApp(); }
+  else if (typeof action === 'string' && action.startsWith('settings:')) openSettings(action.slice(9));
+});
 
 // ── Updates ──
 // electron-updater reads latest.yml from the newest GitHub release: 20 s after
@@ -2012,7 +2084,7 @@ function showUpdatePill(kind) {
     const { x, y, width, height } = display.workArea;
     const b = win.getBounds();
     win.setPosition(x + Math.round((width - b.width) / 2), y + height - b.height - 32);
-    win.webContents.send('set-theme', currentTheme());
+    win.webContents.send('set-theme', currentTheme(), currentGas());
     win.webContents.send('update-data', {
       kind, version: update.version, size: update.size, canInstall: CAN_SELF_UPDATE,
       lang: config.app_language === 'en' ? 'en' : 'de',
