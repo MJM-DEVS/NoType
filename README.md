@@ -141,6 +141,31 @@ Raw speech is messy: "uhm", false starts, missing punctuation. NoType cleans it 
 
 The AI engine ([Ollama](https://ollama.com/)) is installed **from inside NoType with one click**, without admin rights, into NoType's own folder. If the AI would take too long, or if it changes the meaning (for example by translating or answering your sentence), NoType inserts the fast version instead. You never wait on the AI.
 
+### Your languages, your mix
+
+Tell NoType which languages you speak under **Settings → Language & Model → My languages**, and how often if you like: for example 80 % German, 15 % English and 5 % Polish. Short sentences are where speech models most often pick the wrong language. NoType weighs what the model hears against your mix, so a quick "Okay, passt" stays German, while a full English sentence still comes out in English. Shares are optional. Leave one empty and it gets what is left of 100 %.
+
+Other languages are still recognized when they are unmistakable. Switch **Also recognize other languages** off and NoType picks only from your list. With a single language it then skips detection completely.
+
+### Say your punctuation
+
+Say "question mark", "comma" or "new line" and you get the character, not the word. This works in German, English and Polish, in whichever of them you are dictating:
+
+| You get | English | German | Polish |
+|---|---|---|---|
+| `?` | question mark | Fragezeichen | znak zapytania |
+| `!` | exclamation mark, exclamation point | Ausrufezeichen | wykrzyknik |
+| `,` | comma | Komma | przecinek |
+| `.` | period, full stop | Punkt | kropka |
+| `:` | colon | Doppelpunkt | dwukropek |
+| `;` | semicolon | Semikolon, Strichpunkt | średnik |
+| line break | new line, next line, line break | neue Zeile, nächste Zeile, Zeilenumbruch | nowa linia, nowy wiersz, następna linia |
+| empty line | new paragraph, next paragraph | neuer Absatz, nächster Absatz | nowy akapit, następny akapit |
+| `(` `)` | open bracket, close bracket (or parenthesis) | Klammer auf, Klammer zu | otwórz nawias, zamknij nawias |
+| quotes | open quote, close quote, end quote | Anführungszeichen unten / oben (or auf / zu) | otwórz cudzysłów, zamknij cudzysłów |
+
+Words that also have a normal meaning stay words where they are meant that way: "an important point", "the trial period" and "um Punkt acht" are left alone. "Period", "colon", "Punkt" and "kropka" count as punctuation when you say them on their own, at the very end, or right before another command ("period, new paragraph"). Switch the feature off under **Settings → Text Cleanup**.
+
 ### Agent hotkey: send your dictation to a URL
 
 Off by default. Switch it on under **Settings → General → Agent hotkey** and enter a URL. From then on a second hotkey (<kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Alt</kbd> + <kbd>Space</kbd>, in the same hold or press mode as dictation) sends what you say to that URL instead of typing it, for example to an [n8n](https://n8n.io/) webhook or your own script or assistant. Whatever the URL answers shows in the overlay for a few seconds.
@@ -203,7 +228,7 @@ Replies are cut to 200 characters on one line; a long one scrolls through once. 
 
 <table>
 <tr>
-<td width="50%"><img src="docs/assets/settings-models.png" alt="Speech model cards with recommendation for your GPU" /></td>
+<td width="50%"><img src="docs/assets/settings-models.png" alt="Speech model cards next to the detected graphics card" /></td>
 <td width="50%"><img src="docs/assets/settings-dictionary.png" alt="Dictionary with learned corrections" /></td>
 </tr>
 <tr>
@@ -216,7 +241,7 @@ Replies are cut to 200 characters on one line; a long one scrolls through once. 
 </tr>
 <tr>
 <td><sub><b>Command mode:</b> its own shortcut, can be switched off</sub></td>
-<td><sub><b>Text cleanup:</b> Off, Fast or AI, plus one-click AI engine install</sub></td>
+<td><sub><b>Text cleanup:</b> Off, Fast or AI, plus spoken punctuation</sub></td>
 </tr>
 </table>
 
@@ -228,7 +253,8 @@ Replies are cut to 200 characters on one line; a long one scrolls through once. 
 - **History and stats:** your last dictations and daily word counts are one click away in the system tray.
 - **Starts with Windows if you want:** NoType then waits in the tray after you sign in. Switch it on or off under **Settings → General** or right in the tray menu.
 - **Updates with one click:** when a new version is out, a small notice offers it. Click **Update now** and NoType downloads it in the background, installs it and starts again, with your settings and dictionary as they were. It never restarts in the middle of a dictation. The portable ZIP links you to the download page instead.
-- **No invented words:** background noise does not turn into imaginary sentences. Repetitive and low-confidence output is dropped before it reaches your screen.
+- **No invented words:** background noise does not turn into imaginary sentences. The phrases speech models like to make up from silence, such as "Thanks for watching!" or subtitle credits, are filtered out in ten languages, and repetitive or low-confidence output is dropped before it reaches your screen.
+- **Long dictations, faster:** on an NVIDIA card, anything over 30 seconds is transcribed in parallel chunks. An 80 second dictation takes about 3.3 instead of 4.7 seconds, with the same text.
 - **Works in stubborn apps:** if pasting is blocked (some terminals, remote desktops), NoType types the text key by key instead.
 - **English or German interface:** switch any time under **Settings → General**.
 
@@ -364,6 +390,15 @@ Fix the word once where you dictated it, and click **Learn** when NoType asks. Y
 </details>
 
 <details>
+<summary><b>Short sentences come out in the wrong language</b></summary>
+
+<br/>
+
+Add the languages you speak under **Settings → Language & Model → My languages**, with a share for the one you use most. If you never dictate in anything else, switch **Also recognize other languages** off.
+
+</details>
+
+<details>
 <summary><b>Command mode writes new text instead of changing my selection</b></summary>
 
 <br/>
@@ -467,7 +502,9 @@ npm run build:dir                            # → dist/win-unpacked/ (portable)
 NoType/
 ├── backend.py            # IPC loop, recording, transcription orchestration
 ├── audio_recorder.py     # sounddevice capture, spectrum bands, rolling preview window
-├── transcriber.py        # faster-whisper wrapper, model cache, cuBLAS fallback
+├── transcriber.py        # faster-whisper wrapper, language mix, batched long dictations, cuBLAS fallback
+├── hallucinations.py     # known Whisper hallucinations ("Thanks for watching!", subtitle credits)
+├── spoken_punctuation.py # "question mark", "neue Zeile" … become characters (de, en, pl)
 ├── postprocess.py        # rule cleanup + local LLM polish and command mode via Ollama
 ├── dictionary.py         # learned corrections ("heard → meant"), applied to every dictation
 ├── correction_watch.py   # spots fixes typed right after a dictation (UI Automation)
