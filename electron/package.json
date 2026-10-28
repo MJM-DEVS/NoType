@@ -1,7 +1,7 @@
 {
   "name": "notype",
-  "version": "3.2.0",
-  "description": "NoType – Local Voice Dictation (Privacy-First)",
+  "version": "3.3.0",
+  "description": "NoType: Local Voice Dictation (Privacy-First)",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
