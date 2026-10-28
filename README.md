@@ -60,7 +60,7 @@ From version 2.9.0 on, the installed version keeps itself up to date: when a new
 
 - Windows 11, 64-bit.
 - An NVIDIA graphics card (GTX 10 series or newer, ideally 6 GB video memory or more) for instant results. Without one, NoType still works on the processor; choose a smaller model in the setup guide.
-- About 2 GB of disk space for the app, plus 0.1–3 GB for the speech model you pick.
+- About 2 GB of disk space for the app, plus 0.1 to 3 GB for the speech model you pick.
 
 > [!NOTE]
 > **"Windows protected your PC"?** NoType is free and not code-signed, which costs several hundred euros a year. Windows SmartScreen therefore warns you on first launch. Click **More info → Run anyway**. For the ZIP, right-click it first, choose **Properties**, tick **Unblock** and then extract it.
@@ -137,7 +137,7 @@ Raw speech is messy: "uhm", false starts, missing punctuation. NoType cleans it 
 |---|---|---|
 | Off | The raw transcript is inserted as is | none |
 | **Fast** (default) | Filler words and stutters are removed instantly, and sentences start with a capital letter | ~0 ms |
-| AI | After the fast pass, a small local language model fixes grammar, punctuation and small recognition errors | usually 200–500 ms, with a hard time limit |
+| AI | After the fast pass, a small local language model fixes grammar, punctuation and small recognition errors | usually 200 to 500 ms, with a hard time limit |
 
 The AI engine ([Ollama](https://ollama.com/)) is installed **from inside NoType with one click**, without admin rights, into NoType's own folder. If the AI would take too long, or if it changes the meaning (for example by translating or answering your sentence), NoType inserts the fast version instead. You never wait on the AI.
 
