@@ -1,9 +1,10 @@
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, nativeImage, screen, nativeTheme, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, nativeImage, screen, nativeTheme, shell, session } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const { loadSettingsFile } = require('./lib/settings-file');
 const { parseBackendLine } = require('./lib/backend-line');
+const { isSameDocument, isAppFile, allowPermission } = require('./lib/guards');
 
 // ── Single-Instance Lock ──
 // Prevents double hotkey registration when boot-autostart and a manual launch collide.
@@ -2155,7 +2156,38 @@ function quitApp() {
   }, 500);
 }
 
+// ── Navigation & permissions ──
+// Every window shows one local page and has no links out. Nothing may
+// navigate it elsewhere or open new windows; the update pill's release page
+// opens from the main process (shell.openExternal), not from a page.
+app.on('web-contents-created', (_, contents) => {
+  contents.on('will-navigate', (e, url) => {
+    if (!isSameDocument(contents.getURL(), url)) {
+      e.preventDefault();
+      console.warn('Blocked navigation away from the app page');
+    }
+  });
+  // Sub-frames: only the settings page's overlay preview (overlay.html).
+  contents.on('will-frame-navigate', (e) => {
+    if (!e.isMainFrame && !isAppFile(e.url, __dirname)) e.preventDefault();
+  });
+  contents.setWindowOpenHandler(() => {
+    console.warn('Blocked a new window from an app page');
+    return { action: 'deny' };
+  });
+});
+
+function installPermissionHandler() {
+  // Microphone (audio only) for the mic tests in settings and setup;
+  // every other permission and every other page is refused.
+  session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
+    const pageUrl = (details && details.requestingUrl) || contents.getURL();
+    callback(allowPermission(permission, pageUrl, details, __dirname));
+  });
+}
+
 app.whenReady().then(() => {
+  installPermissionHandler();
   initPaths();
   loadConfig();
   syncThemeSource();
