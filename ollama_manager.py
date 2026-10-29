@@ -21,6 +21,7 @@ import time
 import urllib.request
 import zipfile
 
+import loopback
 from config import CONFIG_DIR, get_config
 
 logger = logging.getLogger("NoType.Ollama")
@@ -127,7 +128,7 @@ def _bind_to_job(proc) -> None:
 
 def api_running(timeout: float = 0.4) -> bool:
     try:
-        with urllib.request.urlopen(OLLAMA_URL + "/api/version", timeout=timeout):
+        with loopback.urlopen(OLLAMA_URL + "/api/version", timeout=timeout):
             return True
     except Exception:
         return False
@@ -136,7 +137,7 @@ def api_running(timeout: float = 0.4) -> bool:
 def running_version(timeout: float = 0.4) -> str | None:
     """Version of the Ollama answering on :11434, None if none is up."""
     try:
-        with urllib.request.urlopen(OLLAMA_URL + "/api/version", timeout=timeout) as resp:
+        with loopback.urlopen(OLLAMA_URL + "/api/version", timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8")).get("version") or "?"
     except Exception:
         return None
@@ -152,7 +153,7 @@ def system_installed() -> bool:
 
 def model_pulled(model: str) -> bool:
     try:
-        with urllib.request.urlopen(OLLAMA_URL + "/api/tags", timeout=1.0) as resp:
+        with loopback.urlopen(OLLAMA_URL + "/api/tags", timeout=1.0) as resp:
             tags = json.loads(resp.read().decode("utf-8"))
         names = [m.get("name", "") for m in tags.get("models", [])]
         return any(n == model or n.startswith(model) for n in names)
@@ -490,7 +491,7 @@ def pull_model(model: str, on_progress=None) -> bool:
         headers={"Content-Type": "application/json"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with loopback.urlopen(req, timeout=60) as resp:
             last_pct = -1
             for raw in resp:
                 line = raw.decode("utf-8").strip()

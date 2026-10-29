@@ -23,6 +23,8 @@ import urllib.parse
 import urllib.request
 from datetime import datetime
 
+import loopback
+
 logger = logging.getLogger("NoType.Agent")
 
 TIMEOUT_S = 15                  # per connect/read, like urllib's own timeout
@@ -105,6 +107,9 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 _opener = urllib.request.build_opener(_NoRedirect)
+# A webhook on this machine (n8n on localhost, …) is reached directly, never
+# through a system proxy.
+_local_opener = urllib.request.build_opener(_NoRedirect, urllib.request.ProxyHandler({}))
 
 
 def _host(url: str) -> str:
@@ -131,6 +136,9 @@ def post(url: str, payload: dict, token: str = "", version: str = "",
       status   HTTP status code, None when there was no answer
       message  the line to show (see extract_message), '' for none
       error    '' | no_url | bad_url | http | timeout | tls | unreachable
+
+    A token only goes out over https, or over http to this machine. A plain
+    http URL to another host with a token set counts as bad_url.
     """
     url = (url or "").strip()
     if not url:
@@ -142,12 +150,17 @@ def post(url: str, payload: dict, token: str = "", version: str = "",
         valid = False
     if not valid:
         return _result(False, error="bad_url")
+    local = loopback.is_loopback_host(parts.hostname)
+    token = (token or "").strip()
+    if token and parts.scheme == "http" and not local:
+        logger.warning(f"Agent: not sending the token over plain http to {parts.hostname}, "
+                       "use https (or a local address)")
+        return _result(False, error="bad_url")
 
     headers = {
         "Content-Type": "application/json",
         "User-Agent": f"NoType/{version}" if version else "NoType",
     }
-    token = (token or "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -157,7 +170,7 @@ def post(url: str, payload: dict, token: str = "", version: str = "",
     started = time.perf_counter()
     ms = lambda: int((time.perf_counter() - started) * 1000)  # noqa: E731
     try:
-        with _opener.open(request, timeout=timeout) as resp:
+        with (_local_opener if local else _opener).open(request, timeout=timeout) as resp:
             status = resp.status
             answer = resp.read(MAX_ANSWER_BYTES)
             ctype = resp.headers.get("Content-Type", "")
