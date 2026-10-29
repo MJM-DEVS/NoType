@@ -93,10 +93,15 @@ _LITERAL_AFTER = {
            "zum", "am", "um", "beim", "im", "vom", "ins", "wichtiger", "wichtigen",
            "nächsten", "nächster", "letzten", "letzter", "ersten", "erster",
            "guter", "guten", "springende", "springenden"},
-    "en": {"the", "a", "an", "this", "that", "same", "each", "every", "per", "trial",
-           "grace", "time", "waiting", "notice", "test", "billing", "reporting", "no"},
+    "en": {"the", "a", "an", "this", "that", "same", "each", "every", "per"},
     "pl": {"ta", "ten", "tę", "jedna", "jedną", "jeden", "czarna", "czarną",
            "każda", "każdy", "ostatnia", "ostatni"},
+}
+# Like _LITERAL_AFTER, but only before "period" ("trial period", "no period").
+# "No comma thanks" is still a comma.
+_LITERAL_BEFORE_PERIOD = {
+    "en": {"trial", "grace", "time", "waiting", "notice", "test", "billing",
+           "reporting", "no"},
 }
 
 _PUNCT = ",.;:!?"
@@ -132,6 +137,7 @@ def apply(text: str, language: str | None) -> str:
     if not text or lang not in _COMMANDS:
         return text
     commands, literal = _COMMANDS[lang], _LITERAL_AFTER[lang]
+    period_literal = _LITERAL_BEFORE_PERIOD.get(lang, set())
     pattern = _pattern(lang)
 
     def next_is_command(rest: str) -> bool:
@@ -143,7 +149,9 @@ def apply(text: str, language: str | None) -> str:
         before = m.string[:m.start()]
         rest = m.string[m.end():]
         prev_word = re.search(r"(\w+)\W*$", before)
-        if not m.group("pre") and prev_word and prev_word.group(1).lower() in literal:
+        if not m.group("pre") and prev_word and (
+                prev_word.group(1).lower() in literal
+                or kind == "period" and prev_word.group(1).lower() in period_literal):
             return m.group(0)
         if kind == "period":
             isolated = bool(m.group("pre"))
