@@ -3,6 +3,7 @@ NoType – Whisper Transcription Engine
 Uses faster-whisper with CUDA for local speech-to-text.
 """
 
+import gc
 import logging
 import os
 import threading
@@ -115,8 +116,10 @@ COMPUTE_TYPES = {
 class Transcriber:
     # Class-level cache so reopening the settings panel or saving an unchanged
     # model_size doesn't reload the model from disk. Keyed by the trio that
-    # uniquely identifies a loaded WhisperModel instance. The lock prevents two
-    # concurrent load_model() calls from racing the dict.
+    # uniquely identifies a loaded WhisperModel instance. Holds ONE model:
+    # switching models drops the old one first, so RAM/VRAM never carries
+    # two. The lock prevents two concurrent load_model() calls from racing
+    # the dict.
     _model_cache: dict = {}
     _cache_lock = threading.Lock()
     # SERIALISES every call to `self._model.transcribe(...)`. faster-whisper's
@@ -191,6 +194,13 @@ class Transcriber:
         cache_key = (self._repo, self.device, self.compute_type)
         with Transcriber._cache_lock:
             cached = Transcriber._model_cache.get(cache_key)
+            evict = cached is None and bool(Transcriber._model_cache)
+            if evict:
+                Transcriber._model_cache.clear()
+        if evict:
+            # Free the previous model before the new one loads (it is gone
+            # once no Transcriber holds it any more).
+            gc.collect()
         if cached is not None:
             self._model = cached
             logger.info(f"Model cache hit: {self.model_size} / {self.device} / {self.compute_type}")
@@ -229,6 +239,7 @@ class Transcriber:
                 raise
 
         with Transcriber._cache_lock:
+            Transcriber._model_cache.clear()
             Transcriber._model_cache[cache_key] = self._model
 
         if on_progress:
@@ -244,16 +255,23 @@ class Transcriber:
         - Short (<10s): beam=1 (greedy, fastest, fine for short phrases)
         - Medium (10-30s): beam=3 (balanced)
         - Long (>30s): beam=5 (best quality for complex text)
+
+        A number outside 1..10 or garbage in the config counts as "auto".
         """
-        if beam_size_setting == "auto":
-            if audio_duration < 10:
-                return 1
-            elif audio_duration < 30:
-                return 3
-            else:
-                return 5
+        if beam_size_setting != "auto":
+            try:
+                beam = int(beam_size_setting)
+            except (TypeError, ValueError):
+                beam = 0
+            if 1 <= beam <= 10:
+                return beam
+            logger.warning(f"Invalid beam_size {beam_size_setting!r}, using auto")
+        if audio_duration < 10:
+            return 1
+        elif audio_duration < 30:
+            return 3
         else:
-            return int(beam_size_setting)
+            return 5
 
     def _choose_language(self, audio, languages, allow_other: bool,
                          vad_filter: bool, vad_sensitivity: int):
@@ -382,6 +400,12 @@ class Transcriber:
             return {"text": "", "beam": 0, "compute_type": self.compute_type,
                     "duration": 0, "vad_ms": vad_sensitivity}
 
+        # From the config: a string or garbage must not fail the dictation.
+        try:
+            vad_sensitivity = max(int(vad_sensitivity), 0)
+        except (TypeError, ValueError):
+            vad_sensitivity = 300
+
         audio_duration = len(audio) / SAMPLE_RATE
         actual_beam = self._get_beam_size(audio_duration, beam_size)
         batched = (vad_filter and self.device == "cuda"
@@ -430,6 +454,7 @@ class Transcriber:
                 Transcriber._model_cache.pop(
                     (self._repo, self.device, self.compute_type), None)
             self._model = None
+            self._batched = None  # holds the old model, too
             self.compute_type = "float16"
             self.load_model()
             compute_fallback = True
