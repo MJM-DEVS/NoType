@@ -32,6 +32,7 @@
       "model-catalog.js",
       "keycaps.js",
       "sprites.js",
+      "lib/**",
       "*.html",
       "assets/**",
       "!node_modules/electron-builder/**",
