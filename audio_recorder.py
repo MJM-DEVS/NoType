@@ -133,8 +133,21 @@ class AudioRecorder:
         if self._device_index is not None:
             kwargs["device"] = self._device_index
 
-        self._stream = sd.InputStream(**kwargs)
-        self._stream.start()
+        stream = None
+        try:
+            stream = sd.InputStream(**kwargs)
+            stream.start()
+        except Exception:
+            # No mic / device busy: don't stay "recording" without a stream.
+            with self._lock:
+                self._recording = False
+            if stream is not None:
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+            raise
+        self._stream = stream
 
     def get_recent_audio(self, max_seconds: float = 8.0) -> np.ndarray:
         """Snapshot of the most recent `max_seconds` of buffered audio.

@@ -16,6 +16,8 @@ import re
 
 MAX_ENTRIES = 500
 _WORD_RE = re.compile(r"\w+", re.UNICODE)
+# Words and single punctuation marks; hyphens count as spacing.
+_TOKEN_RE = re.compile(r"\w+|[^\w\s\-]", re.UNICODE)
 
 # (entries key, compiled regex, replacement per group) – rebuilt only when
 # the dictionary changes.
@@ -24,11 +26,13 @@ _cache = (None, None, [])
 
 def _body(phrase: str) -> str | None:
     """Regex for a phrase that tolerates spacing/hyphen variants:
-    "kuber netis" also matches "Kuber-Netis", "Kubernetis", "kuber  netis"."""
-    words = _WORD_RE.findall(phrase)
-    if not words:
+    "kuber netis" also matches "Kuber-Netis", "Kubernetis", "kuber  netis".
+    Other punctuation is part of the phrase and matched literally: "C#"
+    must not shrink to "C" (which would match every lone "c")."""
+    if not _WORD_RE.search(phrase):
         return None
-    return r"[\s\-]*".join(re.escape(w) for w in words)
+    tokens = _TOKEN_RE.findall(phrase)
+    return r"[\s\-]*".join(re.escape(t) for t in tokens)
 
 
 def _normalize(entries) -> tuple:

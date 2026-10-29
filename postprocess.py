@@ -128,7 +128,7 @@ def _ollama_available(model: str) -> bool:
     """True if Ollama answers on localhost AND has `model` pulled. Cached."""
     global _availability
     checked_at, available = _availability
-    if time.monotonic() - checked_at < AVAILABILITY_TTL_S:
+    if time.monotonic() - checked_at < (AVAILABILITY_TTL_S if available else 5.0):
         return available
 
     result = False
