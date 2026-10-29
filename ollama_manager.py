@@ -10,6 +10,7 @@ we simply use it and never manage a portable copy.
 
 import ctypes
 import ctypes.wintypes
+import hashlib
 import json
 import logging
 import os
@@ -175,9 +176,11 @@ def status(model: str) -> dict:
 
 # ── Install (portable zip, no admin rights) ──────────────────────────
 
-def _download(url: str, dest: str, report, label: str) -> None:
-    """Stream `url` to `dest`, reporting 0-90 % (extraction gets the rest)."""
+def _download(url: str, dest: str, report, label: str) -> str:
+    """Stream `url` to `dest`, reporting 0-90 % (extraction gets the rest).
+    Returns the SHA-256 of what was written (hex)."""
     req = urllib.request.Request(url, headers={"User-Agent": "NoType"})
+    sha = hashlib.sha256()
     with urllib.request.urlopen(req, timeout=30) as resp:
         total = int(resp.headers.get("Content-Length") or 0)
         done = 0
@@ -188,12 +191,77 @@ def _download(url: str, dest: str, report, label: str) -> None:
                 if not chunk:
                     break
                 f.write(chunk)
+                sha.update(chunk)
                 done += len(chunk)
                 if total:
                     pct = int(done * 90 / total)
                     if pct != last_pct:
                         last_pct = pct
                         report(pct, f"{label} {done // (1024*1024)} / {total // (1024*1024)} MB")
+    return sha.hexdigest()
+
+
+# ── Integrity check ──────────────────────────────────────────────────
+# GitHub lists a "sha256:<hex>" digest for every release asset; Ollama also
+# publishes a sha256sum.txt. Either one is checked against the download. A
+# release with neither installs as before (with a log line).
+
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _release_info() -> dict | None:
+    """The newest stable release from the GitHub API, None on failure."""
+    try:
+        req = urllib.request.Request(RELEASES_API, headers={
+            "User-Agent": "NoType", "Accept": "application/vnd.github+json"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            info = json.loads(resp.read().decode("utf-8"))
+        return info if isinstance(info, dict) else None
+    except Exception as e:
+        logger.warning(f"Ollama release check failed: {e}")
+        return None
+
+
+def _asset(release: dict | None, name: str) -> dict | None:
+    for asset in (release or {}).get("assets") or []:
+        if isinstance(asset, dict) and asset.get("name") == name:
+            return asset
+    return None
+
+
+def _expected_sha256(release: dict | None) -> str | None:
+    """The published SHA-256 of ZIP_NAME in `release` (lower-case hex), None
+    when the release doesn't say."""
+    digest = str((_asset(release, ZIP_NAME) or {}).get("digest") or "").lower()
+    if digest.startswith("sha256:") and _SHA256_RE.match(digest[7:]):
+        return digest[7:]
+    sums = _asset(release, "sha256sum.txt")
+    if not sums or not sums.get("browser_download_url"):
+        return None
+    try:
+        req = urllib.request.Request(sums["browser_download_url"], headers={"User-Agent": "NoType"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            listing = resp.read(256 * 1024).decode("utf-8", "replace")
+    except Exception as e:
+        logger.warning(f"Could not fetch sha256sum.txt: {e}")
+        return None
+    for line in listing.splitlines():
+        # "<hex>  ./ollama-windows-amd64.zip" (or "*name" in binary mode)
+        parts = line.split()
+        if len(parts) == 2 and parts[1].lstrip("*").removeprefix("./") == ZIP_NAME:
+            if _SHA256_RE.match(parts[0].lower()):
+                return parts[0].lower()
+    return None
+
+
+def _verify(actual: str, expected: str | None) -> None:
+    """Raise when the download doesn't match the published checksum."""
+    if expected is None:
+        logger.info("No published SHA-256 for the Ollama download, not verified")
+        return
+    if actual.lower() != expected:
+        raise RuntimeError("checksum mismatch, download discarded")
+    logger.info("Ollama download SHA-256 verified")
 
 
 def install(on_progress=None) -> bool:
@@ -208,8 +276,15 @@ def install(on_progress=None) -> bool:
     tmp_zip = os.path.join(OLLAMA_DIR, "ollama.zip.part")
 
     try:
-        _download(DOWNLOAD_URL, tmp_zip, report,
-                  _t("Lade Ollama herunter...", "Downloading Ollama..."))
+        # The release info pins the exact file and its checksum; without it
+        # (API unreachable, rate limit) the plain "latest" link still works.
+        release = _release_info()
+        url = str((_asset(release, ZIP_NAME) or {}).get("browser_download_url") or "")
+        if not url.startswith("https://github.com/"):
+            url = DOWNLOAD_URL
+        actual = _download(url, tmp_zip, report,
+                           _t("Lade Ollama herunter...", "Downloading Ollama..."))
+        _verify(actual, _expected_sha256(release))
 
         report(92, _t("Entpacke...", "Extracting..."))
         with zipfile.ZipFile(tmp_zip) as zf:
@@ -336,17 +411,14 @@ def installed_version() -> str | None:
         return None
 
 
+def _tag_version(release: dict | None) -> str | None:
+    tag = str((release or {}).get("tag_name") or "")
+    return tag.lstrip("v") or None
+
+
 def latest_version() -> str | None:
     """Newest stable Ollama release on GitHub, e.g. "0.34.4"."""
-    try:
-        req = urllib.request.Request(RELEASES_API, headers={
-            "User-Agent": "NoType", "Accept": "application/vnd.github+json"})
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            tag = json.loads(resp.read().decode("utf-8")).get("tag_name", "")
-        return tag.lstrip("v") or None
-    except Exception as e:
-        logger.warning(f"Ollama release check failed: {e}")
-        return None
+    return _tag_version(_release_info())
 
 
 def _kill_portable_processes() -> None:
@@ -415,7 +487,8 @@ def update(on_progress=None) -> tuple[bool, str]:
                          "Only the Ollama installed by NoType can be updated here")
 
     report(0, _t("Suche nach Updates...", "Checking for updates..."))
-    latest = latest_version()
+    release = _release_info()
+    latest = _tag_version(release)
     if not latest:
         return False, _t("Update-Prüfung fehlgeschlagen – keine Verbindung zu GitHub",
                          "Update check failed – could not reach GitHub")
@@ -431,7 +504,8 @@ def update(on_progress=None) -> tuple[bool, str]:
     ok, message = False, ""
     try:
         _remove(staging)
-        _download(url, tmp_zip, report, _t(f"Lade Ollama {latest}...", f"Downloading Ollama {latest}..."))
+        actual = _download(url, tmp_zip, report, _t(f"Lade Ollama {latest}...", f"Downloading Ollama {latest}..."))
+        _verify(actual, _expected_sha256(release))
         report(92, _t("Entpacke...", "Extracting..."))
         with zipfile.ZipFile(tmp_zip) as zf:
             zf.extractall(staging)
