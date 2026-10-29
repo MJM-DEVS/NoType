@@ -1,0 +1,76 @@
+name: Bug report
+description: Something in NoType does not work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Please do not report security problems here; see [SECURITY.md](https://github.com/MJM-DEVS/NoType/blob/main/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: |
+        1. Hold Ctrl+Shift+Space in Notepad
+        2. Say "..."
+        3. Nothing is typed, the overlay shows ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: NoType version
+      description: Shown under Settings → General, or in the installer file name.
+      placeholder: "3.3.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installer or portable?
+      options:
+        - Installer
+        - Portable ZIP
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2"
+  - type: input
+    id: gpu
+    attributes:
+      label: Graphics card
+      description: For example "NVIDIA RTX 3060 12 GB", or "none" if NoType runs on the processor.
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Speech model
+      description: Settings → Language & Model.
+      placeholder: "Whisper Large v3 Turbo"
+  - type: dropdown
+    id: cleanup
+    attributes:
+      label: Text cleanup
+      options:
+        - "Off"
+        - Fast
+        - AI
+        - Not sure
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: |
+        The relevant part of `%APPDATA%\NoType\notype.log`. It contains timings and errors, never your dictated text. It can contain program names, model names and the host of an agent URL, so please look it over before posting.
+      render: text
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else?
+      description: Screenshots, the app you dictated into, what changed recently.
