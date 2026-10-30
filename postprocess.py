@@ -19,6 +19,8 @@ import time
 import urllib.request
 import urllib.error
 
+import loopback
+
 logger = logging.getLogger("NoType.PostProcess")
 
 OLLAMA_URL = "http://127.0.0.1:11434"
@@ -137,7 +139,7 @@ def _ollama_available(model: str) -> bool:
 
     result = False
     try:
-        with urllib.request.urlopen(OLLAMA_URL + "/api/tags", timeout=0.4) as resp:
+        with loopback.urlopen(OLLAMA_URL + "/api/tags", timeout=0.4) as resp:
             tags = json.loads(resp.read().decode("utf-8"))
         names = [m.get("name", "") for m in tags.get("models", [])]
         # "qwen3:4b-instruct" also matches "qwen3:4b-instruct-2507-q4_K_M"
@@ -159,7 +161,7 @@ def _model_loaded(model: str) -> bool:
     gives up early cancels the load – so after every idle half hour, all
     following dictations used to time out on the LLM."""
     try:
-        with urllib.request.urlopen(OLLAMA_URL + "/api/ps", timeout=0.3) as resp:
+        with loopback.urlopen(OLLAMA_URL + "/api/ps", timeout=0.3) as resp:
             running = json.loads(resp.read().decode("utf-8")).get("models", [])
     except Exception:
         return True  # can't tell – the cleanup request itself will find out
@@ -207,7 +209,7 @@ def warm_up(model: str = DEFAULT_LLM_MODEL) -> None:
             OLLAMA_URL + "/api/generate", data=payload,
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with loopback.urlopen(req, timeout=30) as resp:
             resp.read()
         logger.info(f"LLM '{model}' warmed up")
     except Exception as e:
@@ -224,7 +226,7 @@ def _chat(payload: dict, timeout: float) -> dict:
         OLLAMA_URL + "/api/chat", data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with loopback.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
