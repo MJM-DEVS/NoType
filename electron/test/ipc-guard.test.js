@@ -2,72 +2,66 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { pathToFileURL } = require('url');
-const { CHANNEL_PAGES, appPageName, allowSender, senderLabel, filterConfig } = require('../lib/ipc-guard');
+const { CHANNEL_PAGES, CONFIG_TYPES, senderPage, allowSender, filterConfig } = require('../lib/ipc-guard');
 
 const APP = path.resolve(__dirname, '..');
-const page = (name, extra = '') => pathToFileURL(path.join(APP, name)).href + extra;
 const read = (f) => fs.readFileSync(path.join(APP, f), 'utf-8');
 
-test('page name: files directly in the app folder, query and hash ignored', () => {
-  assert.strictEqual(appPageName(page('settings.html'), APP), 'settings.html');
-  assert.strictEqual(appPageName(page('settings.html', '#speech'), APP), 'settings.html');
-  assert.strictEqual(appPageName(page('overlay.html', '?demo=1&style=amoled#x'), APP), 'overlay.html');
-  assert.strictEqual(appPageName(page('lib/x.html'), APP), null);
-  assert.strictEqual(appPageName(pathToFileURL(path.join(APP, '..', 'settings.html')).href, APP), null);
-  assert.strictEqual(appPageName(pathToFileURL(APP).href, APP), null);
-  assert.strictEqual(appPageName(pathToFileURL(APP).href + '/', APP), null);
-  assert.strictEqual(appPageName('https://example.com/settings.html', APP), null);
-  assert.strictEqual(appPageName('data:text/html,hi', APP), null);
-  assert.strictEqual(appPageName('', APP), null);
-  assert.strictEqual(appPageName('not a url', APP), null);
-  assert.strictEqual(appPageName(page('settings.html'), ''), null);
-});
+// A fake BrowserWindow / IPC event: only what senderPage() reads.
+let nextId = 1;
+const fakeWin = () => {
+  const w = { destroyed: false, webContents: { id: nextId++ }, isDestroyed: () => w.destroyed };
+  return w;
+};
+const fromWin = (w, frame = { parent: null }) => ({ sender: { id: w.webContents.id }, senderFrame: frame });
 
-test('page name: Windows app folders in file:///C:/ URLs', () => {
-  const dir = 'C:\\Users\\Max Müller\\AppData\\Local\\Programs\\NoType\\resources\\app';
-  const base = 'file:///C:/Users/Max%20M%C3%BCller/AppData/Local/Programs/NoType/resources/app';
-  assert.strictEqual(appPageName(`${base}/settings.html`, dir), 'settings.html');
-  assert.strictEqual(appPageName(`${base}/toast.html?x=1#y`, dir), 'toast.html');
-  // Drive letter and folder case differ on Windows only.
-  assert.strictEqual(appPageName(`${base.replace('C:', 'c:').replace('Programs', 'programs')}/settings.html`, dir), 'settings.html');
-  assert.strictEqual(appPageName(`${base}/settings.html`, dir + '\\'), 'settings.html');
-  assert.strictEqual(appPageName('file:///D:/Users/Max%20M%C3%BCller/AppData/Local/Programs/NoType/resources/app/settings.html', dir), null);
-  assert.strictEqual(appPageName(`${base}/../settings.html`, dir), null);
-  assert.strictEqual(appPageName(`${base}/sub%2Fsettings.html`, dir), null);
-  assert.strictEqual(appPageName(`${base}/sub%5Csettings.html`, dir), null);
-  assert.strictEqual(appPageName(`${base}/x%2F..%2Fsettings.html`, dir), null);
-  assert.strictEqual(appPageName(`${base}/bad%E0%A4%A.html`, dir), null);
-  // A UNC install keeps its host.
-  assert.strictEqual(appPageName('file://server/share/NoType/settings.html', '\\\\server\\share\\NoType'), 'settings.html');
-  assert.strictEqual(appPageName('file://other/share/NoType/settings.html', '\\\\server\\share\\NoType'), null);
-});
-
-test('page name: POSIX folders stay case-sensitive', () => {
-  assert.strictEqual(appPageName('file:///opt/NoType/settings.html', '/opt/NoType'), 'settings.html');
-  assert.strictEqual(appPageName('file:///opt/notype/settings.html', '/opt/NoType'), null);
+test('senders: the page is the window that sent, top frame only', () => {
+  const settings = fakeWin(), toast = fakeWin(), stray = fakeWin();
+  const windows = { 'settings.html': settings, 'toast.html': toast, 'update.html': null };
+  assert.strictEqual(senderPage(fromWin(settings), windows), 'settings.html');
+  assert.strictEqual(senderPage(fromWin(toast), windows), 'toast.html');
+  assert.strictEqual(senderPage(fromWin(stray), windows), null);
+  // A sub-frame (the overlay preview in settings) is not the page itself.
+  assert.strictEqual(senderPage(fromWin(settings, { parent: {} }), windows), null);
+  // Frame already gone, or a window that is closing.
+  assert.strictEqual(senderPage(fromWin(settings, null), windows), null);
+  toast.destroyed = true;
+  assert.strictEqual(senderPage(fromWin(toast), windows), null);
+  // A getter that throws on a torn-down frame drops the message, no crash.
+  const broken = { sender: { id: settings.webContents.id }, get senderFrame() { throw new Error('gone'); } };
+  assert.strictEqual(senderPage(broken, windows), null);
+  assert.strictEqual(senderPage({}, windows), null);
 });
 
 test('senders: each channel only from its pages', () => {
-  assert.ok(allowSender('save-config', page('settings.html'), APP));
-  assert.ok(allowSender('save-config', page('onboarding.html', '#step2'), APP));
-  assert.ok(allowSender('update-action', page('update.html'), APP));
-  assert.ok(allowSender('update-action', page('settings.html'), APP));
-  assert.ok(allowSender('toast-action', page('toast.html'), APP));
+  assert.ok(allowSender('save-config', 'settings.html'));
+  assert.ok(allowSender('save-config', 'onboarding.html'));
+  assert.ok(allowSender('update-action', 'update.html'));
+  assert.ok(allowSender('update-action', 'settings.html'));
+  assert.ok(allowSender('toast-action', 'toast.html'));
   for (const p of ['toast.html', 'overlay.html', 'update.html', 'suggest.html']) {
-    assert.ok(!allowSender('save-config', page(p), APP), p);
-    assert.ok(!allowSender('agent-test', page(p), APP), p);
+    assert.ok(!allowSender('save-config', p), p);
+    assert.ok(!allowSender('agent-test', p), p);
   }
-  assert.ok(!allowSender('save-config', 'https://example.com/settings.html', APP));
-  assert.ok(!allowSender('save-config', '', APP));
-  assert.ok(!allowSender('unknown-channel', page('settings.html'), APP));
-  assert.ok(!allowSender('toString', page('settings.html'), APP));
-  assert.ok(!allowSender('__proto__', page('settings.html'), APP));
+  assert.ok(!allowSender('save-config', null));
+  assert.ok(!allowSender('unknown-channel', 'settings.html'));
+  assert.ok(!allowSender('toString', 'settings.html'));
+  assert.ok(!allowSender('__proto__', 'settings.html'));
 });
 
-test('senders: log label is the page name, never the URL', () => {
-  assert.strictEqual(senderLabel(page('toast.html', '?secret=1'), APP), 'toast.html');
-  assert.strictEqual(senderLabel('https://example.com/?q=dictation', APP), '(not an app page)');
+// main.js maps each page to the variable of the window that loads it.
+test('window map in main.js matches the windows that load each page', () => {
+  const main = read('main.js');
+  const map = main.match(/const appWindows = \(\) => \(\{([\s\S]*?)\}\);/)[1];
+  const pairs = [...map.matchAll(/'([\w-]+\.html)':\s*(\w+)/g)].map((m) => [m[1], m[2]]);
+  const pages = fs.readdirSync(APP).filter((f) => f.endsWith('.html')).sort();
+  assert.deepStrictEqual(pairs.map(([p]) => p).sort(), pages);
+  for (const [p, v] of pairs) {
+    // The first page loaded after `v = new BrowserWindow(` or `v = win;`.
+    const m = main.match(new RegExp(`\\b${v} = (?:new BrowserWindow\\(|win;)[\\s\\S]*?loadFile\\(path\\.join\\(__dirname, '([\\w-]+\\.html)'\\)`));
+    assert.ok(m, `${v} is assigned a window`);
+    assert.strictEqual(m[1], p, `${v} loads ${p}`);
+  }
 });
 
 // What the pages send must reach main.js: every preload channel is in the
@@ -123,12 +117,23 @@ test('config: what settings.html saves passes unchanged', () => {
 });
 
 test('config: the onboarding steps pass', () => {
-  for (const partial of [
+  const samples = [
     { app_language: 'de' }, { mic_device_name: 'Mikrofon (USB)', mic_device_index: null },
     { mic_device_name: null, mic_device_index: null }, { hotkey: 'ctrl+space', mode: 'press_to_speak' },
-    { model_size: 'large-v3-turbo' }, { autostart: true }, { first_run_complete: true },
-  ]) {
+    { model_size: 'large-v3-turbo' }, { autostart: true }, { update_check: false }, { first_run_complete: true },
+  ];
+  for (const partial of samples) {
     assert.deepStrictEqual(filterConfig(partial), { config: partial, rejected: [] });
+  }
+  // Every key a setup step saves is allowed and has a typed sample above.
+  const sampled = new Set(samples.flatMap(Object.keys));
+  const calls = [...read('onboarding.html').matchAll(/\bsave\(\{([\s\S]*?)\}\)/g)];
+  assert.ok(calls.length >= 5);
+  for (const [, body] of calls) {
+    for (const [, key] of body.matchAll(/(?:^|,)\s*(\w+):/g)) {
+      assert.ok(Object.prototype.hasOwnProperty.call(CONFIG_TYPES, key), `onboarding saves unknown key ${key}`);
+      assert.ok(sampled.has(key), `no typed sample for onboarding key ${key}`);
+    }
   }
 });
 

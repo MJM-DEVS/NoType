@@ -2,7 +2,7 @@
 // electron import: unit-tested with `node --test`.
 
 // Channel -> the pages (HTML files in the app folder) that send it. A message
-// from any other page, or on a channel not listed here, is dropped.
+// from any other window, or on a channel not listed here, is dropped.
 const CHANNEL_PAGES = {
   'save-config': ['settings.html', 'onboarding.html'],
   'get-config': ['settings.html', 'onboarding.html'],
@@ -30,40 +30,24 @@ const CHANNEL_PAGES = {
 
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 
-// 'C:\app' and '/opt/app' as they appear in a file: URL path ('/C:/app').
-function urlDir(dir) {
-  let p = String(dir || '').replace(/\\/g, '/').replace(/\/+$/, '');
-  if (/^[A-Za-z]:/.test(p)) p = '/' + p;
-  return p;
-}
-
-// File name of a page that sits directly in the app folder, else null.
-// Query and hash are ignored; Windows paths compare case-insensitively.
-function appPageName(url, appDir) {
+// The page whose window sent an IPC message, else null. `windows` maps each
+// page to the BrowserWindow (or null) main.js opened it in. Matching the
+// sender's identity, not its URL, sidesteps how a file: URL spells the
+// install folder (%, spaces, case). Only the top frame counts; that it still
+// shows its page is the navigation guard's job (main.js, lib/guards.js).
+function senderPage(event, windows) {
   try {
-    const u = new URL(url);
-    if (u.protocol !== 'file:') return null;
-    const p = (u.host ? '//' + u.host : '') + decodeURIComponent(u.pathname);
-    const i = p.lastIndexOf('/');
-    const name = p.slice(i + 1);
-    let parent = p.slice(0, i), dir = urlDir(appDir);
-    if (!dir || !name || name.includes('\\')) return null;
-    if (/^\/[A-Za-z]:(\/|$)|^\/\//.test(dir)) { parent = parent.toLowerCase(); dir = dir.toLowerCase(); }
-    return parent === dir ? name : null;
-  } catch (_) {
-    return null;
-  }
+    const frame = event.senderFrame;
+    if (!frame || frame.parent) return null;
+    for (const [page, win] of Object.entries(windows)) {
+      if (win && !win.isDestroyed() && win.webContents.id === event.sender.id) return page;
+    }
+  } catch (_) { /* frame or window torn down meanwhile */ }
+  return null;
 }
 
-function allowSender(channel, url, appDir) {
-  const name = appPageName(url, appDir);
-  return !!name && has(CHANNEL_PAGES, channel) && CHANNEL_PAGES[channel].includes(name);
-}
-
-// For the log line of a dropped message: the page name, never the full URL.
-function senderLabel(url, appDir) {
-  const name = appPageName(url, appDir);
-  return name ? name.slice(0, 60) : '(not an app page)';
+function allowSender(channel, page) {
+  return !!page && has(CHANNEL_PAGES, channel) && CHANNEL_PAGES[channel].includes(page);
 }
 
 // Settings a page may save, with a rough type each: the defaults in main.js
@@ -140,4 +124,4 @@ function filterConfig(input) {
   return { config, rejected };
 }
 
-module.exports = { CHANNEL_PAGES, CONFIG_TYPES, appPageName, allowSender, senderLabel, filterConfig };
+module.exports = { CHANNEL_PAGES, CONFIG_TYPES, senderPage, allowSender, filterConfig };

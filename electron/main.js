@@ -8,7 +8,7 @@ const { isSameDocument, isAppFile, allowPermission } = require('./lib/guards');
 const { phraseKey } = require('./lib/phrase-key');
 const { modelLabel } = require('./lib/model-labels');
 const { loadHistoryFile, saveHistoryFile, debouncedSave } = require('./lib/history-file');
-const { allowSender, senderLabel, filterConfig } = require('./lib/ipc-guard');
+const { senderPage, allowSender, filterConfig } = require('./lib/ipc-guard');
 
 // ── Single-Instance Lock ──
 // Prevents double hotkey registration when boot-autostart and a manual launch collide.
@@ -1582,14 +1582,19 @@ function sendToOnboarding(channel, data) {
 }
 
 // ── IPC from renderers ──
-// Every channel answers only the pages that use it (lib/ipc-guard.js): a
-// toast or a foreign page cannot save settings. Dropped messages log the
-// channel and page name, never the payload.
+// Every channel answers only the windows of the pages that use it
+// (lib/ipc-guard.js): a toast or a foreign page cannot save settings.
+// Dropped messages log the channel and page name, never the payload.
+const appWindows = () => ({
+  'settings.html': settingsWin, 'onboarding.html': onboardingWin, 'toast.html': toastWin,
+  'suggest.html': suggestWin, 'update.html': updateWin, 'overlay.html': overlayWin,
+});
+
 function onIpc(channel, handler) {
   ipcMain.on(channel, (event, ...args) => {
-    const url = (event.senderFrame && event.senderFrame.url) || '';
-    if (!allowSender(channel, url, __dirname)) {
-      console.warn(`IPC '${channel}' from ${senderLabel(url, __dirname)} dropped`);
+    const page = senderPage(event, appWindows());
+    if (!allowSender(channel, page)) {
+      console.warn(`IPC '${channel}' from ${page || '(not an app window)'} dropped`);
       return;
     }
     handler(event, ...args);
