@@ -6,6 +6,7 @@ os.environ["APPDATA"] = _TMP
 os.environ["XDG_CONFIG_HOME"] = _TMP
 
 import gc  # noqa: E402
+import threading  # noqa: E402
 import weakref  # noqa: E402
 from types import SimpleNamespace  # noqa: E402
 
@@ -80,3 +81,78 @@ def test_invalid_vad_sensitivity_with_empty_audio():
     t = _loaded("small")
     result = t.transcribe(np.zeros(0, dtype=np.float32), vad_sensitivity="x")
     assert result["vad_ms"] == 300
+
+
+class CublasModel(FakeModel):
+    """int8_float16 loads but fails on the first matmul; the float16 load
+    waits for `release`, so a second pass can arrive mid-reload."""
+
+    loads = []
+    reloading = None
+    release = None
+
+    def __init__(self, source, device=None, compute_type=None):
+        super().__init__(source, device, compute_type)
+        self.compute_type = compute_type
+        CublasModel.loads.append(compute_type)
+        if compute_type == "float16":
+            CublasModel.reloading.set()
+            assert CublasModel.release.wait(5)
+
+    def transcribe(self, audio, **kwargs):
+        if self.compute_type == "int8_float16":
+            raise RuntimeError("CUBLAS_STATUS_NOT_SUPPORTED")
+        return super().transcribe(audio, **kwargs)
+
+
+@pytest.fixture
+def cublas(monkeypatch):
+    monkeypatch.setattr(transcriber, "WhisperModel", CublasModel)
+    CublasModel.loads = []
+    CublasModel.reloading = threading.Event()
+    CublasModel.release = threading.Event()
+    t = Transcriber(model_size="small", device="cuda", compute_type="int8_float16")
+    t.load_model()
+    return t
+
+
+def test_preview_waits_for_cublas_reload(cublas):
+    audio = np.zeros(16000, dtype=np.float32)
+    results, errors = {}, []
+
+    def run(name, **kwargs):
+        try:
+            results[name] = cublas.transcribe(audio, **kwargs)
+        except Exception as e:
+            errors.append(e)
+
+    final = threading.Thread(target=run, args=("final",))
+    final.start()
+    assert CublasModel.reloading.wait(5)
+    # Mid-reload the model counts as loaded, so a preview pass starts and
+    # waits for the lock instead of failing with "Model not loaded".
+    assert cublas.is_loaded
+    preview = threading.Thread(target=run, args=("preview",), kwargs={"beam_size": "1"})
+    preview.start()
+    preview.join(0.2)
+    assert preview.is_alive()  # blocked on the inference lock
+    CublasModel.release.set()
+    final.join(5)
+    preview.join(5)
+    assert errors == []
+    assert results["final"]["compute_fallback"] is True
+    assert results["preview"]["compute_type"] == "float16"
+    assert CublasModel.loads == ["int8_float16", "float16"]
+
+
+def test_failed_cublas_reload_reports_not_loaded(cublas, monkeypatch):
+    def broken(*args, **kwargs):
+        raise OSError("out of VRAM")
+
+    CublasModel.release.set()
+    monkeypatch.setattr(transcriber, "WhisperModel", broken)
+    with pytest.raises(OSError):
+        cublas.transcribe(np.zeros(16000, dtype=np.float32))
+    assert not cublas.is_loaded
+    with pytest.raises(RuntimeError, match="Model not loaded"):
+        cublas.transcribe(np.zeros(16000, dtype=np.float32))
