@@ -114,7 +114,6 @@ class Backend:
         self._model_load_lock = threading.Lock()
         self._model_generation_lock = threading.Lock()
         self._model_generation = 0
-        self._amplitude_thread = None
         self._running = True
         # Dictionary stage 2: fixes the user types right after a dictation
         # are offered as dictionary entries (Electron asks first).
@@ -247,12 +246,6 @@ class Backend:
             # Selftest must never block startup – a real inference problem
             # will surface (and be handled) on the first dictation anyway.
             logger.warning(f"Inference selftest failed (non-fatal): {e}")
-
-    def _amplitude_sender(self):
-        """Send amplitude data to Electron while recording."""
-        while self._running and self.recorder and self.recorder.is_recording:
-            # Get amplitude from recorder's internal state
-            time.sleep(0.04)  # ~25fps
 
     def _on_amplitude(self, amplitude, bands=None):
         """Called by AudioRecorder per block: level + spectrum for the overlay."""
