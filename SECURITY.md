@@ -61,7 +61,7 @@ With `learn_corrections` on, `correction_watch.py` reads the text field the user
 
 ### Updates
 
-The installed version uses `electron-updater` with the GitHub provider: 20 seconds after start and every 6 hours (unless `update_check` is off) it reads `latest.yml` from the newest release of `MJM-DEVS/NoType`. Nothing is downloaded before the user clicks **Update now**; the installer then runs silently.
+The installed version uses `electron-updater` with the GitHub provider: 20 seconds after start (on the first run, 20 seconds after the setup guide, which asks about it) and every 6 hours (unless `update_check` is off) it reads `latest.yml` from the newest release of `MJM-DEVS/NoType`. Nothing is downloaded before the user clicks **Update now**; the installer then runs silently.
 
 - `electron-updater` checks the downloaded installer against the SHA-512 in `latest.yml`. Both come from the same GitHub release.
 - The installers are not code-signed and no publisher check is configured. The trust anchor is HTTPS and the GitHub account that can publish releases: whoever can publish a release there can ship code to every installed copy.

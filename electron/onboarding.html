@@ -409,7 +409,7 @@
       </div>
       <div class="privacy">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
-        <span data-i18n="w.privacy">Kein Cloud-Dienst, kein Konto. Audio und Text verlassen deinen Rechner nie.</span>
+        <span data-i18n="w.privacy">Kein Cloud-Dienst, kein Konto. Was du sagst, bleibt auf deinem Rechner, außer du schickst es selbst weiter.</span>
       </div>
     </div>
   </section>
@@ -510,6 +510,13 @@
         </div>
         <label class="toggle"><input type="checkbox" id="autostartToggle" checked aria-labelledby="autostartLabel" aria-describedby="autostartDesc"><span class="slider"></span></label>
       </div>
+      <div class="field">
+        <div>
+          <div class="field-label" id="updateCheckLabel" data-i18n="d.update">Nach Updates suchen</div>
+          <div class="field-desc" id="updateCheckDesc" data-i18n="d.update.desc">Fragt beim Start und alle 6 Stunden bei GitHub nach einer neuen Version. Geladen wird erst, wenn du zustimmst.</div>
+        </div>
+        <label class="toggle"><input type="checkbox" id="updateCheckToggle" checked aria-labelledby="updateCheckLabel" aria-describedby="updateCheckDesc"><span class="slider"></span></label>
+      </div>
     </div>
     <p class="tips" data-i18n="d.tips">Tipp: Im Overlay-Tab der Einstellungen wählst du das Aussehen der Aufnahme-Anzeige, unter „Eigene Begriffe“ hinterlegst du Namen und Fachwörter, damit sie richtig geschrieben werden.</p>
   </section>
@@ -546,7 +553,7 @@
       'skip': 'Überspringen', 'back': 'Zurück', 'next': 'Weiter', 'start': 'Los geht\'s', 'finish': 'Fertig',
       'w.title': 'Willkommen bei NoType',
       'w.lead': 'Diktieren statt tippen, in jeder App. Die Spracherkennung läuft komplett auf deinem PC.',
-      'w.privacy': 'Kein Cloud-Dienst, kein Konto. Audio und Text verlassen deinen Rechner nie.',
+      'w.privacy': 'Kein Cloud-Dienst, kein Konto. Was du sagst, bleibt auf deinem Rechner, außer du schickst es selbst weiter.',
       'w.lang': 'Sprache',
       'm.title': 'Mikrofon',
       'm.lead': 'Wähle das Mikrofon, mit dem du diktieren willst, und sprich kurz. Der Balken sollte ausschlagen.',
@@ -592,13 +599,15 @@
       'd.settings': 'Einstellungen öffnen',
       'd.autostart': 'Mit Windows starten',
       'd.autostart.desc': 'Nach jedem Neustart sofort bereit, ohne NoType selbst zu öffnen. Lässt sich in den Einstellungen jederzeit ändern.',
+      'd.update': 'Nach Updates suchen',
+      'd.update.desc': 'Fragt beim Start und alle 6 Stunden bei GitHub nach einer neuen Version. Geladen wird erst, wenn du zustimmst.',
       'd.tips': 'Tipp: Im Overlay-Tab der Einstellungen wählst du das Aussehen der Aufnahme-Anzeige, unter „Eigene Begriffe“ hinterlegst du Namen und Fachwörter, damit sie richtig geschrieben werden.',
     },
     en: {
       'skip': 'Skip', 'back': 'Back', 'next': 'Next', 'start': 'Let\'s go', 'finish': 'Done',
       'w.title': 'Welcome to NoType',
       'w.lead': 'Dictate instead of typing, in any app. Speech recognition runs entirely on your PC.',
-      'w.privacy': 'No cloud service, no account. Audio and text never leave your machine.',
+      'w.privacy': 'No cloud service, no account. What you say stays on your machine, unless you send it somewhere yourself.',
       'w.lang': 'Language',
       'm.title': 'Microphone',
       'm.lead': 'Pick the microphone you want to dictate with and say a few words. The bar should move.',
@@ -644,6 +653,8 @@
       'd.settings': 'Open settings',
       'd.autostart': 'Start with Windows',
       'd.autostart.desc': 'Ready after every restart without opening NoType yourself. You can change this in settings at any time.',
+      'd.update': 'Check for updates',
+      'd.update.desc': 'Asks GitHub for a new version at startup and every 6 hours. Nothing downloads until you say so.',
       'd.tips': 'Tip: the Overlay tab in settings picks the look of the recording indicator, and "Custom Vocabulary" teaches NoType names and jargon so they are spelled right.',
     },
   };
@@ -745,7 +756,9 @@
         if (state.model_size !== cfg.model_size) { modelReady = false; testState = 'loading'; }
         save({ model_size: state.model_size });
         break;
-      case STEPS - 1: save({ autostart: $('autostartToggle').checked }); break;
+      case STEPS - 1:
+        save({ autostart: $('autostartToggle').checked, update_check: $('updateCheckToggle').checked });
+        break;
     }
   }
 
@@ -1105,6 +1118,7 @@
     $('sumModel').textContent = window.NoTypeModels ? window.NoTypeModels.nameOf(state.model_size) : state.model_size;
   }
   $('autostartToggle').addEventListener('change', (e) => { if (e.target.checked) ignite(e.target); });
+  $('updateCheckToggle').addEventListener('change', (e) => { if (e.target.checked) ignite(e.target); });
 
   // ── IPC ──
   if (window.notype) {
@@ -1124,6 +1138,7 @@
       state.model_size = cfg.model_size || 'small';
       // First run suggests autostart; a rerun of the wizard shows the real state.
       $('autostartToggle').checked = cfg.first_run_complete ? cfg.autostart === true : true;
+      $('updateCheckToggle').checked = cfg.update_check !== false;
       uiLang = state.app_language;
       markLang();
       renderHotkeyBox();

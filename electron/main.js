@@ -8,6 +8,7 @@ const { isSameDocument, isAppFile, allowPermission } = require('./lib/guards');
 const { phraseKey } = require('./lib/phrase-key');
 const { modelLabel } = require('./lib/model-labels');
 const { loadHistoryFile, saveHistoryFile, debouncedSave } = require('./lib/history-file');
+const { firstUpdateCheck } = require('./lib/first-update-check');
 
 // ── Single-Instance Lock ──
 // Prevents double hotkey registration when boot-autostart and a manual launch collide.
@@ -1572,6 +1573,7 @@ function markOnboardingDone() {
   config.first_run_complete = true;
   writeConfigToDisk();
   if (pythonProcess && pythonProcess.stdin.writable) sendToPython('save_config', { first_run_complete: true });
+  scheduleFirstUpdateCheck(config);
 }
 
 function sendToOnboarding(channel, data) {
@@ -1609,6 +1611,8 @@ ipcMain.on('save-config', (_, newConfig) => {
   }
   writeConfigToDisk();
   if (hotkeySignature(config) !== prevKeys) registerHotkeys();
+  // The setup guide's last step saves first_run_complete before it closes.
+  scheduleFirstUpdateCheck(config);
 
   const modelChanged = !!newConfig.model_size && newConfig.model_size !== prevModel;
   if (modelChanged) {
@@ -1907,10 +1911,11 @@ ipcMain.on('toast-action', (_, action) => {
 
 // ── Updates ──
 // electron-updater reads latest.yml from the newest GitHub release: 20 s after
-// start, then every 6 hours (unless switched off in settings), and whenever the
-// user asks from the tray or settings. Nothing downloads before a click. Only
-// the NSIS install can replace itself; the portable ZIP and an unpacked build
-// get a link to the release page instead.
+// start (on the first run 20 s after the setup guide), then every 6 hours (unless
+// switched off in the setup or settings), and whenever the user asks from the
+// tray or settings. Nothing downloads before a click. Only the NSIS install
+// can replace itself; the portable ZIP and an unpacked build get a link to the
+// release page instead.
 const RELEASES_URL = 'https://github.com/MJM-DEVS/NoType/releases/latest';
 const UPDATE_FIRST_CHECK_MS = 20_000;
 const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -1926,6 +1931,7 @@ let updateOffered = null;        // version whose pill was shown this session
 let updateOfferPending = false;
 let updateWin = null;            // "NoType x.y.z ist da" pill
 let updateWinTimer = null;
+const scheduleFirstUpdateCheck = firstUpdateCheck(() => setTimeout(() => checkForUpdate(false), UPDATE_FIRST_CHECK_MS));
 
 function initUpdater() {
   if (!IS_PACKAGED) return;      // a dev run has no app-update.yml
@@ -1973,7 +1979,7 @@ function initUpdater() {
   });
 
   if (CAN_SELF_UPDATE) setTimeout(clearPendingUpdate, UPDATE_FIRST_CHECK_MS / 2);
-  setTimeout(() => checkForUpdate(false), UPDATE_FIRST_CHECK_MS);
+  scheduleFirstUpdateCheck(config);   // on the first run: once the setup is done
   setInterval(() => checkForUpdate(false), UPDATE_INTERVAL_MS);
 }
 
@@ -2008,7 +2014,7 @@ function pushUpdateStatus() {
 
 function checkForUpdate(manual) {
   if (!autoUpdater) return;
-  if (!manual && config.update_check === false) return;
+  if (!manual && (config.update_check === false || !config.first_run_complete)) return;
   if (['checking', 'downloading', 'ready'].includes(update.state)) return;
   if (manual && update.state === 'available') { offerUpdate(true); return; }
   updateManual = manual;
