@@ -9,7 +9,7 @@ NoType is a hybrid app. A **Python backend** handles audio capture, [faster-whis
 | Audio | sounddevice at 16 kHz, live spectrum bands for the overlay |
 | Text insertion | Win32 `SendInput` + clipboard, Unicode typing fallback |
 | Correction learning | Windows UI Automation (reads the dictated field only, never password fields) |
-| Frontend | Electron 33, plain HTML/CSS/JS, no framework |
+| Frontend | Electron 45, plain HTML/CSS/JS, no framework |
 | Packaging | PyInstaller (backend) + electron-builder (NSIS installer) |
 
 ```mermaid
@@ -37,7 +37,7 @@ flowchart LR
 
 ## Build from source (Windows)
 
-You need Windows 11 x64, **Python 3.12** (what the README has always asked for; other versions are not tested) and **Node.js 18 or newer**. An NVIDIA GPU is optional for running, but the backend build bundles cuBLAS either way.
+You need Windows 11 x64, **Python 3.12** (what the README has always asked for; other versions are not tested) and **Node.js 22.12 or newer** (Electron 45 requires it). An NVIDIA GPU is optional for running, but the backend build bundles cuBLAS either way.
 
 ```bat
 :: Backend. The venv must be called "venv" and sit in the repository root:

@@ -444,7 +444,7 @@ Turn on **Settings → System → GPU safe mode** and restart the app. This move
 
 NoType is a hybrid app: a **Python backend** (audio, [faster-whisper](https://github.com/SYSTRAN/faster-whisper), text insertion, Ollama) and an **Electron frontend** (tray, overlay, settings, hotkeys) that talk JSON over stdin/stdout.
 
-- **[Development guide](docs/development.md):** architecture, building from source on Windows (Python 3.12, Node.js 18+), what you can test on Linux, project structure.
+- **[Development guide](docs/development.md):** architecture, building from source on Windows (Python 3.12, Node.js 22.12+), what you can test on Linux, project structure.
 - **[Configuration reference](docs/configuration.md):** every key in `settings.json`.
 - **[Contributing](CONTRIBUTING.md):** bug reports, pull requests, commit style.
 - **[Security](SECURITY.md):** how to report a problem, and what NoType does with the network, the clipboard and your settings.

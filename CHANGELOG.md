@@ -12,6 +12,7 @@ This file was written after the fact from the commit history. Dates are those of
 - `requirements-build.txt` for PyInstaller and the bundled cuBLAS.
 
 ### Changed
+- Electron 45 (from 33) and electron-builder 26. Building from source now needs Node.js 22.12 or newer.
 - `requirements.txt` asks for `faster-whisper>=1.1` and no longer lists PyInstaller.
 - README: the tagline, privacy badge and privacy bullet no longer say that nothing ever leaves the PC, and point to the list of what goes online. Developer notes, with a complete project structure, moved to `docs/development.md`.
 
