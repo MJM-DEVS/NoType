@@ -1,7 +1,11 @@
-const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, nativeImage, screen, nativeTheme, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, nativeImage, screen, nativeTheme, shell, session } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const { loadSettingsFile, stripBom } = require('./lib/settings-file');
+const { parseBackendLine } = require('./lib/backend-line');
+const { isSameDocument, isAppFile, allowPermission } = require('./lib/guards');
+const { phraseKey } = require('./lib/phrase-key');
 
 // ── Single-Instance Lock ──
 // Prevents double hotkey registration when boot-autostart and a manual launch collide.
@@ -20,7 +24,7 @@ if (!gotLock) {
 // resolvable at module load (only the cached USER_DATA_DIR is deferred).
 try {
   const _cfgPath = path.join(app.getPath('userData'), 'settings.json');
-  const _cfg = fs.existsSync(_cfgPath) ? JSON.parse(fs.readFileSync(_cfgPath, 'utf-8')) : {};
+  const _cfg = fs.existsSync(_cfgPath) ? JSON.parse(stripBom(fs.readFileSync(_cfgPath, 'utf-8'))) : {};
   if (_cfg.gpu_safe_mode) {
     app.disableHardwareAcceleration();
     console.log('GPU safe mode ON – hardware acceleration disabled');
@@ -214,19 +218,21 @@ function broadcastTheme() {
 
 // ── Config ──
 function loadConfig() {
+  // A broken settings.json falls back to the newest good backup (and is kept
+  // as settings.json.corrupt) instead of being overwritten with defaults.
   try {
-    if (fs.existsSync(CONFIG_FILE)) {
-      config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf-8'));
-    }
+    const r = loadSettingsFile(CONFIG_FILE);
+    if (r.error) console.error(`Config unreadable (${r.error})${r.corrupt ? ', kept as ' + path.basename(r.corrupt) : ''}`);
+    if (r.config && r.source !== CONFIG_FILE) console.log(`Config restored from ${path.basename(r.source)}`);
+    if (r.config) config = r.config;
   } catch (e) {
-    console.error('Config load error:', e);
+    console.error('Config load error:', e.message);
   }
   config = {
     language: 'de',
-    languages_enabled: ['de', 'en', 'pl', 'hr'],
     model_size: 'small',
-    hotkey: 'CmdOrCtrl+Shift+Space',
-    mode: 'press_to_speak',
+    hotkey: 'ctrl+shift+space',
+    mode: 'hold_to_speak',
     autostart: false,
     update_check: true,
     auto_language_detect: true,
@@ -340,10 +346,21 @@ function startPython() {
     windowsHide: true,
     env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
   });
+  // A fresh backend gets the full watchdog grace, not the dead one's clock.
+  lastPongTs = Date.now();
+  missedPings = 0;
+  // Writing to a backend that just died fails asynchronously (EPIPE); without
+  // a listener that 'error' would be an uncaught exception in the main process.
+  pythonProcess.stdin.on('error', (err) => {
+    console.error('Backend stdin error:', err.code || err.message);
+  });
 
   let buffer = '';
+  // Decode as a stream: a chunk can end in the middle of a multi-byte
+  // character (umlauts), which per-chunk toString() turns into U+FFFD.
+  pythonProcess.stdout.setEncoding('utf8');
   pythonProcess.stdout.on('data', (data) => {
-    buffer += data.toString();
+    buffer += data;
     const lines = buffer.split('\n');
     buffer = lines.pop();
     for (const line of lines) {
@@ -455,11 +472,17 @@ function sendToPython(command, data = null) {
   }
 }
 
+// Parsing and handling are kept apart so that neither a stray non-JSON line
+// nor a bug in a handler ends up writing the line, and with it dictated text,
+// to the log. Only the message type and the error are logged.
 function handlePythonMessage(line) {
+  const msg = parseBackendLine(line);
+  if (msg.error) {
+    console.log(`Backend output ignored: ${msg.error}`);
+    return;
+  }
+  const { type, data } = msg;
   try {
-    const msg = JSON.parse(line);
-    const { type, data } = msg;
-
     // Any reply – including arbitrary status updates – is proof the backend
     // is alive. Reset the watchdog counters whenever we hear from it.
     lastPongTs = Date.now();
@@ -482,7 +505,7 @@ function handlePythonMessage(line) {
 
       case 'hotkey_released':
         if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
-        if (isRecording && (config.mode || 'press_to_speak') === 'hold_to_speak') stopRecording();
+        if (isRecording && (config.mode || 'hold_to_speak') === 'hold_to_speak') stopRecording();
         break;
 
       case 'recording_limit': {
@@ -685,7 +708,7 @@ function handlePythonMessage(line) {
         break;
 
       case 'error':
-        console.error('Backend error:', data.message);
+        console.error('Backend error:', data && data.message);
         // CRITICAL: if an error arrives while we were mid-transcription,
         // restore the state machine so the hotkey works again. Without this
         // a single transcription error locks the app dead.
@@ -696,8 +719,7 @@ function handlePythonMessage(line) {
         break;
     }
   } catch (e) {
-    // Not JSON – just log it
-    console.log('Python output:', line);
+    console.error(`Handling backend message '${type}' failed:`, e && e.message);
   }
 }
 
@@ -938,11 +960,12 @@ function activeKind() {
 }
 
 let holdTimer = null;  // Timer for hold-to-speak release detection
+let transcribeTimer = null;  // stopRecording's safety net, cleared once the result is in
 
 // One handler for every hotkey: dictation, command mode and the agent
 // hotkey (the text goes to a URL instead of being typed).
 function onHotkey(kind) {
-  const mode = config.mode || 'press_to_speak';
+  const mode = config.mode || 'hold_to_speak';
   const keys = kind === 'command' ? config.command_hotkey
     : kind === 'agent' ? config.agent_hotkey : config.hotkey;
   if (mode === 'hold_to_speak') {
@@ -989,7 +1012,7 @@ function registerHotkeys() {
   if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
 
   const hotkey = configHotkeyToElectron(config.hotkey);
-  const mode = config.mode || 'press_to_speak';
+  const mode = config.mode || 'hold_to_speak';
   console.log(`Registering hotkey: ${hotkey} (mode: ${mode})`);
 
   try {
@@ -1102,8 +1125,11 @@ function stopRecording() {
   // Safety net: if the backend NEVER replies (process crashed, IPC stuck),
   // make sure we unlock after 30 s instead of leaving the user dead. A
   // command also waits on the LLM (up to 25 s), the agent hotkey on the
-  // URL (15 s per connect/read) – give them more room.
-  setTimeout(() => {
+  // URL (15 s per connect/read) – give them more room. Cleared when this
+  // dictation finishes, so it can never cut off a later one.
+  if (transcribeTimer) clearTimeout(transcribeTimer);
+  transcribeTimer = setTimeout(() => {
+    transcribeTimer = null;
     if (isTranscribing) {
       console.error('Transcription timeout – forcing state reset');
       finishTranscription();
@@ -1118,7 +1144,7 @@ function cancelRecording() {
   isRecording = false;
   isPaused = false;
   if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
-  if ((config.mode || 'press_to_speak') === 'hold_to_speak') hotkeyQuietUntil = Date.now() + 700;
+  if ((config.mode || 'hold_to_speak') === 'hold_to_speak') hotkeyQuietUntil = Date.now() + 700;
   sendToPython('cancel_recording');
   if (overlayWin && !overlayWin.isDestroyed()) overlayWin.webContents.send('recording-cancelled');
   sendToOnboarding('transcription-done', { text: '', empty: true, cancelled: true });
@@ -1130,6 +1156,7 @@ function cancelRecording() {
 // Single place to reset post-recording state. Called from `transcription_done`,
 // from `error`, and from the timeout watchdog above.
 function finishTranscription(ok = false, text = '') {
+  if (transcribeTimer) { clearTimeout(transcribeTimer); transcribeTimer = null; }
   isRecording = false;
   isTranscribing = false;
   isPaused = false;
@@ -1170,6 +1197,7 @@ function agentOverlayData(result, hold) {
 // The URL answered (or didn't): show it, then back to ready. Never types
 // anything, also not as a fallback.
 function finishAgent(result) {
+  if (transcribeTimer) { clearTimeout(transcribeTimer); transcribeTimer = null; }
   isRecording = false;
   isTranscribing = false;
   isPaused = false;
@@ -1642,7 +1670,6 @@ ipcMain.on('close-toast', () => {
 // The backend spotted a fix the user typed right after a dictation. The pill
 // is clickable but never takes focus – the user keeps typing where they were.
 const DICT_MAX = 500;
-const phraseKey = (s) => (String(s).toLowerCase().match(/[\p{L}\p{N}_]+/gu) || []).join(' ');
 
 function closeSuggestion() {
   if (suggestTimer) { clearTimeout(suggestTimer); suggestTimer = null; }
@@ -2142,7 +2169,41 @@ function quitApp() {
   }, 500);
 }
 
+// ── Navigation & permissions ──
+// Every window shows one local page and has no links out. Nothing may
+// navigate it elsewhere or open new windows; the update pill's release page
+// opens from the main process (shell.openExternal), not from a page.
+app.on('web-contents-created', (_, contents) => {
+  // DevTools (dev runs) load their own devtools:// pages.
+  if (contents.getType() === 'devtools') return;
+  contents.on('will-navigate', (e, url) => {
+    if (!isSameDocument(contents.getURL(), url)) {
+      e.preventDefault();
+      console.warn('Blocked navigation away from the app page');
+    }
+  });
+  // Sub-frames: only the settings page's overlay preview (overlay.html).
+  contents.on('will-frame-navigate', (e) => {
+    if (!e.isMainFrame && !isAppFile(e.url, __dirname)) e.preventDefault();
+  });
+  contents.setWindowOpenHandler(() => {
+    console.warn('Blocked a new window from an app page');
+    return { action: 'deny' };
+  });
+});
+
+function installPermissionHandler() {
+  // Permission requests: the microphone (audio only) for the mic tests in
+  // settings and setup; every other request and every other page is refused.
+  // Synchronous permission checks keep Electron's default.
+  session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
+    const pageUrl = (details && details.requestingUrl) || contents.getURL();
+    callback(allowPermission(permission, pageUrl, details, __dirname));
+  });
+}
+
 app.whenReady().then(() => {
+  installPermissionHandler();
   initPaths();
   loadConfig();
   syncThemeSource();

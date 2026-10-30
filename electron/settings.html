@@ -2,6 +2,8 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
+<!-- Local page only: no remote code, no network. Inline scripts and styles need 'unsafe-inline'. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; frame-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NoType · Einstellungen</title>
 <style>
@@ -1305,6 +1307,7 @@
 <script src="model-catalog.js"></script>
 <script src="sprites.js"></script>
 <script src="keycaps.js"></script>
+<script src="lib/phrase-key.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
   // Drawn icons for the small row controls (remove, "heard → meant").
@@ -1460,6 +1463,9 @@
       'system.mictest': 'Mikrofon-Test', 'system.mictest.desc': 'Prüfe ob dein Mikrofon funktioniert',
       'system.mictest.start': 'Testen', 'system.mictest.stop': 'Stopp',
       'system.mictest.error': 'Kein Zugriff auf das Mikrofon. Prüfe die Windows-Datenschutzeinstellungen für Mikrofone.',
+      'system.mictest.error.none': 'Kein Mikrofon gefunden. Schließe eins an oder aktiviere es in den Windows-Soundeinstellungen.',
+      'system.mictest.error.busy': 'Das Mikrofon lässt sich nicht öffnen. Vielleicht nutzt es gerade eine andere App.',
+      'system.mictest.fallback': 'Gewähltes Mikrofon nicht verfügbar, das Standardmikrofon wird getestet.',
       'a11y.close': 'Schließen', 'a11y.add': 'Hinzufügen', 'a11y.remove': '„{item}“ entfernen',
       'system.mute': 'Andere Wiedergabe stummschalten',
       'system.mute.desc': 'Musik und Videos sind still, solange du sprichst. Danach ist der Ton sofort wieder da.',
@@ -1620,6 +1626,9 @@
       'system.mictest': 'Microphone test', 'system.mictest.desc': 'Check that your microphone works',
       'system.mictest.start': 'Test', 'system.mictest.stop': 'Stop',
       'system.mictest.error': 'No access to the microphone. Check the Windows privacy settings for microphones.',
+      'system.mictest.error.none': 'No microphone found. Plug one in or enable it in the Windows sound settings.',
+      'system.mictest.error.busy': 'The microphone can’t be opened. Another app may be using it.',
+      'system.mictest.fallback': 'The chosen microphone is not available, testing the default one.',
       'a11y.close': 'Close', 'a11y.add': 'Add', 'a11y.remove': 'Remove “{item}”',
       'system.mute': 'Mute other audio while dictating',
       'system.mute.desc': 'Music and videos go quiet while you speak and come back right after.',
@@ -2216,8 +2225,9 @@
   // spellings also bias Whisper and the AI cleanup.
   const DICT_MAX = 500;
   let dictEntries = [];   // [{from, to}], oldest first
-  // Same word split as the backend: "Kuber-Netis" and "kuber netis" are one mistake.
-  const phraseKey = (s) => (String(s).toLowerCase().match(/[\p{L}\p{N}_]+/gu) || []).join(' ');
+  // Same tokens as the backend: "Kuber-Netis" and "kuber netis" are one
+  // mistake, "C#" and "C" are two (lib/phrase-key.js).
+  const phraseKey = window.NoTypePhraseKey;
 
   function renderDict(flashNewest = false) {
     const list = $('dictList');
@@ -3142,9 +3152,12 @@
   // at 31 characters).
   const micKey = (s) => String(s || '').toLowerCase()
     .replace(/\(\d+- /, '(').replace(/[^a-z0-9äöüß]+/g, '');
+  // Returns { stream, fallback }: fallback when the chosen mic could not be
+  // opened and the stream is the default one.
   async function openMicStream(name) {
     let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    if (!name) return stream;
+    if (!name) return { stream, fallback: false };
+    let fallback = true;
     try {
       const want = micKey(name).slice(0, 24);
       const list = await navigator.mediaDevices.enumerateDevices();
@@ -3152,15 +3165,23 @@
         d.deviceId !== 'default' && d.deviceId !== 'communications' &&
         micKey(d.label).startsWith(want));
       if (match) {
+        // Open the chosen mic before closing the default one, so a failure
+        // here still returns a live stream.
+        const exact = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: match.deviceId } } });
         stream.getTracks().forEach(tr => tr.stop());
-        stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: match.deviceId } } });
+        stream = exact;
+        fallback = false;
       }
     } catch (_) { /* keep the default stream */ }
-    return stream;
+    return { stream, fallback };
   }
   let micTestStream = null;
   let micTestContext = null;
   let micTestAnimId = null;
+  // Bumped by stopMicTest(): a stream that arrives after the test was
+  // stopped (second click, page hidden, other mic picked) is closed again.
+  let micTestGen = 0;
+  let micTestOpening = false;
   const MIC_ICO = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
   const STOP_ICO = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/></svg>';
   function micTestLabel(on) {
@@ -3170,14 +3191,19 @@
   micTestLabel(false);
 
   $('micTestBtn').onclick = async () => {
-    if (micTestStream) {
+    if (micTestStream || micTestOpening) {
       // Stop test
       stopMicTest();
       return;
     }
 
+    const gen = micTestGen;
+    micTestOpening = true;
     try {
-      micTestStream = await openMicStream($('micSelect').value);
+      const { stream, fallback } = await openMicStream($('micSelect').value);
+      if (gen !== micTestGen) { stream.getTracks().forEach(t2 => t2.stop()); return; }
+      micTestOpening = false;
+      micTestStream = stream;
       micTestContext = new AudioContext();
       const source = micTestContext.createMediaStreamSource(micTestStream);
       const analyser = micTestContext.createAnalyser();
@@ -3199,22 +3225,36 @@
         micTestAnimId = requestAnimationFrame(updateMeter);
       }
       updateMeter();
+      if (fallback) micTestNote('system.mictest.fallback');
     } catch (e) {
+      if (gen !== micTestGen) return;
       stopMicTest();
-      // Say why, in the row itself, for a few seconds.
-      const desc = $('micTestBtn').closest('.field').querySelector('.field-desc');
-      desc.textContent = t('system.mictest.error');
-      desc.classList.add('warn');
-      desc.setAttribute('role', 'alert');
-      setTimeout(() => {
-        desc.classList.remove('warn');
-        desc.removeAttribute('role');
-        desc.textContent = t(desc.dataset.i18n);
-      }, 6000);
+      // Say why, in the row itself. Denied, missing and busy mics need
+      // different next steps.
+      const key = e && (e.name === 'NotFoundError' || e.name === 'OverconstrainedError') ? 'system.mictest.error.none'
+        : e && e.name === 'NotReadableError' ? 'system.mictest.error.busy' : 'system.mictest.error';
+      micTestNote(key);
     }
   };
 
+  // A note in the mic test row's description, for a few seconds.
+  let micTestNoteTimer = null;
+  function micTestNote(key) {
+    const desc = $('micTestBtn').closest('.field').querySelector('.field-desc');
+    desc.textContent = t(key);
+    desc.classList.add('warn');
+    desc.setAttribute('role', 'alert');
+    clearTimeout(micTestNoteTimer);
+    micTestNoteTimer = setTimeout(() => {
+      desc.classList.remove('warn');
+      desc.removeAttribute('role');
+      desc.textContent = t(desc.dataset.i18n);
+    }, 6000);
+  }
+
   function stopMicTest() {
+    micTestGen++;
+    micTestOpening = false;
     if (micTestAnimId) cancelAnimationFrame(micTestAnimId);
     if (micTestStream) micTestStream.getTracks().forEach(t2 => t2.stop());
     if (micTestContext) micTestContext.close();
@@ -3231,7 +3271,7 @@
   window.addEventListener('pagehide', stopMicTest);   // not beforeunload: that one may be cancelled
   // Another mic picked mid-test: listen to that one.
   $('micSelect').addEventListener('change', () => {
-    if (!micTestStream) return;
+    if (!micTestStream && !micTestOpening) return;
     stopMicTest();
     $('micTestBtn').click();
   });

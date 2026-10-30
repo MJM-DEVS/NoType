@@ -2,6 +2,8 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
+<!-- Local page only: no remote code, no network. Inline scripts and styles need 'unsafe-inline'. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; frame-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NoType · Einrichtung</title>
 <style>
@@ -552,7 +554,10 @@
       'm.default': 'Standard (System)', 'm.defaulttag': ' (Standard)', 'm.level': 'Pegel',
       'm.missing': ' (nicht verbunden)',
       'm.hint': 'Sag ein paar Worte …', 'm.ok': 'Klingt gut. Dein Mikrofon funktioniert.',
+      'm.fallback': 'Gewähltes Mikrofon nicht verfügbar, das Standardmikrofon wird getestet.',
       'm.error': 'Kein Zugriff auf das Mikrofon. Prüfe die Windows-Datenschutzeinstellungen für Mikrofone.',
+      'm.error.none': 'Kein Mikrofon gefunden. Schließe eins an oder aktiviere es in den Windows-Soundeinstellungen.',
+      'm.error.busy': 'Das Mikrofon lässt sich nicht öffnen. Vielleicht nutzt es gerade eine andere App.',
       'h.title': 'Hotkey & Modus',
       'h.lead': 'Mit dieser Tastenkombination startest du ein Diktat, egal in welcher App du gerade bist.',
       'h.combo': 'Tastenkombination', 'h.combo.desc': '„Ändern“ drücken, dann die gewünschte Kombination.',
@@ -601,7 +606,10 @@
       'm.default': 'Default (system)', 'm.defaulttag': ' (default)', 'm.level': 'Level',
       'm.missing': ' (not connected)',
       'm.hint': 'Say a few words …', 'm.ok': 'Sounds good. Your microphone works.',
+      'm.fallback': 'The chosen microphone is not available, testing the default one.',
       'm.error': 'No access to the microphone. Check the Windows privacy settings for microphones.',
+      'm.error.none': 'No microphone found. Plug one in or enable it in the Windows sound settings.',
+      'm.error.busy': 'The microphone can’t be opened. Another app may be using it.',
       'h.title': 'Hotkey & mode',
       'h.lead': 'This key combination starts a dictation, no matter which app you are in.',
       'h.combo': 'Key combination', 'h.combo.desc': 'Press "Change", then your combination.',
@@ -815,14 +823,25 @@
     .replace(/\(\d+- /, '(').replace(/[^a-z0-9äöüß]+/g, '');
 
   let meterStream = null, meterCtx = null, meterAnim = null, meterPeak = 0;
+  // Bumped by stopMeter(): a getUserMedia that resolves after the step was
+  // left (or the meter restarted) must close its stream, not keep the mic open.
+  let meterGen = 0;
+  const dropStream = (s) => { if (s) s.getTracks().forEach(tr => tr.stop()); };
   async function startMeter() {
     stopMeter();
+    const gen = meterGen;
     $('micHint').textContent = t('m.hint');
     $('micMeterWrap').classList.remove('err');
+    let stream = null;
+    // The chosen mic could not be opened: the meter measures the default
+    // one and says so instead of "your microphone works".
+    let fallback = false;
     try {
-      let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (gen !== meterGen) { dropStream(stream); return; }
       // Match the chosen device by name so the meter shows THAT mic.
       if (state.mic_device_name) {
+        fallback = true;
         try {
           const want = micKey(state.mic_device_name).slice(0, 24);
           const list = await navigator.mediaDevices.enumerateDevices();
@@ -830,10 +849,16 @@
             d.deviceId !== 'default' && d.deviceId !== 'communications' &&
             micKey(d.label).startsWith(want));
           if (match) {
-            stream.getTracks().forEach(tr => tr.stop());
-            stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: match.deviceId } } });
+            // Open the chosen mic before closing the default one, so a
+            // failure here still leaves a live stream to measure.
+            const exact = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: match.deviceId } } });
+            dropStream(stream);
+            stream = exact;
+            fallback = false;
           }
         } catch (_) { /* keep the default stream */ }
+        if (gen !== meterGen) { dropStream(stream); return; }
+        if (fallback) $('micHint').textContent = t('m.fallback');
       }
       meterStream = stream;
       meterCtx = new AudioContext();
@@ -850,19 +875,30 @@
         const level = Math.min(100, Math.sqrt(sum / buf.length) * 400);
         $('micMeter').style.width = level + '%';
         const heard = level > 18 && meterPeak <= 18;
-        if (heard) $('micHint').textContent = t('m.ok');
+        if (heard && !fallback) $('micHint').textContent = t('m.ok');
         meterPeak = Math.max(meterPeak, level);
         if (heard) updateReady();
         meterAnim = requestAnimationFrame(tick);
       };
       tick();
     } catch (e) {
+      dropStream(stream);
+      if (gen !== meterGen) return;
+      stopMeter();
       $('micMeterWrap').classList.add('err');
       $('micMeter').style.width = '100%';
-      $('micHint').textContent = t('m.error');
+      $('micHint').textContent = t(micErrorKey(e));
     }
   }
+  // Denied, missing and busy mics need different next steps.
+  function micErrorKey(e) {
+    const name = e && e.name;
+    if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'm.error.none';
+    if (name === 'NotReadableError') return 'm.error.busy';
+    return 'm.error';
+  }
   function stopMeter() {
+    meterGen++;
     if (meterAnim) cancelAnimationFrame(meterAnim);
     if (meterStream) meterStream.getTracks().forEach(tr => tr.stop());
     if (meterCtx) { try { meterCtx.close(); } catch (_) {} }
