@@ -26,6 +26,7 @@ autostart_error.log
 # ── Secrets / signing keys ──
 .env
 .env.*
+!.env.example
 *.pem
 *.pfx
 *.p12

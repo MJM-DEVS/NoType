@@ -5,8 +5,11 @@
 //   EnableNodeCliInspectArguments      --inspect / --inspect-brk debugger
 // Nothing in main.js needs them: the backend is spawned as its own exe and
 // there is no child_process.fork or ELECTRON_RUN_AS_NODE. electron-updater
-// starts the downloaded NSIS installer itself. asar stays off and OnlyLoadAppFromAsar stays untouched (see
-// "asar": false in package.json); every other fuse keeps Electron's default.
+// starts the downloaded NSIS installer itself.
+// asar stays off ("asar": false in package.json), so OnlyLoadAppFromAsar
+// stays untouched and every other fuse keeps Electron's default. That also
+// limits what this protects: whoever can write to the (per-user) install
+// folder can still edit resources\app\main.js directly.
 const path = require('path');
 const { flipFuses, FuseVersion, FuseV1Options } = require('@electron/fuses');
 
