@@ -1572,6 +1572,8 @@ function markOnboardingDone() {
   config.first_run_complete = true;
   writeConfigToDisk();
   if (pythonProcess && pythonProcess.stdin.writable) sendToPython('save_config', { first_run_complete: true });
+  // The setup asks about update checks; the first one waits for its answer.
+  setTimeout(() => checkForUpdate(false), UPDATE_FIRST_CHECK_MS);
 }
 
 function sendToOnboarding(channel, data) {
@@ -1907,10 +1909,11 @@ ipcMain.on('toast-action', (_, action) => {
 
 // ── Updates ──
 // electron-updater reads latest.yml from the newest GitHub release: 20 s after
-// start, then every 6 hours (unless switched off in settings), and whenever the
-// user asks from the tray or settings. Nothing downloads before a click. Only
-// the NSIS install can replace itself; the portable ZIP and an unpacked build
-// get a link to the release page instead.
+// start (on the first run 20 s after the setup), then every 6 hours (unless
+// switched off in the setup or settings), and whenever the user asks from the
+// tray or settings. Nothing downloads before a click. Only the NSIS install
+// can replace itself; the portable ZIP and an unpacked build get a link to the
+// release page instead.
 const RELEASES_URL = 'https://github.com/MJM-DEVS/NoType/releases/latest';
 const UPDATE_FIRST_CHECK_MS = 20_000;
 const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -2008,7 +2011,7 @@ function pushUpdateStatus() {
 
 function checkForUpdate(manual) {
   if (!autoUpdater) return;
-  if (!manual && config.update_check === false) return;
+  if (!manual && (config.update_check === false || !config.first_run_complete)) return;
   if (['checking', 'downloading', 'ready'].includes(update.state)) return;
   if (manual && update.state === 'available') { offerUpdate(true); return; }
   updateManual = manual;
