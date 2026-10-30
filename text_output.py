@@ -179,6 +179,15 @@ _u32.CreateWindowExW.argtypes = [ctypes.wintypes.DWORD, ctypes.wintypes.LPCWSTR,
 _u32.CreateWindowExW.restype = ctypes.wintypes.HWND
 _u32.DestroyWindow.argtypes = [ctypes.wintypes.HWND]
 GMEM_MOVEABLE = 0x0002
+CF_UNICODETEXT = 13
+
+# Documented markers that keep what NoType puts on the clipboard out of
+# clipboard history (Win+V), cloud clipboard sync and clipboard monitors.
+_PRIVACY_FORMATS = (
+    ("ExcludeClipboardContentFromMonitorProcessing", b"\0\0\0\0"),  # any content
+    ("CanIncludeInClipboardHistory", b"\0\0\0\0"),  # DWORD 0
+    ("CanUploadToCloudClipboard", b"\0\0\0\0"),  # DWORD 0
+)
 
 
 def _clipboard_raw(format_name: str) -> bytes | None:
@@ -205,8 +214,49 @@ def _clipboard_raw(format_name: str) -> bytes | None:
         _u32.CloseClipboard()
 
 
+def _place_one(fmt: int, data: bytes, u32, k32, memmove) -> bool:
+    """Put one format on the already opened and emptied clipboard."""
+    h = k32.GlobalAlloc(GMEM_MOVEABLE, len(data))
+    ptr = k32.GlobalLock(h) if h else None
+    if not ptr:
+        if h:
+            k32.GlobalFree(h)
+        return False
+    memmove(ptr, data, len(data))
+    k32.GlobalUnlock(h)
+    if u32.SetClipboardData(fmt, h):
+        return True  # the clipboard owns the memory now
+    k32.GlobalFree(h)
+    return False
+
+
+def _place_formats(formats: dict, u32=None, k32=None, memmove=None) -> bool:
+    """Put `formats` plus the privacy markers on the opened, emptied clipboard.
+
+    Only for content NoType itself pastes. NoType never puts the user's
+    previous clipboard back, so nothing of theirs gets these markers.
+    The Win32 handles are injectable for tests."""
+    u32 = u32 or _u32
+    k32 = k32 or _k32
+    memmove = memmove or ctypes.memmove
+    # Markers first: a failure here must never stop the paste.
+    for name, data in _PRIVACY_FORMATS:
+        try:
+            fmt = u32.RegisterClipboardFormatW(name)
+            if not fmt or not _place_one(fmt, data, u32, k32, memmove):
+                logger.debug(f"Clipboard privacy format {name} not set")
+        except Exception as e:
+            logger.debug(f"Clipboard privacy format {name} failed: {type(e).__name__}")
+    placed = 0
+    for fmt, data in formats.items():
+        if _place_one(fmt, data, u32, k32, memmove):
+            placed += 1
+    return placed > 0
+
+
 def _set_clipboard(formats: dict) -> bool:
-    """Replace the clipboard with raw formats ({format id: bytes})."""
+    """Replace the clipboard with raw formats ({format id: bytes}), kept out
+    of clipboard history and cloud sync."""
     # SetClipboardData fails when the clipboard was opened without a window.
     hwnd = _u32.CreateWindowExW(0, "STATIC", None, 0, 0, 0, 0, 0, None, None, None, None)
     for _ in range(20):
@@ -219,21 +269,7 @@ def _set_clipboard(formats: dict) -> bool:
         return False
     try:
         _u32.EmptyClipboard()
-        placed = 0
-        for fmt, data in formats.items():
-            h = _k32.GlobalAlloc(GMEM_MOVEABLE, len(data))
-            ptr = _k32.GlobalLock(h) if h else None
-            if not ptr:
-                if h:
-                    _k32.GlobalFree(h)
-                continue
-            ctypes.memmove(ptr, data, len(data))
-            _k32.GlobalUnlock(h)
-            if _u32.SetClipboardData(fmt, h):
-                placed += 1  # the clipboard owns the memory now
-            else:
-                _k32.GlobalFree(h)
-        return placed > 0
+        return _place_formats(formats)
     finally:
         _u32.CloseClipboard()
         if hwnd:
@@ -310,7 +346,8 @@ def insert_text(text: str, method: str = "auto") -> bool:
     Restoring after a fixed delay races slow apps (browsers in particular) –
     sometimes the restore fires before the target has read the clipboard, and
     the transcribed text is silently lost. The clipboard simply ending up with
-    the transcribed text is the expected dictation UX.
+    the transcribed text is the expected dictation UX. The text is marked to
+    stay out of Windows clipboard history and cloud sync (_place_formats).
     """
     # A dictated "neuer Absatz" alone is text, too.
     if not text or not (text.strip() or "\n" in text):
@@ -329,8 +366,12 @@ def insert_text(text: str, method: str = "auto") -> bool:
 
         seq = user32.GetClipboardSequenceNumber()
         # Windows text on the clipboard uses CRLF; some editors paste a bare
-        # LF as nothing at all.
-        pyperclip.copy(text.replace("\r\n", "\n").replace("\n", "\r\n"))
+        # LF as nothing at all. Own Win32 path instead of pyperclip so the
+        # text stays out of clipboard history and cloud sync.
+        crlf = text.replace("\r\n", "\n").replace("\n", "\r\n")
+        if not _set_clipboard({CF_UNICODETEXT: (crlf + "\0").encode("utf-16-le")}):
+            logger.warning("Clipboard could not be set, typing instead")
+            return _type_unicode(text)
         if not _wait_clipboard_updated(seq):
             logger.warning("Clipboard did not update in time, typing instead")
             return _type_unicode(text)
