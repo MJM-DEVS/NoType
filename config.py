@@ -73,6 +73,7 @@ DEFAULT_CONFIG = {
     "initial_prompt": "",            # custom-vocab bias for Whisper
     "dictionary": [],                # learned corrections [{"from": heard, "to": meant}]
     "learn_corrections": True,       # offer fixes typed right after a dictation
+    "save_history": True,            # keep the last 10 dictations in history.json (Electron side)
     "command_enabled": True,         # command mode: rewrite the selection by voice
     "command_hotkey": "ctrl+alt+space",
     "agent_enabled": False,          # agent hotkey: POST the dictation to agent_url instead of typing it

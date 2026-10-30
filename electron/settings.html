@@ -1073,6 +1073,23 @@
             <span class="slider"></span>
           </label>
         </div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="dict.history">Verlauf speichern</div>
+            <div class="field-desc" data-i18n="dict.history.desc">Die letzten 10 Diktate bleiben nach einem Neustart hier (nur auf diesem PC). Aus: nur bis NoType beendet wird.</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="saveHistoryToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="dict.history.clear">Verlauf löschen</div>
+            <div class="field-desc" data-i18n="dict.history.clear.desc">Entfernt die letzten Diktate sofort, auch aus dem Tray-Menü.</div>
+          </div>
+          <button class="btn-sm" id="clearHistoryBtn" data-i18n="dict.history.clear.btn">Löschen</button>
+        </div>
       </div>
 
       <div class="card">
@@ -1412,6 +1429,11 @@
       'dict.auto': 'Korrekturen automatisch vorschlagen',
       'dict.auto.desc': 'Korrigierst du ein diktiertes Wort gleich danach, fragt NoType, ob es das lernen soll. Liest dafür kurz das Textfeld mit (nur lokal, nie Passwortfelder).',
       'dict.learn.empty': 'Noch keine Diktate. Sobald du diktierst, erscheinen sie hier.',
+      'dict.history': 'Verlauf speichern',
+      'dict.history.desc': 'Die letzten 10 Diktate bleiben nach einem Neustart hier (nur auf diesem PC). Aus: nur bis NoType beendet wird.',
+      'dict.history.clear': 'Verlauf löschen',
+      'dict.history.clear.desc': 'Entfernt die letzten Diktate sofort, auch aus dem Tray-Menü.',
+      'dict.history.clear.btn': 'Löschen',
       'dict.learn.placeholder': 'Richtige Schreibweise', 'dict.learn.apply': 'Übernehmen',
       'dict.fix.title': 'Korrekturen',
       'dict.fix.desc': 'Was die Spracherkennung falsch versteht → wie es geschrieben werden soll. Gilt für jedes Diktat, auch ohne KI. Die richtige Schreibweise hilft außerdem der Erkennung.',
@@ -1575,6 +1597,11 @@
       'dict.auto': 'Suggest corrections automatically',
       'dict.auto.desc': 'When you fix a dictated word right afterwards, NoType asks whether to learn it. It briefly reads the text field for that (locally only, never password fields).',
       'dict.learn.empty': 'No dictations yet. They show up here as soon as you dictate.',
+      'dict.history': 'Save history',
+      'dict.history.desc': 'The last 10 dictations stay here after a restart (on this PC only). Off: only until NoType quits.',
+      'dict.history.clear': 'Clear history',
+      'dict.history.clear.desc': 'Removes the recent dictations right away, from the tray menu too.',
+      'dict.history.clear.btn': 'Clear',
       'dict.learn.placeholder': 'Correct spelling', 'dict.learn.apply': 'Apply',
       'dict.fix.title': 'Corrections',
       'dict.fix.desc': 'What speech recognition gets wrong → how it should be written. Applies to every dictation, even without AI. The correct spelling also helps recognition.',
@@ -2311,6 +2338,7 @@
       .filter(h => h && typeof h.text === 'string' && h.text.trim())
       .map(h => prev.get(h.time) || { time: h.time, text: h.text, marks: [] });
     if (histSel && !histItems.some(it => it.time === histSel.time)) histSel = null;
+    $('clearHistoryBtn').disabled = !histItems.length;  // also the feedback after clearing
     renderHist();
   }
 
@@ -2855,6 +2883,7 @@
     $('modeSelect').value = cfg.mode || 'hold_to_speak';
     $('cmdToggle').checked = cfg.command_enabled !== false;
     $('learnToggle').checked = cfg.learn_corrections !== false;
+    $('saveHistoryToggle').checked = cfg.save_history !== false;
     showHotkey('cmdHotkey', cfg.command_hotkey || 'ctrl+alt+space');
     renderCmdCard();
     $('ctxToggle').checked = cfg.ai_context !== false;
@@ -2943,6 +2972,7 @@
       mode: $('modeSelect').value,
       command_enabled: $('cmdToggle').checked,
       learn_corrections: $('learnToggle').checked,
+      save_history: $('saveHistoryToggle').checked,
       command_hotkey: hotkeyOf('cmdHotkey'),
       ai_context: $('ctxToggle').checked,
       agent_enabled: $('agentToggle').checked,
@@ -3070,6 +3100,8 @@
       window.notype.onHistory(setHistory);
       window.notype.getHistory();
     }
+    // Main answers with the empty list (and drops history.json's dictations).
+    if (window.notype.clearHistory) $('clearHistoryBtn').onclick = () => window.notype.clearHistory();
     // Learned from a correction suggestion while this window is open – it's
     // saved already; merge it without discarding unsaved edits here.
     if (window.notype.onDictionary) {
