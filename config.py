@@ -222,35 +222,8 @@ def save_config(config: dict) -> None:
             raise
 
 
-def _try_restore_from_backup():
-    """If settings.json is missing or empty, try the rolling backups."""
-    for suffix in (".bak1", ".bak2", ".bak3", ".bak"):
-        candidate = CONFIG_FILE + suffix
-        if os.path.exists(candidate) and os.path.getsize(candidate) > 10:
-            try:
-                shutil.copy(candidate, CONFIG_FILE)
-                return True
-            except Exception:
-                continue
-    return False
-
-
 def get_config() -> dict:
     """Get current config, loading if necessary."""
     if _config is None:
         return load_config()
     return _config
-
-
-def update_config(**kwargs) -> dict:
-    """Update specific config values and save."""
-    config = get_config()
-    config.update(kwargs)
-    save_config(config)
-    return config
-
-
-def is_first_run() -> bool:
-    """Check if this is the first time the app is launched."""
-    config = get_config()
-    return not config.get("first_run_complete", False)

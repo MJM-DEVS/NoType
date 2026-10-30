@@ -485,6 +485,17 @@ function handlePythonMessage(line) {
         if (isRecording && (config.mode || 'press_to_speak') === 'hold_to_speak') stopRecording();
         break;
 
+      case 'recording_limit': {
+        // The take hit the backend's length cap. Only warn: an automatic stop
+        // would insert a forgotten recording into whatever window has focus
+        // now. The user's own stop transcribes the audio up to the cap.
+        if (!isRecording) break;
+        const [limitTitle, limitSub] = trayT().recordingLimit;
+        const minutes = Math.round(((data && data.seconds) || 900) / 60);
+        showToast([limitTitle.replace('{min}', minutes), limitSub], 'warning');
+        break;
+      }
+
       case 'escape_pressed':
         // Esc (swallowed by the backend's keyboard hook) during a dictation.
         if (isRecording) cancelRecording();
@@ -1313,6 +1324,7 @@ function trayT() {
     commandFailed: ['Befehl ohne Antwort', 'Die lokale KI hat nicht rechtzeitig geantwortet. Noch einmal versuchen.'],
     bootUpdated: 'Auf {v} aktualisiert, NoType ist bereit',
     micFallback: ['Mikrofon „{name}“ nicht gefunden', 'NoType nimmt mit dem Standardmikrofon auf.'],
+    recordingLimit: ['Aufnahme auf {min} Minuten begrenzt', 'Zum Beenden die Taste drücken.'],
     actRestart: 'Neu starten', actSetup: 'Einrichten', actOpen: 'Öffnen', actChange: 'Ändern',
     updCheck: 'Nach Updates suchen', updChecking: 'Suche nach Updates …',
     updInstall: '↑  Auf {v} aktualisieren', updDownload: '↑  NoType {v} herunterladen',
@@ -1341,6 +1353,7 @@ function trayT() {
     commandFailed: ['Command got no answer', 'The local AI did not answer in time. Try again.'],
     bootUpdated: 'Updated to {v}, NoType is ready',
     micFallback: ['Microphone “{name}” not found', 'NoType is recording with the default microphone.'],
+    recordingLimit: ['Recording capped at {min} minutes', 'Press the hotkey to stop.'],
     actRestart: 'Restart', actSetup: 'Set up', actOpen: 'Open', actChange: 'Change',
     updCheck: 'Check for updates', updChecking: 'Checking for updates …',
     updInstall: '↑  Update to {v}', updDownload: '↑  Download NoType {v}',

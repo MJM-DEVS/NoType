@@ -47,7 +47,8 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from audio_recorder import (AudioRecorder, refresh_devices, input_devices,
-                            find_input_device, input_device_name, SAMPLE_RATE)
+                            find_input_device, input_device_name, SAMPLE_RATE,
+                            MAX_RECORD_SECONDS)
 from transcriber import Transcriber, normalize_languages
 from text_output import insert_text, copy_selection
 from config import load_config, save_config, CONFIG_DIR
@@ -114,7 +115,6 @@ class Backend:
         self._model_load_lock = threading.Lock()
         self._model_generation_lock = threading.Lock()
         self._model_generation = 0
-        self._amplitude_thread = None
         self._running = True
         # Dictionary stage 2: fixes the user types right after a dictation
         # are offered as dictionary entries (Electron asks first).
@@ -237,10 +237,7 @@ class Backend:
                 beam_size="1", vad_filter=False,
             )
             if result.get("compute_fallback"):
-                self.config["compute_type"] = result["compute_type"]
-                if self._save_config():
-                    logger.info(f"Selftest downgraded compute_type to "
-                                f"{result['compute_type']} (persisted)")
+                self._persist_compute_fallback()
             else:
                 logger.info("Inference selftest OK")
         except Exception as e:
@@ -248,15 +245,28 @@ class Backend:
             # will surface (and be handled) on the first dictation anyway.
             logger.warning(f"Inference selftest failed (non-fatal): {e}")
 
-    def _amplitude_sender(self):
-        """Send amplitude data to Electron while recording."""
-        while self._running and self.recorder and self.recorder.is_recording:
-            # Get amplitude from recorder's internal state
-            time.sleep(0.04)  # ~25fps
+    def _persist_compute_fallback(self):
+        """Save the compute type a cuBLAS fallback reload switched to (in any
+        pass, also a preview), so the next app start doesn't repeat the failed
+        load+retry cycle. A failed save must not cost a finished dictation."""
+        t = self.transcriber
+        fell_back_to = getattr(t, "fell_back_to", None)
+        if not fell_back_to:
+            return
+        t.fell_back_to = None
+        self.config["compute_type"] = fell_back_to
+        if self._save_config():
+            logger.info(f"Persisted compute_type fallback: {fell_back_to}")
 
     def _on_amplitude(self, amplitude, bands=None):
         """Called by AudioRecorder per block: level + spectrum for the overlay."""
         self.send("amplitude", {"value": round(amplitude, 4), "bands": bands or []})
+
+    def _on_record_limit(self):
+        """The take hit MAX_RECORD_SECONDS (audio thread): Electron only warns.
+        It must not stop on its own (a forgotten take would land in whatever
+        window has focus); the user's stop transcribes the audio up to the cap."""
+        self.send("recording_limit", {"seconds": MAX_RECORD_SECONDS})
 
     def handle_start_recording(self, command: bool = False, agent: bool = False):
         """Start audio recording. `command`: the command hotkey started it,
@@ -307,7 +317,8 @@ class Backend:
         if name:
             index = find_input_device(name)
             if index is not None:
-                rec = AudioRecorder(on_amplitude=self._on_amplitude, device_index=index)
+                rec = AudioRecorder(on_amplitude=self._on_amplitude, device_index=index,
+                                    on_limit=self._on_record_limit)
                 try:
                     rec.start()
                     self._mic_missing = None
@@ -318,7 +329,7 @@ class Backend:
             if self._mic_missing != name:  # tell once, not on every dictation
                 self._mic_missing = name
                 self.send("mic_fallback", {"name": name})
-        rec = AudioRecorder(on_amplitude=self._on_amplitude)
+        rec = AudioRecorder(on_amplitude=self._on_amplitude, on_limit=self._on_record_limit)
         rec.start()
         return rec
 
@@ -557,14 +568,9 @@ class Backend:
                 "duration": result["duration"],
             }
 
-            # The transcriber downgraded an unsupported compute type mid-call
-            # (cuBLAS refusal) – persist the working one so the next app start
-            # doesn't repeat the failed load+retry cycle. A failed save must
-            # not cost the text that is already transcribed.
-            if result.get("compute_fallback"):
-                self.config["compute_type"] = result["compute_type"]
-                if self._save_config():
-                    logger.info(f"Persisted compute_type fallback: {result['compute_type']}")
+            # The transcriber downgraded an unsupported compute type (cuBLAS
+            # refusal), in this pass or in a preview pass before it.
+            self._persist_compute_fallback()
 
             if self._cancelled({**done, **stats}):
                 return

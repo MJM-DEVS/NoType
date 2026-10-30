@@ -148,6 +148,15 @@ class Transcriber:
         self.forced_language = entry["lang"]
         self._model = None
         self._batched = None
+        # True while transcribe() swaps in a float16 model: the model is
+        # gone for a moment, but callers should wait for it, not give up.
+        # No lock of its own: it is only written under inference_lock, and
+        # reading a bool is atomic under the GIL.
+        self._reloading = False
+        # Compute type a cuBLAS fallback reload switched to ("float16"), set
+        # by whichever pass did it (also a preview pass, whose result nobody
+        # reads). The backend persists it and resets it to None.
+        self.fell_back_to = None
 
         # Auto-detect device
         if device == "auto":
@@ -395,7 +404,7 @@ class Transcriber:
             Dict with 'text', 'beam', 'compute_type', 'duration', 'vad_ms',
             'language'.
         """
-        if self._model is None:
+        if not self.is_loaded:
             raise RuntimeError("Model not loaded. Call load_model() first.")
 
         # From the config: a string or garbage must not fail the dictation.
@@ -421,10 +430,14 @@ class Transcriber:
         # names, jargon, etc.) – the simplest form of vocabulary customization
         # without fine-tuning.
         prompt = initial_prompt.strip() if initial_prompt else None
+        tried_compute = self.compute_type
 
         # Inference is serialised via the class-level lock – see comment above.
         def _run_inference():
             with Transcriber.inference_lock:
+                # A float16 reload that failed leaves no model behind.
+                if self._model is None:
+                    raise RuntimeError("Model not loaded. Call load_model() first.")
                 language = self._choose_language(audio, languages, allow_other,
                                                  vad_filter, vad_sensitivity)
                 if batched:
@@ -448,17 +461,27 @@ class Transcriber:
             # model LOADED fine (e.g. Blackwell GPUs + int8_float16 raise
             # CUBLAS_STATUS_NOT_SUPPORTED on the first matmul). Reload as
             # float16 and retry once instead of failing the dictation.
-            if "CUBLAS" not in str(e).upper() or self.compute_type == "float16":
+            if "CUBLAS" not in str(e).upper() or tried_compute == "float16":
                 raise
-            logger.warning(f"cuBLAS rejected compute_type={self.compute_type}, "
-                           f"falling back to float16: {e}")
-            with Transcriber._cache_lock:
-                Transcriber._model_cache.pop(
-                    (self._repo, self.device, self.compute_type), None)
-            self._model = None
-            self._batched = None  # holds the old model, too
-            self.compute_type = "float16"
-            self.load_model()
+            # Swap the model under the inference lock: a preview pass running
+            # in parallel waits for the reload instead of finding no model.
+            with Transcriber.inference_lock:
+                # The other pass may have hit the same error and reloaded already.
+                if self.compute_type == tried_compute:
+                    logger.warning(f"cuBLAS rejected compute_type={self.compute_type}, "
+                                   f"falling back to float16: {e}")
+                    with Transcriber._cache_lock:
+                        Transcriber._model_cache.pop(
+                            (self._repo, self.device, self.compute_type), None)
+                    self._reloading = True
+                    try:
+                        self._model = None
+                        self._batched = None  # holds the old model, too
+                        self.compute_type = "float16"
+                        self.load_model()
+                        self.fell_back_to = self.compute_type
+                    finally:
+                        self._reloading = False
             compute_fallback = True
             segments, info = _run_inference()
 
@@ -489,7 +512,7 @@ class Transcriber:
 
     @property
     def is_loaded(self) -> bool:
-        return self._model is not None
+        return self._model is not None or self._reloading
 
     def get_device_info(self) -> str:
         """Return a string describing the current device setup."""
