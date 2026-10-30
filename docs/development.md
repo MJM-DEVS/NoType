@@ -66,6 +66,7 @@ npm run build:dir
 ```
 
 - `requirements-build.txt` adds PyInstaller and `nvidia-cublas-cu12`. `backend.spec` copies `cublas64_12.dll` and `cublasLt64_12.dll` from that package next to the CTranslate2 DLLs and stops with an error when they are missing, because without them the GPU path silently falls back to the CPU on most PCs.
+- On a PC without a CUDA 12 toolkit on `PATH` the bundled DLLs are the only cuBLAS; if loading the model on the GPU fails anyway, the backend retries on the CPU (`init_transcriber` in `backend.py`) and reports `CPU (int8)` as the device.
 - `backend.spec` also generates the comtypes wrappers for UI Automation at build time, so the build has to run on Windows.
 - Release steps (version bump, portable ZIP, GitHub release) are in [RELEASING.md](../RELEASING.md).
 
@@ -80,15 +81,15 @@ Most of the app needs Windows: audio capture, hotkeys, text insertion, UI Automa
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-pip install numpy pytest ruff
+pip install -r requirements-dev.txt      # if present, otherwise: pip install numpy pytest ruff
 
 pytest                                   # the tests set their own config folder
-ruff check --select E9,F .               # syntax errors and pyflakes, passes today
+ruff check .
 python tools/gen_config_docs.py --check  # docs/configuration.md matches config.py
 for f in electron/*.js tools/svg_to_png.js; do node --check "$f"; done
 ```
 
-A plain `ruff check .` with a recent ruff and no project config reports many style findings in the existing code; the repository has no ruff configuration yet.
+Ruff uses the project configuration in `pyproject.toml` if present. Without one, a recent ruff reports many style findings in the existing code; `ruff check --select E9,F .` then checks only syntax errors and pyflakes.
 
 Changes in Windows-only code can't be verified this way. Say so in your pull request and describe how you tested on Windows, if you could.
 
@@ -148,6 +149,7 @@ NoType/
     ├── update.html        # "new version available" prompt
     ├── toast.html         # notification toast
     ├── installer.nsh      # uninstaller step: autostart entry and update cache
+    ├── lib/, test/        # if present: helper modules and their tests
     ├── assets/            # icons, tray icons, Quicksand font (OFL)
     └── package.json       # electron-builder (NSIS installer, GitHub update feed)
 ```

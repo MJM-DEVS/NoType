@@ -46,3 +46,14 @@ def test_new_key_makes_check_fail(gen, tmp_path, monkeypatch):
     config_copy.write_text(changed, encoding="utf-8")
     monkeypatch.setattr(gen, "CONFIG_PY", str(config_copy))
     assert gen.main(["--check"]) == 1
+
+
+def test_multiline_value_and_pipe_in_default(gen):
+    changed = _source().replace(
+        '"first_run_complete": False,',
+        '"first_run_complete": False,\n'
+        '    "spread_key": [  # first part\n'
+        '        "a|b",       # second part\n'
+        '    ],')
+    row = next(line for line in gen.render(changed).splitlines() if "`spread_key`" in line)
+    assert row == '| `spread_key` | `["a\\|b"]` | first part second part |'

@@ -8,7 +8,7 @@ Bug reports, ideas and pull requests are welcome.
 
 - the NoType version (Settings → General) and whether you use the installer or the portable ZIP,
 - your graphics card (or "none") and the speech model,
-- `%APPDATA%\NoType\notype.log`. It contains timings and errors, never your dictated text. It can contain program names and model names, so have a look before you post it.
+- `%APPDATA%\NoType\notype.log`. It contains timings and errors, never your dictated text. It can contain program names, model names and file paths with your Windows user name, so have a look before you post it.
 
 Security problems do not belong in a public issue; see [SECURITY.md](SECURITY.md).
 
@@ -18,7 +18,7 @@ How to run NoType from source, build the installer and test the platform-neutral
 
 - NoType is a Windows 11 app. Audio, hotkeys, text insertion, UI Automation, the Electron UI and the installer can only be tested on Windows.
 - `config.py`, `dictionary.py`, `spoken_punctuation.py`, `hallucinations.py`, `postprocess.py` and `agent_webhook.py` import on any OS with only numpy installed, and `pytest` runs on Linux.
-- Before a pull request, run `pytest`, `ruff check --select E9,F .`, `python tools/gen_config_docs.py --check` and `node --check` on the JavaScript files you touched.
+- Before a pull request, run `pytest`, `ruff check .`, `python tools/gen_config_docs.py --check` and `node --check` on the JavaScript files you touched. Install the tools with `pip install -r requirements-dev.txt` if that file is present, otherwise `pip install numpy pytest ruff`.
 
 ## Ground rules
 

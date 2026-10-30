@@ -55,6 +55,7 @@ Output in `dist\`:
 The portable ZIP is **not** an electron-builder target; `win.target` only lists `nsis`. It has to be made by hand from `dist\win-unpacked\` (*derived* from the README, which names it `NoType-<version>-portable.zip`):
 
 ```powershell
+# from the repository root
 Compress-Archive -Path dist\win-unpacked\* -DestinationPath dist\NoType-3.4.0-portable.zip
 ```
 
@@ -102,4 +103,5 @@ So:
 ## Afterwards
 
 - Start a new *Unreleased* section in `CHANGELOG.md`.
+- `SECURITY.md` and the issue templates say "latest release" instead of a version number; if you added a number anywhere, update it.
 - If the README's download section or screenshots changed, check that its links still point at the right assets.

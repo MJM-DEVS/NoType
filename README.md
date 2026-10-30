@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/banner.png" alt="NoType: voice dictation that never leaves your PC" width="100%" />
+<img src="docs/assets/banner.png" alt="NoType: private voice dictation that runs on your PC" width="100%" />
 
 **Hold a key. Say what you're thinking. Let go. Your words appear wherever your cursor is.**
 
@@ -312,9 +312,9 @@ Everything else stays in `%APPDATA%\NoType\` on your PC:
 
 **Uninstalling removes this whole folder**, NoType's autostart entry and its update cache in `%LOCALAPPDATA%\notype-updater\` (updates keep all three). The speech models are the exception: they live in the shared Hugging Face cache at `%USERPROFILE%\.cache\huggingface\hub\`, which other apps may use too, so the uninstaller leaves it alone. To free the space, delete the folders of the models you downloaded in NoType there; their names contain `whisper`, for example `models--mobiuslabsgmbh--faster-whisper-large-v3-turbo`. The portable version has no uninstaller: delete its folder and `%APPDATA%\NoType\` by hand.
 
-NoType pastes through the clipboard, so the dictated text stays there afterwards and you can paste it again. If you use Windows clipboard history or sync across devices, it ends up there too. To keep the clipboard out of it, choose **Always type** under **Settings → System**.
+NoType pastes through the clipboard, so the dictated text stays there afterwards and you can paste it again. If you use Windows clipboard history, it ends up there too, and with sync across devices turned on Windows can upload it to your Microsoft account and your other devices. To keep the clipboard out of it, choose **Always type** under **Settings → System**.
 
-To send screenshots and copied text along to AI apps ([see above](#show-ai-apps-what-you-are-talking-about)), NoType notes when something is copied. It reads the clipboard only while you dictate into an AI app, a terminal, a code editor or a browser, and only copies made from a minute before the start until your text is in. Terminals and editors need a file to open, so those copies are saved to `attachments\` and deleted after 24 hours. The log only notes whether an item was an image or text, never its content. You can switch this off under **Settings → General**.
+To send screenshots and copied text along to AI apps ([see above](#show-ai-apps-what-you-are-talking-about)), NoType notes when something is copied. It reads the clipboard only while you dictate into an AI app, a terminal, a code editor or a browser, and only copies made from a minute before the start until your text is in. Terminals and editors need a file to open, so those copies are saved to `attachments\` and cleaned up once they are older than 24 hours. The log only notes whether an item was an image or text, never its content. You can switch this off under **Settings → General**.
 
 To suggest corrections, NoType reads the text field you dictated into for up to a minute afterwards and compares only the dictated part. It stops as soon as you switch fields or start a new dictation. It never reads password fields and keeps nothing unless you click **Learn**. You can switch this off under **Settings → Dictionary**.
 

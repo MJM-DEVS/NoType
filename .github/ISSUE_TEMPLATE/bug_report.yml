@@ -22,7 +22,7 @@ body:
     attributes:
       label: NoType version
       description: Shown under Settings → General, or in the installer file name.
-      placeholder: "3.3.0"
+      placeholder: "for example the latest release"
     validations:
       required: true
   - type: dropdown
@@ -67,7 +67,7 @@ body:
     attributes:
       label: Log
       description: |
-        The relevant part of `%APPDATA%\NoType\notype.log`. It contains timings and errors, never your dictated text. It can contain program names, model names and the host of an agent URL, so please look it over before posting.
+        The relevant part of `%APPDATA%\NoType\notype.log`. It contains timings and errors, never your dictated text. It can contain program names, model names, the host of an agent URL and file paths with your Windows user name, so please look it over before posting.
       render: text
   - type: textarea
     id: more

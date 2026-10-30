@@ -3,7 +3,8 @@
 Reads config.py as source (ast + tokenize) instead of importing it, so it has
 no side effects (importing config.py creates the user-data folder) and runs on
 any platform. Each key's description is the comment on its line in config.py;
-keys without one take theirs from NOTES below.
+keys without one take theirs from NOTES below. A value that spans several
+lines collects the comments on all of them.
 
   python tools/gen_config_docs.py           # rewrite docs/configuration.md
   python tools/gen_config_docs.py --check   # exit 1 if it is out of date
@@ -30,7 +31,7 @@ NOTES = {
                   "distil-large-v3, distil-large-v3.5, german-turbo)",
     "hotkey": "Dictation hotkey",
     "autostart": "Start with Windows. The Electron app treats the Windows login item as the source of truth",
-    "overlay_enabled": "Not read anywhere else in the code at the moment",
+    "overlay_enabled": "Currently has no effect: nothing reads it",
     "command_hotkey": "Command mode hotkey",
     "agent_hotkey": "Agent hotkey (only registered while `agent_enabled` is on)",
     "agent_url": "http(s) URL the agent hotkey POSTs to; empty = not set up",
@@ -84,7 +85,7 @@ These are read or written by the app but have no default in `DEFAULT_CONFIG`. Th
 """
 
 FOOTER_NOTE = """
-`electron/main.js` (`loadConfig`) has its own fallback defaults for when it reads the file. Some of them differ from `DEFAULT_CONFIG` (for example `mode` and the `hotkey` notation); the setup guide writes the user's choices on first run.
+`electron/main.js` (`loadConfig`) has its own fallback defaults for when it reads the file; the setup guide writes the user's choices on first run.
 """
 
 
@@ -113,7 +114,9 @@ def read_defaults(source: str) -> list:
             rows = []
             for key, value in zip(node.value.keys, node.value.values):
                 name = ast.literal_eval(key)
-                rows.append((name, ast.literal_eval(value), comments.get(value.end_lineno, "")))
+                text = " ".join(comments[n] for n in range(key.lineno, value.end_lineno + 1)
+                                if n in comments)
+                rows.append((name, ast.literal_eval(value), text))
             return rows
     raise SystemExit("DEFAULT_CONFIG not found in config.py")
 
@@ -122,7 +125,8 @@ def render(source: str) -> str:
     lines = [HEADER]
     for name, default, comment in read_defaults(source):
         meaning = comment or NOTES.get(name, "")
-        lines.append(f"| `{name}` | `{json.dumps(default, ensure_ascii=False)}` | {_cell(meaning)} |\n")
+        value = _cell(json.dumps(default, ensure_ascii=False))
+        lines.append(f"| `{name}` | `{value}` | {_cell(meaning)} |\n")
     lines.append(FOOTER_INTRO)
     for name, default, meaning in OTHER_KEYS:
         lines.append(f"| `{name}` | {default} | {_cell(meaning)} |\n")

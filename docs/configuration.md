@@ -24,7 +24,7 @@ python tools/gen_config_docs.py --check   # exit 1 if it is out of date
 | `update_check` | `true` | ask GitHub for a newer release (Electron side) |
 | `auto_language_detect` | `true` | also recognize languages outside `languages` |
 | `spoken_punctuation` | `true` | "Fragezeichen", "neue Zeile" … become characters |
-| `overlay_enabled` | `true` | Not read anywhere else in the code at the moment |
+| `overlay_enabled` | `true` | Currently has no effect: nothing reads it |
 | `overlay_style` | `"amoled"` | amoled \| matrix \| island \| halo \| buddy \| slime \| dragon \| mimic \| line (retired ids are migrated by the Electron app) |
 | `overlay_position` | `"bottom"` | bottom \| top \| center – applies to every style |
 | `overlay_accent` | `"mint"` | mint \| mono \| aurora \| blue \| violet \| red \| amber |
@@ -64,4 +64,4 @@ These are read or written by the app but have no default in `DEFAULT_CONFIG`. Th
 | `vad_sensitivity` | `300` (backend) | Minimum silence in ms the VAD needs to split speech |
 | `mic_device_index` | unset | Legacy (up to 2.9): PortAudio index, migrated to `mic_device_name` on start |
 
-`electron/main.js` (`loadConfig`) has its own fallback defaults for when it reads the file. Some of them differ from `DEFAULT_CONFIG` (for example `mode` and the `hotkey` notation); the setup guide writes the user's choices on first run.
+`electron/main.js` (`loadConfig`) has its own fallback defaults for when it reads the file; the setup guide writes the user's choices on first run.

@@ -7,7 +7,7 @@
 <!-- Be specific. Windows-only parts (audio, hotkeys, text insertion, UI Automation, Electron UI, installer) can't be tested on Linux; say so if you couldn't run them on Windows. -->
 
 - [ ] `pytest`
-- [ ] `ruff check --select E9,F .`
+- [ ] `ruff check .`
 - [ ] `python tools/gen_config_docs.py --check`
 - [ ] `node --check` on changed JavaScript files
 - [ ] Tried on Windows 11 (describe below)

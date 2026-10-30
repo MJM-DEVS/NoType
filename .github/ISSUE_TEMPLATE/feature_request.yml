@@ -25,4 +25,4 @@ body:
     id: version
     attributes:
       label: NoType version you use
-      placeholder: "3.3.0"
+      placeholder: "for example the latest release"
