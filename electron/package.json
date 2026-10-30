@@ -5,9 +5,9 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win --x64",
-    "build:dir": "electron-builder --win --x64 --dir",
-    "check": "node --check main.js && node --check preload.js && node --check model-catalog.js && node --check keycaps.js && node --check sprites.js && node --check lib/settings-file.js && node --check lib/backend-line.js && node --check lib/guards.js && node --check lib/phrase-key.js && node --check lib/model-labels.js && node --check lib/history-file.js",
+    "build": "electron-builder --win --x64 --publish never",
+    "build:dir": "electron-builder --win --x64 --dir --publish never",
+    "check": "node --check main.js && node --check preload.js && node --check model-catalog.js && node --check keycaps.js && node --check sprites.js && node --check lib/settings-file.js && node --check lib/backend-line.js && node --check lib/guards.js && node --check lib/phrase-key.js && node --check lib/model-labels.js && node --check lib/history-file.js && node --check build-resources/fuses.js",
     "test": "node --test"
   },
   "author": "Mijo Jurisic (MJM-DEVS)",
@@ -18,6 +18,7 @@
     "url": "https://github.com/MJM-DEVS/NoType.git"
   },
   "devDependencies": {
+    "@electron/fuses": "^1.8.0",
     "electron": "^33.0.0",
     "electron-builder": "^25.0.0"
   },
@@ -26,8 +27,9 @@
     "productName": "NoType",
     "directories": {
       "output": "../dist",
-      "buildResources": "build"
+      "buildResources": "build-resources"
     },
+    "afterPack": "build-resources/fuses.js",
     "files": [
       "main.js",
       "preload.js",
@@ -71,12 +73,19 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/icon.ico",
-      "artifactName": "NoType-Setup-${version}.${ext}"
+      "artifactName": "NoType-${version}-portable.${ext}"
     },
     "nsis": {
+      "artifactName": "NoType-Setup-${version}.${ext}",
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,

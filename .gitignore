@@ -23,6 +23,14 @@ settings.json.bak*
 history.json
 autostart_error.log
 
+# ── Secrets / signing keys ──
+.env
+.env.*
+!.env.example
+*.pem
+*.pfx
+*.p12
+
 # ── OS / IDE noise ──
 .DS_Store
 Thumbs.db
