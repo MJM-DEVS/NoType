@@ -79,6 +79,7 @@ def github(tmp_path, monkeypatch):
     monkeypatch.setattr(om, "DOWNLOAD_URL", base + "/latest/" + om.ZIP_NAME)
     monkeypatch.setattr(om, "OLLAMA_DIR", str(tmp_path))
     monkeypatch.setattr(om, "OLLAMA_EXE", str(tmp_path / "ollama.exe"))
+    monkeypatch.setattr(om, "_t", lambda de, en: en)
     yield server
     server.shutdown()
     server.server_close()
@@ -97,6 +98,36 @@ def test_digest_mismatch_is_rejected(github, tmp_path):
     assert not (tmp_path / "ollama.exe").exists()
     assert not (tmp_path / "ollama.zip.part").exists()
     assert "checksum mismatch" in messages[-1]
+
+
+def test_mismatch_message_follows_app_language(github, monkeypatch):
+    github.release(digest="sha256:" + BAD)
+    monkeypatch.setattr(om, "_t", lambda de, en: de)
+    messages = []
+    assert not om.install(lambda stage, pct, msg: messages.append(msg))
+    assert "Prüfsumme stimmt nicht" in messages[-1]
+
+
+@pytest.mark.parametrize("asset_url,used", [
+    (f"https://github.com/ollama/ollama/releases/download/v9.9.9/{om.ZIP_NAME}", "asset"),
+    (f"https://example.com/{om.ZIP_NAME}", "latest"),
+    (f"http://github.com/ollama/ollama/releases/download/v9.9.9/{om.ZIP_NAME}", "latest"),
+])
+def test_install_downloads_the_pinned_github_asset(github, monkeypatch, asset_url, used):
+    github.release(digest="sha256:" + GOOD)
+    api = json.loads(github.files["/api"])
+    api["assets"][0]["browser_download_url"] = asset_url
+    github.files["/api"] = json.dumps(api).encode()
+    urls = []
+
+    def fake_download(url, dest, report, label):
+        urls.append(url)
+        with open(dest, "wb") as f:
+            f.write(ZIP)
+        return GOOD
+    monkeypatch.setattr(om, "_download", fake_download)
+    assert om.install()
+    assert urls == [asset_url if used == "asset" else om.DOWNLOAD_URL]
 
 
 def test_sha256sum_txt_is_used(github, tmp_path):

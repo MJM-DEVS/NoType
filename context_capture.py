@@ -9,9 +9,11 @@ hold-to-speak the hands are on the hotkey, so it's snip first, then speak.
   chat apps (ChatGPT, Claude, Gemini, … as app or browser tab): images are
       pasted like Ctrl+V, copied text is quoted under the sentence.
   terminals (Claude Code, Codex, …): images are saved as PNG and their paths
-      go in front of the sentence; the CLI reads them from disk. Long or
-      multi-line text goes to a .txt file the same way (a multi-line paste
-      would run each line in a plain shell).
+      go in front of the sentence; the CLI reads them from disk. Short
+      one-line text goes in quoted after the sentence; long or multi-line
+      text, or text with a double quote or a trailing backslash, goes to a
+      .txt file the same way (a multi-line paste would run each line in a
+      plain shell, a quote would end the "…" around it).
 
 Browser tabs whose title doesn't name an AI site (ChatGPT titles its tabs
 after the chat) and code editors take what is copied during the recording,
@@ -57,10 +59,11 @@ MAX_ITEMS = 5
 MAX_IMAGES = 3
 MAX_TEXT = 20000         # chars kept from one copy
 INLINE_MAX = 160         # terminal: shorter one-line text goes inline
-# … unless it holds a character that would end or expand the "…" around it
-# in a shell (cmd %VAR%, PowerShell $var / `, bash $( ) / `); a trailing
-# backslash would escape the closing quote. Such text goes to a .txt file.
-_INLINE_UNSAFE = re.compile(r'["`$%]|\\$')
+# … unless it holds a character that would end the "…" around it: a straight
+# or typographic double quote (PowerShell treats “ ” „ like "), a line break,
+# or a trailing backslash that would escape the closing quote. Such text goes
+# to a .txt file. $ % ! stay inline: "KeyError: 'id'", 100%, $PATH.
+_INLINE_UNSAFE = re.compile(r'["“”„\r\n]|\\$')
 KEEP_FILES_S = 24 * 3600
 CLEANUP_EVERY_S = 3600   # old attachment files are also swept on this timer
 THUMB_W, THUMB_H = 96, 64  # overlay chip thumbnail (2× its CSS size)
@@ -434,6 +437,7 @@ class ContextCapture:
         self._seen = {}
         self._session = None
         self._cleanup_lock = threading.Lock()
+        self._stopped = threading.Event()
         # Swept at start and then hourly, not just on the next save: a file
         # must not outlive KEEP_FILES_S because nothing was copied since.
         threading.Thread(target=self._sweep, name="attachment-cleanup", daemon=True).start()
@@ -596,9 +600,13 @@ class ContextCapture:
         return path
 
     def _sweep(self):
-        while True:
+        while not self._stopped.is_set():
             self._cleanup()
-            time.sleep(CLEANUP_EVERY_S)
+            self._stopped.wait(CLEANUP_EVERY_S)
+
+    def stop_cleanup(self):
+        """Ends the cleanup timer (tests; the app just exits)."""
+        self._stopped.set()
 
     def _cleanup(self):
         """Delete our files older than KEEP_FILES_S (one listdir, cheap)."""
@@ -626,7 +634,7 @@ def _path_arg(path: str) -> str:
 def _inline_ok(text: str) -> bool:
     """Short one-line text that can go in quoted, as is, after the sentence."""
     text = text.strip()
-    return "\n" not in text and len(text) <= INLINE_MAX and not _INLINE_UNSAFE.search(text)
+    return len(text) <= INLINE_MAX and not _INLINE_UNSAFE.search(text)
 
 
 def _quote(text: str) -> str:
@@ -639,14 +647,8 @@ def compose(text: str, items, target: Target) -> str:
     texts = [a for a in items if a.kind == "text"]
     if target.paths:
         front = [_path_arg(a.path) for a in items if a.path]
-        inline = ""
-        for a in texts:
-            if a.path:
-                continue
-            if not _inline_ok(a.text):  # _attachment saves these; never break the quoting
-                logger.warning("Copied text not attached: it can't go inline safely")
-                continue
-            inline += f' "{a.text.strip()}"'
+        # Text without a path passed _inline_ok in _attachment (same target).
+        inline = "".join(f' "{a.text.strip()}"' for a in texts if not a.path)
         return " ".join(front + [text]) + inline
     return text + "".join("\n\n" + _quote(a.text) for a in texts)
 

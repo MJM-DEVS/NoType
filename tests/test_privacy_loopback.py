@@ -1,5 +1,5 @@
 """Loopback traffic (Ollama, a local agent webhook) never goes via a proxy;
-the agent token never goes over plain http to another host."""
+the agent token never goes over plain http to a public host."""
 
 import os
 import sys
@@ -138,13 +138,34 @@ def test_agent_local_webhook_bypasses_proxy(proxy, ollama):
     assert proxy.hits == []
 
 
-def test_agent_token_never_over_plain_http_to_remote(monkeypatch):
+@pytest.mark.parametrize("url", [
+    "http://example.com/hook", "http://8.8.8.8/hook", "http://[2001:4860::8888]/hook",
+    "http://nas.example.org:5678/hook",
+])
+def test_agent_token_never_over_plain_http_to_public_host(monkeypatch, url):
     def fail(*args, **kwargs):
         raise AssertionError("must not connect")
     monkeypatch.setattr(agent_webhook._opener, "open", fail)
-    result = agent_webhook.post("http://example.com/hook", {"text": "x"}, token="secret")
-    # Same shape as an invalid URL, so the UI shows its existing message.
-    assert result == {"ok": False, "status": None, "message": "", "error": "bad_url"}
+    monkeypatch.setattr(agent_webhook._local_opener, "open", fail)
+    result = agent_webhook.post(url, {"text": "x"}, token="secret")
+    assert result == {"ok": False, "status": None, "message": "", "error": "insecure_url"}
+
+
+@pytest.mark.parametrize("url", [
+    "http://192.168.1.20:5678/webhook/x", "http://10.0.0.5/hook", "http://172.20.3.4/hook",
+    "http://169.254.10.1/hook", "http://[fd00::1]/hook", "http://[fe80::1]/hook",
+    "http://nas.local:5678/hook", "http://nas/hook", "http://NAS.LOCAL./hook",
+])
+def test_agent_token_over_plain_http_to_local_network(monkeypatch, url):
+    seen = []
+
+    def fake_open(request, timeout):
+        seen.append(request.get_header("Authorization"))
+        raise agent_webhook.urllib.error.URLError(ConnectionRefusedError())
+    monkeypatch.setattr(agent_webhook._opener, "open", fake_open)
+    result = agent_webhook.post(url, {"text": "x"}, token="secret")
+    assert result["error"] == "unreachable"
+    assert seen == ["Bearer secret"]
 
 
 def test_agent_plain_http_without_token_still_allowed(monkeypatch):

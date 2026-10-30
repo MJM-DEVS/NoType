@@ -260,7 +260,8 @@ def _verify(actual: str, expected: str | None) -> None:
         logger.info("No published SHA-256 for the Ollama download, not verified")
         return
     if actual.lower() != expected:
-        raise RuntimeError("checksum mismatch, download discarded")
+        raise RuntimeError(_t("Prüfsumme stimmt nicht, Download verworfen",
+                              "checksum mismatch, download discarded"))
     logger.info("Ollama download SHA-256 verified")
 
 
