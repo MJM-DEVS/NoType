@@ -182,7 +182,8 @@ GMEM_MOVEABLE = 0x0002
 CF_UNICODETEXT = 13
 
 # Documented markers that keep what NoType puts on the clipboard out of
-# clipboard history (Win+V), cloud clipboard sync and clipboard monitors.
+# clipboard history (Win+V), cloud clipboard sync and clipboard managers
+# that honour it.
 _PRIVACY_FORMATS = (
     ("ExcludeClipboardContentFromMonitorProcessing", b"\0\0\0\0"),  # any content
     ("CanIncludeInClipboardHistory", b"\0\0\0\0"),  # DWORD 0
@@ -233,13 +234,15 @@ def _place_one(fmt: int, data: bytes, u32, k32, memmove) -> bool:
 def _place_formats(formats: dict, u32=None, k32=None, memmove=None) -> bool:
     """Put `formats` plus the privacy markers on the opened, emptied clipboard.
 
-    Only for content NoType itself pastes. NoType never puts the user's
-    previous clipboard back, so nothing of theirs gets these markers.
+    Used for everything NoType pastes, including copies of the user's own
+    images and texts it pastes along into AI apps (context_capture). Their
+    original copy is already in the history (if it is on), so nothing of
+    theirs is lost.
     The Win32 handles are injectable for tests."""
     u32 = u32 or _u32
     k32 = k32 or _k32
     memmove = memmove or ctypes.memmove
-    # Markers first: a failure here must never stop the paste.
+    # Markers are best effort: a failure is only logged.
     for name, data in _PRIVACY_FORMATS:
         try:
             fmt = u32.RegisterClipboardFormatW(name)

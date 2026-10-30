@@ -44,7 +44,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from text_output import insert_text, paste_formats
+from text_output import CF_UNICODETEXT, insert_text, paste_formats
 
 logger = logging.getLogger("NoType.Context")
 
@@ -60,7 +60,6 @@ INLINE_MAX = 160         # terminal: shorter one-line text goes inline
 KEEP_FILES_S = 24 * 3600
 THUMB_W, THUMB_H = 96, 64  # overlay chip thumbnail (2× its CSS size)
 
-CF_UNICODETEXT = 13
 CF_DIB = 8
 GMEM_MOVEABLE = 0x0002
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000

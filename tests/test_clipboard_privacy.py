@@ -1,4 +1,4 @@
-"""Which clipboard formats NoType sets, and in which order.
+"""Which clipboard formats NoType sets when it pastes.
 
 text_output needs ctypes.windll and pyperclip at import time; both are
 stubbed here and restored after each test. Only the format logic is tested,
@@ -75,14 +75,15 @@ def place(mod, fake, formats):
     return mod._place_formats(formats, u32=fake, k32=fake, memmove=fake.memmove)
 
 
-def test_privacy_formats_come_first_then_content(text_output):
+def test_all_markers_and_the_content_are_set(text_output):
     fake = FakeWin32()
     text = ("hi\r\n" + "\0").encode("utf-16-le")
     assert place(text_output, fake, {text_output.CF_UNICODETEXT: text})
-    assert [n for n, _ in fake.set] == PRIVACY + [text_output.CF_UNICODETEXT]
-    assert fake.set[1][1] == b"\0\0\0\0"  # CanIncludeInClipboardHistory = 0
-    assert fake.set[2][1] == b"\0\0\0\0"  # CanUploadToCloudClipboard = 0
-    assert fake.set[3][1] == text
+    placed = dict(fake.set)
+    assert set(placed) == set(PRIVACY) | {text_output.CF_UNICODETEXT}
+    for name in PRIVACY:
+        assert placed[name] == b"\0\0\0\0"  # DWORD 0
+    assert placed[text_output.CF_UNICODETEXT] == text
 
 
 def test_image_formats_get_the_markers_too(text_output):
@@ -111,3 +112,27 @@ def test_rejected_marker_is_freed_and_paste_continues(text_output):
 def test_no_content_placed_reports_failure(text_output):
     fake = FakeWin32(fail_set={13})
     assert not place(text_output, fake, {13: b"x\0"})
+
+
+def _quiet_paste(mod, monkeypatch):
+    monkeypatch.setattr(mod, "_wait_modifiers_released", lambda *a: None)
+    monkeypatch.setattr(mod, "_wait_clipboard_updated", lambda *a: True)
+    monkeypatch.setattr(mod, "_send_ctrl_v", lambda: True)
+
+
+def test_insert_text_puts_crlf_utf16_text_on_the_clipboard(text_output, monkeypatch):
+    _quiet_paste(text_output, monkeypatch)
+    calls = []
+    monkeypatch.setattr(text_output, "_set_clipboard", lambda f: calls.append(f) or True)
+    assert text_output.insert_text("a\nb")
+    assert calls == [{13: "a\r\nb\0".encode("utf-16-le")}]
+
+
+def test_insert_text_types_when_the_clipboard_cannot_be_set(text_output, monkeypatch):
+    _quiet_paste(text_output, monkeypatch)
+    monkeypatch.setattr(text_output, "_set_clipboard", lambda f: False)
+    typed = []
+    result = object()
+    monkeypatch.setattr(text_output, "_type_unicode", lambda t: typed.append(t) or result)
+    assert text_output.insert_text("hello") is result
+    assert typed == ["hello"]
