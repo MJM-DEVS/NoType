@@ -40,6 +40,10 @@ _THINK_BLOCK_RE = re.compile(r"<think>.*?(?:</think>|$)\s*", re.IGNORECASE | re.
 LLM_TIMEOUT_S = 2.5
 # How long a "is Ollama up / is the model pulled" verdict stays cached.
 AVAILABILITY_TTL_S = 60.0
+# A "not available" verdict expires sooner, so an Ollama started by hand is
+# picked up quickly; long enough that a missing Ollama doesn't cost the 0.4 s
+# connect timeout (Windows) on every dictation.
+UNAVAILABLE_TTL_S = 20.0
 
 # Standalone filler words. Word-boundary matched, case-insensitive; an
 # immediately following comma/period is removed with the filler.
@@ -128,7 +132,7 @@ def _ollama_available(model: str) -> bool:
     """True if Ollama answers on localhost AND has `model` pulled. Cached."""
     global _availability
     checked_at, available = _availability
-    if time.monotonic() - checked_at < AVAILABILITY_TTL_S:
+    if time.monotonic() - checked_at < (AVAILABILITY_TTL_S if available else UNAVAILABLE_TTL_S):
         return available
 
     result = False
