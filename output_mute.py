@@ -15,7 +15,7 @@ import queue
 import sys
 import threading
 import time
-from ctypes import HRESULT, POINTER, c_float, c_uint, c_void_p
+from ctypes import POINTER, c_float, c_uint, c_void_p
 from ctypes.wintypes import BOOL, DWORD, LPCWSTR, LPWSTR
 
 logger = logging.getLogger("NoType.OutputMute")
@@ -31,6 +31,7 @@ def _interfaces():
     global _ifaces
     if _ifaces is not None:
         return _ifaces
+    from ctypes import HRESULT  # Windows only
     from comtypes import COMMETHOD, GUID, IUnknown
 
     class IAudioEndpointVolume(IUnknown):
