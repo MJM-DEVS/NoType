@@ -115,6 +115,8 @@ def test_no_content_placed_reports_failure(text_output):
 
 
 def _quiet_paste(mod, monkeypatch):
+    # user32 is None off Windows once the import guards land; stub it either way.
+    monkeypatch.setattr(mod, "user32", mock.MagicMock(), raising=False)
     monkeypatch.setattr(mod, "_wait_modifiers_released", lambda *a: None)
     monkeypatch.setattr(mod, "_wait_clipboard_updated", lambda *a: True)
     monkeypatch.setattr(mod, "_send_ctrl_v", lambda: True)
