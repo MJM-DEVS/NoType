@@ -46,10 +46,6 @@ def test_dictation_found_with_prefix():
                prefix="Hallo. ") == [("Kuber Netis", "Kubernetes")]
 
 
-@pytest.mark.xfail(strict=False, raises=AssertionError, reason=(
-    "Bug: replaced words count as removed, so fixing 2 of 3 dictated words "
-    "('Kuber Netis' -> 'Kubernetes') looks like 'dictation mostly gone' and "
-    "returns None - short dictations never get a suggestion"))
 @pytest.mark.parametrize("inserted, after", [
     ("Kuber Netis läuft", "Kubernetes läuft"),
     ("Kuber Netis", "Kubernetes"),
@@ -122,10 +118,6 @@ def test_duplicate_pairs_reported_once():
     assert fix(inserted, after) == [("Kuber Netis", "Kubernetes")]
 
 
-@pytest.mark.xfail(strict=False, raises=AssertionError, reason=(
-    "Bug/limitation: when the fixed word ends the field and the user keeps "
-    "typing, the fix and the new text merge into one >3-word replace, so the "
-    "correction is lost (docstring: text typed after the dictation stays outside)"))
 def test_fix_of_last_word_then_typing_on():
     assert fix("Wir nutzen Kuber Netis", "Wir nutzen Kubernetes. Und noch mehr Text danach") \
         == [("Kuber Netis", "Kubernetes")]

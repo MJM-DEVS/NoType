@@ -43,9 +43,6 @@ def test_other_json_values_show_sent(body):
     assert extract_message(body, "application/json; charset=utf-8") == ""
 
 
-@pytest.mark.xfail(strict=False, raises=AssertionError, reason=(
-    "Bug: json.loads('null') is None, which the code reads as 'not JSON', so "
-    "the overlay shows the literal 'null' while [] or 42 show 'Sent'"))
 def test_json_null_shows_sent():
     assert extract_message(b"null", JSON) == ""
 
@@ -82,8 +79,6 @@ def test_html_tags_kept_for_plain_text():
     assert extract_message(b"<b>x</b>", "text/plain") == "<b>x</b>"
 
 
-@pytest.mark.xfail(strict=False, raises=AssertionError, reason=(
-    "Bug (minor): HTML entities are not decoded, the overlay shows '&amp;'"))
 def test_html_entities_decoded():
     assert extract_message(b"<p>Fish &amp; Chips</p>", "text/html") == "Fish & Chips"
 

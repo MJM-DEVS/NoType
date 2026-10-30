@@ -41,10 +41,6 @@ def test_credits_removed_completely(text):
     assert strip_credits(text) == ""
 
 
-@pytest.mark.xfail(strict=False, raises=AssertionError, reason=(
-    "Bug: '字幕由' matches first and its sentence tail stops at the dot of "
-    "'Amara.org' (no \\b between CJK and Latin for the amara pattern), "
-    "leaving 'org社区提供'"))
 def test_chinese_amara_credit_removed_completely():
     assert strip_credits("字幕由Amara.org社区提供") == ""
 

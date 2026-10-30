@@ -122,10 +122,6 @@ def test_whisper_prompt_none_when_empty():
     assert whisper_prompt("toolongterm", [], budget=3) is None
 
 
-@pytest.mark.xfail(strict=False, raises=AssertionError, reason=(
-    "Bug: the self-protection for a target spelling drops its non-word "
-    "characters ('.NET' -> body 'NET'), so a second pass turns '.NET' into "
-    "'..NET' - contradicts 'applying the dictionary twice never doubles up'"))
 def test_target_with_leading_symbol_is_idempotent():
     entries = [entry("dot net", ".NET")]
     once = apply("Wir nutzen dot net", entries)
@@ -133,9 +129,6 @@ def test_target_with_leading_symbol_is_idempotent():
     assert apply(once, entries) == once
 
 
-@pytest.mark.xfail(strict=False, raises=AssertionError, reason=(
-    "Bug: target 'C++' protects the bare word 'C', so 'Vitamin C' becomes "
-    "'Vitamin C++'"))
 def test_target_with_trailing_symbol_does_not_grab_prefix_word():
     assert apply("Vitamin C", [entry("c plus plus", "C++")]) == "Vitamin C"
 

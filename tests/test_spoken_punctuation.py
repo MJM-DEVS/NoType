@@ -112,9 +112,6 @@ def test_after_an_article_nothing_is_a_command(text, lang):
     assert apply(text, lang) == text
 
 
-@pytest.mark.xfail(strict=False, raises=AssertionError, reason=(
-    "Bug: _LITERAL_AFTER['en'] holds words meant for 'period' ('trial period', "
-    "'time period', 'no'), but they block every command after them"))
 @pytest.mark.parametrize("text, expected", [
     ("No comma thanks", "No, thanks"),
     ("Thank you for your time exclamation mark", "Thank you for your time!"),
