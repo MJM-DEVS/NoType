@@ -1,0 +1,10 @@
+# Everything needed to build dist/backend/ with backend.spec (Windows only).
+# Not tested on Windows in this form; see RELEASING.md.
+
+-r requirements.txt
+pyinstaller
+# backend.spec bundles cublas64_12.dll and cublasLt64_12.dll from this package
+# and stops with an error when they are missing. Not pinned: it has to stay a
+# CUDA 12 build that matches the ctranslate2 in requirements.txt; pin it here
+# if a newer release ever breaks the GPU path.
+nvidia-cublas-cu12
