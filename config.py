@@ -11,6 +11,9 @@ so backend and frontend share one settings file.
 import json
 import os
 import shutil
+import tempfile
+import threading
+import time
 
 APP_NAME = "NoType"
 
@@ -91,19 +94,53 @@ DEFAULT_CONFIG = {
 }
 
 _config = None
+# Several backend threads save (selftest, transcription, Ollama setup, IPC).
+_save_lock = threading.Lock()
+
+
+# A temp file of save_config() older than this was left by a crash or power
+# loss; a younger one may still be written by another backend instance.
+_STALE_TMP_S = 600
+
+
+def _remove_stale_tmp_files() -> None:
+    """Delete settings.json.<random>.tmp files a crashed save left behind.
+    Only our own unique names: Electron's settings.json.tmp is never touched."""
+    folder = os.path.dirname(CONFIG_FILE)
+    prefix = os.path.basename(CONFIG_FILE) + "."
+    electron_tmp = prefix + "tmp"
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return
+    with _save_lock:
+        for name in names:
+            if (not (name.startswith(prefix) and name.endswith(".tmp"))
+                    or name == electron_tmp):
+                continue
+            path = os.path.join(folder, name)
+            try:
+                if time.time() - os.path.getmtime(path) > _STALE_TMP_S:
+                    os.remove(path)
+            except OSError:
+                pass
 
 
 def load_config() -> dict:
     """Load config from file, falling back to rolling backups on corruption."""
     global _config
+    _remove_stale_tmp_files()
 
     def _try_read(path: str):
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            # utf-8-sig: a file re-saved by Notepad & co. may start with a BOM.
+            with open(path, "r", encoding="utf-8-sig") as f:
                 data = json.load(f)
             if isinstance(data, dict) and "hotkey" in data:
                 return data
-        except (json.JSONDecodeError, IOError):
+        except (ValueError, OSError):
+            # ValueError covers JSONDecodeError and UnicodeDecodeError (a
+            # file saved in a non-UTF-8 encoding) – try the next candidate.
             return None
         return None
 
@@ -136,41 +173,53 @@ def save_config(config: dict) -> None:
     """Save config dict to settings.json atomically with 3 rolling backups.
 
     Sequence:
-      1. write to settings.json.tmp + fsync
+      1. write to a unique settings.json.*.tmp + fsync
       2. rotate backups (.bak2 -> .bak3, .bak1 -> .bak2, current -> .bak1)
       3. atomic rename .tmp -> settings.json
 
     Even with a power-loss between steps you keep up to 3 previous-known-good
     generations under settings.json.bak1/.bak2/.bak3. The atomic rename in
     step 3 means settings.json itself is never half-written.
+
+    Serialised by a module lock; the temp name is unique because Electron
+    writes settings.json.tmp itself. Raises on failure (callers decide).
     """
     global _config
     _config = config
 
-    tmp = CONFIG_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=2, ensure_ascii=False)
-        f.flush()
+    with _save_lock:
+        fd, tmp = tempfile.mkstemp(prefix="settings.json.", suffix=".tmp",
+                                   dir=os.path.dirname(CONFIG_FILE))
         try:
-            os.fsync(f.fileno())
-        except Exception:
-            pass
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+                f.flush()
+                try:
+                    os.fsync(f.fileno())
+                except Exception:
+                    pass
 
-    # Rotate backups: .bak2 -> .bak3, .bak1 -> .bak2, current -> .bak1
-    try:
-        bak1 = CONFIG_FILE + ".bak1"
-        bak2 = CONFIG_FILE + ".bak2"
-        bak3 = CONFIG_FILE + ".bak3"
-        if os.path.exists(bak2):
-            shutil.copy(bak2, bak3)
-        if os.path.exists(bak1):
-            shutil.copy(bak1, bak2)
-        if os.path.exists(CONFIG_FILE):
-            shutil.copy(CONFIG_FILE, bak1)
-    except Exception:
-        pass  # backup failure must not block the actual save
+            # Rotate backups: .bak2 -> .bak3, .bak1 -> .bak2, current -> .bak1
+            try:
+                bak1 = CONFIG_FILE + ".bak1"
+                bak2 = CONFIG_FILE + ".bak2"
+                bak3 = CONFIG_FILE + ".bak3"
+                if os.path.exists(bak2):
+                    shutil.copy(bak2, bak3)
+                if os.path.exists(bak1):
+                    shutil.copy(bak1, bak2)
+                if os.path.exists(CONFIG_FILE):
+                    shutil.copy(CONFIG_FILE, bak1)
+            except Exception:
+                pass  # backup failure must not block the actual save
 
-    os.replace(tmp, CONFIG_FILE)
+            os.replace(tmp, CONFIG_FILE)
+        except BaseException:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+            raise
 
 
 def _try_restore_from_backup():
