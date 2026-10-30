@@ -150,7 +150,13 @@ class Transcriber:
         self._batched = None
         # True while transcribe() swaps in a float16 model: the model is
         # gone for a moment, but callers should wait for it, not give up.
+        # No lock of its own: it is only written under inference_lock, and
+        # reading a bool is atomic under the GIL.
         self._reloading = False
+        # Compute type a cuBLAS fallback reload switched to ("float16"), set
+        # by whichever pass did it (also a preview pass, whose result nobody
+        # reads). The backend persists it and resets it to None.
+        self.fell_back_to = None
 
         # Auto-detect device
         if device == "auto":
@@ -473,6 +479,7 @@ class Transcriber:
                         self._batched = None  # holds the old model, too
                         self.compute_type = "float16"
                         self.load_model()
+                        self.fell_back_to = self.compute_type
                     finally:
                         self._reloading = False
             compute_fallback = True

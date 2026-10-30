@@ -33,10 +33,10 @@ def b(monkeypatch):
     return inst
 
 
-def _stop_with(b, seconds, text="hallo welt", **result):
+def _stop_with(b, seconds, text="hallo welt", fell_back_to=None, **result):
     b.recorder = mock.Mock()
     b.recorder.stop.return_value = np.zeros(int(seconds * backend.SAMPLE_RATE), dtype=np.float32)
-    b.transcriber = mock.Mock(is_loaded=True)
+    b.transcriber = mock.Mock(is_loaded=True, fell_back_to=fell_back_to)
     b.transcriber.transcribe.return_value = {
         "text": text, "beam": 1, "compute_type": "float16", "duration": seconds,
         "language": "de", **result}
@@ -61,10 +61,27 @@ def test_enough_audio_is_transcribed(b):
 
 def test_failed_save_keeps_transcribed_text(b):
     backend.save_config.side_effect = OSError("disk full")
-    done = _stop_with(b, 1.0, compute_fallback=True)
+    done = _stop_with(b, 1.0, compute_fallback=True, fell_back_to="float16")
     assert done and done[0]["text"] == "hallo welt"
     backend.insert_text.assert_called_once()
     assert b.config["compute_type"] == "float16"
+
+
+def test_fallback_from_a_preview_pass_is_saved(b):
+    # The preview pass reloaded float16, so the final result itself carries
+    # compute_fallback=False; the transcriber's flag still gets persisted.
+    b.config["compute_type"] = "int8_float16"
+    _stop_with(b, 1.0, compute_fallback=False, fell_back_to="float16")
+    assert b.config["compute_type"] == "float16"
+    backend.save_config.assert_called_once()
+    assert b.transcriber.fell_back_to is None
+
+
+def test_no_fallback_saves_nothing(b):
+    b.config["compute_type"] = "int8_float16"
+    _stop_with(b, 1.0)
+    assert b.config["compute_type"] == "int8_float16"
+    backend.save_config.assert_not_called()
 
 
 def test_broken_dictionary_entries_do_not_fail_dictation(b):
@@ -92,7 +109,7 @@ def test_handle_save_config_survives_save_error(b, monkeypatch):
 
 def test_selftest_survives_save_error(b):
     backend.save_config.side_effect = OSError("locked")
-    b.transcriber = mock.Mock()
+    b.transcriber = mock.Mock(fell_back_to="float16")
     b.transcriber.transcribe.return_value = {"compute_fallback": True,
                                              "compute_type": "float16"}
     b._inference_selftest()  # must not raise
@@ -139,3 +156,28 @@ def test_init_transcriber_runs_one_load_and_skips_superseded(b, monkeypatch):
         t.join(5)
     assert max_active[0] == 1
     assert loaded == ["small", "large-v3"]
+
+
+def test_record_limit_tells_electron(b):
+    b._on_record_limit()
+    assert b.sent == [("recording_limit", {"seconds": backend.MAX_RECORD_SECONDS})]
+
+
+def test_recorders_get_the_limit_callback(b, monkeypatch):
+    rec_cls = mock.Mock()
+    monkeypatch.setattr(backend, "AudioRecorder", rec_cls)
+    monkeypatch.setattr(backend, "refresh_devices", mock.Mock())
+    b.config["mic_device_name"] = None
+    b._open_recorder()
+    assert rec_cls.call_args.kwargs["on_limit"] == b._on_record_limit
+
+
+def test_chosen_mic_recorder_gets_the_limit_callback(b, monkeypatch):
+    rec_cls = mock.Mock()
+    monkeypatch.setattr(backend, "AudioRecorder", rec_cls)
+    monkeypatch.setattr(backend, "refresh_devices", mock.Mock())
+    monkeypatch.setattr(backend, "find_input_device", mock.Mock(return_value=3))
+    b.config["mic_device_name"] = "Headset"
+    b._open_recorder()
+    assert rec_cls.call_args.kwargs["device_index"] == 3
+    assert rec_cls.call_args.kwargs["on_limit"] == b._on_record_limit

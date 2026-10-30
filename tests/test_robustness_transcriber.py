@@ -156,3 +156,53 @@ def test_failed_cublas_reload_reports_not_loaded(cublas, monkeypatch):
     assert not cublas.is_loaded
     with pytest.raises(RuntimeError, match="Model not loaded"):
         cublas.transcribe(np.zeros(16000, dtype=np.float32))
+
+
+def test_fallback_flag_is_set_by_the_reloading_pass(cublas):
+    CublasModel.release.set()
+    assert cublas.fell_back_to is None
+    result = cublas.transcribe(np.zeros(16000, dtype=np.float32), beam_size="1")
+    assert result["compute_fallback"] is True
+    # Stays set for the backend even if nobody reads this (preview) result.
+    assert cublas.fell_back_to == "float16"
+    cublas.fell_back_to = None
+    cublas.transcribe(np.zeros(16000, dtype=np.float32))
+    assert cublas.fell_back_to is None
+
+
+def test_two_passes_hitting_cublas_reload_once(cublas, monkeypatch):
+    CublasModel.release.set()
+    barrier = threading.Barrier(2)
+
+    def failing(self, audio, **kwargs):
+        # Both passes are inside the int8 model at once and both see the
+        # error. The lock is dropped for the meeting only, or the second
+        # pass could never get in.
+        Transcriber.inference_lock.release()
+        try:
+            barrier.wait(5)
+        finally:
+            Transcriber.inference_lock.acquire()
+        raise RuntimeError("CUBLAS_STATUS_NOT_SUPPORTED")
+
+    original = CublasModel.transcribe
+    monkeypatch.setattr(CublasModel, "transcribe", lambda self, audio, **kw: (
+        failing(self, audio, **kw) if self.compute_type == "int8_float16"
+        else original(self, audio, **kw)))
+    results, errors = [], []
+
+    def run():
+        try:
+            results.append(cublas.transcribe(np.zeros(16000, dtype=np.float32)))
+        except Exception as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=run) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(5)
+    assert errors == []
+    assert [r["compute_type"] for r in results] == ["float16", "float16"]
+    assert CublasModel.loads.count("float16") == 1
+    assert cublas.fell_back_to == "float16"
