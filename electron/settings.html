@@ -1307,6 +1307,7 @@
 <script src="model-catalog.js"></script>
 <script src="sprites.js"></script>
 <script src="keycaps.js"></script>
+<script src="lib/phrase-key.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
   // Drawn icons for the small row controls (remove, "heard → meant").
@@ -1463,6 +1464,7 @@
       'system.mictest.error': 'Kein Zugriff auf das Mikrofon. Prüfe die Windows-Datenschutzeinstellungen für Mikrofone.',
       'system.mictest.error.none': 'Kein Mikrofon gefunden. Schließe eins an oder aktiviere es in den Windows-Soundeinstellungen.',
       'system.mictest.error.busy': 'Das Mikrofon lässt sich nicht öffnen. Vielleicht nutzt es gerade eine andere App.',
+      'system.mictest.fallback': 'Gewähltes Mikrofon nicht verfügbar, das Standardmikrofon wird getestet.',
       'a11y.close': 'Schließen', 'a11y.add': 'Hinzufügen', 'a11y.remove': '„{item}“ entfernen',
       'system.mute': 'Andere Wiedergabe stummschalten',
       'system.mute.desc': 'Musik und Videos sind still, solange du sprichst. Danach ist der Ton sofort wieder da.',
@@ -1624,6 +1626,7 @@
       'system.mictest.error': 'No access to the microphone. Check the Windows privacy settings for microphones.',
       'system.mictest.error.none': 'No microphone found. Plug one in or enable it in the Windows sound settings.',
       'system.mictest.error.busy': 'The microphone can’t be opened. Another app may be using it.',
+      'system.mictest.fallback': 'The chosen microphone is not available, testing the default one.',
       'a11y.close': 'Close', 'a11y.add': 'Add', 'a11y.remove': 'Remove “{item}”',
       'system.mute': 'Mute other audio while dictating',
       'system.mute.desc': 'Music and videos go quiet while you speak and come back right after.',
@@ -2220,8 +2223,9 @@
   // spellings also bias Whisper and the AI cleanup.
   const DICT_MAX = 500;
   let dictEntries = [];   // [{from, to}], oldest first
-  // Same word split as the backend: "Kuber-Netis" and "kuber netis" are one mistake.
-  const phraseKey = (s) => (String(s).toLowerCase().match(/[\p{L}\p{N}_]+/gu) || []).join(' ');
+  // Same tokens as the backend: "Kuber-Netis" and "kuber netis" are one
+  // mistake, "C#" and "C" are two (lib/phrase-key.js).
+  const phraseKey = window.NoTypePhraseKey;
 
   function renderDict(flashNewest = false) {
     const list = $('dictList');
@@ -3146,9 +3150,12 @@
   // at 31 characters).
   const micKey = (s) => String(s || '').toLowerCase()
     .replace(/\(\d+- /, '(').replace(/[^a-z0-9äöüß]+/g, '');
+  // Returns { stream, fallback }: fallback when the chosen mic could not be
+  // opened and the stream is the default one.
   async function openMicStream(name) {
     let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    if (!name) return stream;
+    if (!name) return { stream, fallback: false };
+    let fallback = true;
     try {
       const want = micKey(name).slice(0, 24);
       const list = await navigator.mediaDevices.enumerateDevices();
@@ -3161,9 +3168,10 @@
         const exact = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: match.deviceId } } });
         stream.getTracks().forEach(tr => tr.stop());
         stream = exact;
+        fallback = false;
       }
     } catch (_) { /* keep the default stream */ }
-    return stream;
+    return { stream, fallback };
   }
   let micTestStream = null;
   let micTestContext = null;
@@ -3190,7 +3198,7 @@
     const gen = micTestGen;
     micTestOpening = true;
     try {
-      const stream = await openMicStream($('micSelect').value);
+      const { stream, fallback } = await openMicStream($('micSelect').value);
       if (gen !== micTestGen) { stream.getTracks().forEach(t2 => t2.stop()); return; }
       micTestOpening = false;
       micTestStream = stream;
@@ -3215,24 +3223,32 @@
         micTestAnimId = requestAnimationFrame(updateMeter);
       }
       updateMeter();
+      if (fallback) micTestNote('system.mictest.fallback');
     } catch (e) {
       if (gen !== micTestGen) return;
       stopMicTest();
-      // Say why, in the row itself, for a few seconds. Denied, missing and
-      // busy mics need different next steps.
+      // Say why, in the row itself. Denied, missing and busy mics need
+      // different next steps.
       const key = e && (e.name === 'NotFoundError' || e.name === 'OverconstrainedError') ? 'system.mictest.error.none'
         : e && e.name === 'NotReadableError' ? 'system.mictest.error.busy' : 'system.mictest.error';
-      const desc = $('micTestBtn').closest('.field').querySelector('.field-desc');
-      desc.textContent = t(key);
-      desc.classList.add('warn');
-      desc.setAttribute('role', 'alert');
-      setTimeout(() => {
-        desc.classList.remove('warn');
-        desc.removeAttribute('role');
-        desc.textContent = t(desc.dataset.i18n);
-      }, 6000);
+      micTestNote(key);
     }
   };
+
+  // A note in the mic test row's description, for a few seconds.
+  let micTestNoteTimer = null;
+  function micTestNote(key) {
+    const desc = $('micTestBtn').closest('.field').querySelector('.field-desc');
+    desc.textContent = t(key);
+    desc.classList.add('warn');
+    desc.setAttribute('role', 'alert');
+    clearTimeout(micTestNoteTimer);
+    micTestNoteTimer = setTimeout(() => {
+      desc.classList.remove('warn');
+      desc.removeAttribute('role');
+      desc.textContent = t(desc.dataset.i18n);
+    }, 6000);
+  }
 
   function stopMicTest() {
     micTestGen++;

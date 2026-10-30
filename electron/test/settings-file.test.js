@@ -28,7 +28,9 @@ test('a valid settings.json is used as is', () => {
 });
 
 test('a broken settings.json is kept as .corrupt and the first good backup promoted', () => {
-  const broken = '{"hotkey": "ctrl+shift+space", "agent_token": "secret"';
+  // An unquoted value: V8's SyntaxError message quotes this part of the input.
+  const broken = '{"hotkey": "ctrl+shift+space", "agent_token": secret}';
+  assert.throws(() => JSON.parse(broken), (e) => e.message.includes('secret'));
   const file = tmpSettings({ '': broken, '.bak1': '{oops', '.bak2': good('alt+y'), '.bak3': good('alt+z') });
   const r = loadSettingsFile(file);
   assert.strictEqual(r.config.hotkey, 'alt+y');
@@ -36,7 +38,29 @@ test('a broken settings.json is kept as .corrupt and the first good backup promo
   assert.strictEqual(fs.readFileSync(file + '.corrupt', 'utf-8'), broken);
   assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf-8')).hotkey, 'alt+y');
   // The error never quotes the file (it can hold the agent token).
-  assert.ok(!String(r.error).includes('secret'));
+  assert.strictEqual(r.error, 'SyntaxError');
+});
+
+test('a UTF-8 BOM is skipped, like config.py does', () => {
+  const file = tmpSettings({ '': '﻿' + good('alt+m'), '.bak1': good('alt+x') });
+  const r = loadSettingsFile(file);
+  assert.strictEqual(r.config.hotkey, 'alt+m');
+  assert.strictEqual(r.source, file);
+  assert.strictEqual(r.error, null);
+  assert.ok(!fs.existsSync(file + '.corrupt'));
+});
+
+test('a settings.json that cannot be read is left alone, the backup used from memory', () => {
+  const file = tmpSettings({ '.bak1': good('alt+r') });
+  // A directory stands in for a locked file: it exists, reading it fails.
+  fs.mkdirSync(file);
+  const r = loadSettingsFile(file);
+  assert.strictEqual(r.config.hotkey, 'alt+r');
+  assert.strictEqual(r.source, file + '.bak1');
+  assert.strictEqual(r.error, 'EISDIR');
+  assert.strictEqual(r.corrupt, null);
+  assert.ok(!fs.existsSync(file + '.corrupt'));
+  assert.ok(fs.statSync(file).isDirectory());
 });
 
 test('like config.py, an object without a hotkey does not count', () => {

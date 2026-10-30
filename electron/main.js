@@ -2,9 +2,10 @@ const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, nativeImage, sc
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
-const { loadSettingsFile } = require('./lib/settings-file');
+const { loadSettingsFile, stripBom } = require('./lib/settings-file');
 const { parseBackendLine } = require('./lib/backend-line');
 const { isSameDocument, isAppFile, allowPermission } = require('./lib/guards');
+const { phraseKey } = require('./lib/phrase-key');
 
 // ── Single-Instance Lock ──
 // Prevents double hotkey registration when boot-autostart and a manual launch collide.
@@ -23,7 +24,7 @@ if (!gotLock) {
 // resolvable at module load (only the cached USER_DATA_DIR is deferred).
 try {
   const _cfgPath = path.join(app.getPath('userData'), 'settings.json');
-  const _cfg = fs.existsSync(_cfgPath) ? JSON.parse(fs.readFileSync(_cfgPath, 'utf-8')) : {};
+  const _cfg = fs.existsSync(_cfgPath) ? JSON.parse(stripBom(fs.readFileSync(_cfgPath, 'utf-8'))) : {};
   if (_cfg.gpu_safe_mode) {
     app.disableHardwareAcceleration();
     console.log('GPU safe mode ON – hardware acceleration disabled');
@@ -1656,7 +1657,6 @@ ipcMain.on('close-toast', () => {
 // The backend spotted a fix the user typed right after a dictation. The pill
 // is clickable but never takes focus – the user keeps typing where they were.
 const DICT_MAX = 500;
-const phraseKey = (s) => (String(s).toLowerCase().match(/[\p{L}\p{N}_]+/gu) || []).join(' ');
 
 function closeSuggestion() {
   if (suggestTimer) { clearTimeout(suggestTimer); suggestTimer = null; }
@@ -2161,6 +2161,8 @@ function quitApp() {
 // navigate it elsewhere or open new windows; the update pill's release page
 // opens from the main process (shell.openExternal), not from a page.
 app.on('web-contents-created', (_, contents) => {
+  // DevTools (dev runs) load their own devtools:// pages.
+  if (contents.getType() === 'devtools') return;
   contents.on('will-navigate', (e, url) => {
     if (!isSameDocument(contents.getURL(), url)) {
       e.preventDefault();
@@ -2178,8 +2180,9 @@ app.on('web-contents-created', (_, contents) => {
 });
 
 function installPermissionHandler() {
-  // Microphone (audio only) for the mic tests in settings and setup;
-  // every other permission and every other page is refused.
+  // Permission requests: the microphone (audio only) for the mic tests in
+  // settings and setup; every other request and every other page is refused.
+  // Synchronous permission checks keep Electron's default.
   session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
     const pageUrl = (details && details.requestingUrl) || contents.getURL();
     callback(allowPermission(permission, pageUrl, details, __dirname));

@@ -554,6 +554,7 @@
       'm.default': 'Standard (System)', 'm.defaulttag': ' (Standard)', 'm.level': 'Pegel',
       'm.missing': ' (nicht verbunden)',
       'm.hint': 'Sag ein paar Worte …', 'm.ok': 'Klingt gut. Dein Mikrofon funktioniert.',
+      'm.fallback': 'Gewähltes Mikrofon nicht verfügbar, das Standardmikrofon wird getestet.',
       'm.error': 'Kein Zugriff auf das Mikrofon. Prüfe die Windows-Datenschutzeinstellungen für Mikrofone.',
       'm.error.none': 'Kein Mikrofon gefunden. Schließe eins an oder aktiviere es in den Windows-Soundeinstellungen.',
       'm.error.busy': 'Das Mikrofon lässt sich nicht öffnen. Vielleicht nutzt es gerade eine andere App.',
@@ -605,6 +606,7 @@
       'm.default': 'Default (system)', 'm.defaulttag': ' (default)', 'm.level': 'Level',
       'm.missing': ' (not connected)',
       'm.hint': 'Say a few words …', 'm.ok': 'Sounds good. Your microphone works.',
+      'm.fallback': 'The chosen microphone is not available, testing the default one.',
       'm.error': 'No access to the microphone. Check the Windows privacy settings for microphones.',
       'm.error.none': 'No microphone found. Plug one in or enable it in the Windows sound settings.',
       'm.error.busy': 'The microphone can’t be opened. Another app may be using it.',
@@ -831,11 +833,15 @@
     $('micHint').textContent = t('m.hint');
     $('micMeterWrap').classList.remove('err');
     let stream = null;
+    // The chosen mic could not be opened: the meter measures the default
+    // one and says so instead of "your microphone works".
+    let fallback = false;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (gen !== meterGen) { dropStream(stream); return; }
       // Match the chosen device by name so the meter shows THAT mic.
       if (state.mic_device_name) {
+        fallback = true;
         try {
           const want = micKey(state.mic_device_name).slice(0, 24);
           const list = await navigator.mediaDevices.enumerateDevices();
@@ -848,9 +854,11 @@
             const exact = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: match.deviceId } } });
             dropStream(stream);
             stream = exact;
+            fallback = false;
           }
         } catch (_) { /* keep the default stream */ }
         if (gen !== meterGen) { dropStream(stream); return; }
+        if (fallback) $('micHint').textContent = t('m.fallback');
       }
       meterStream = stream;
       meterCtx = new AudioContext();
@@ -867,7 +875,7 @@
         const level = Math.min(100, Math.sqrt(sum / buf.length) * 400);
         $('micMeter').style.width = level + '%';
         const heard = level > 18 && meterPeak <= 18;
-        if (heard) $('micHint').textContent = t('m.ok');
+        if (heard && !fallback) $('micHint').textContent = t('m.ok');
         meterPeak = Math.max(meterPeak, level);
         if (heard) updateReady();
         meterAnim = requestAnimationFrame(tick);
