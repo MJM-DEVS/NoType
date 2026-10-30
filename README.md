@@ -305,7 +305,7 @@ Everything else stays in `%APPDATA%\NoType\` on your PC:
 | Data | Where it lives |
 |---|---|
 | Settings | `settings.json` (with automatic backups) |
-| Dictation history & stats | `history.json`, the last 10 entries |
+| Dictation history & stats | `history.json`, the last 10 entries; switch saving off or clear it under **Settings → Dictionary** (the stats stay) |
 | Diagnostic log | `notype.log`, rotating; timings and errors only, never your dictated text |
 | AI engine & model | the `ollama\` subfolder |
 | Screenshots and copied text for AI apps | the `attachments\` subfolder, each file deleted after 24 hours |

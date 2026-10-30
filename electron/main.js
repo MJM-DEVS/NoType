@@ -6,6 +6,8 @@ const { loadSettingsFile, stripBom } = require('./lib/settings-file');
 const { parseBackendLine } = require('./lib/backend-line');
 const { isSameDocument, isAppFile, allowPermission } = require('./lib/guards');
 const { phraseKey } = require('./lib/phrase-key');
+const { modelLabel } = require('./lib/model-labels');
+const { loadHistoryFile, saveHistoryFile, debouncedSave } = require('./lib/history-file');
 
 // ── Single-Instance Lock ──
 // Prevents double hotkey registration when boot-autostart and a manual launch collide.
@@ -71,66 +73,37 @@ function initPaths() {
 }
 
 // ── History & Stats Persistence ──────────────────────────────────────
-// Stored shape:
-//   {
-//     "history": [ { text, time }, ... up to MAX_HISTORY ],
-//     "stats":   { "Mon May 14 2026": { count, words }, ... }
-//   }
-// Written atomically (tmp + rename) on every change. Robust to corrupt files:
-// if the JSON can't be parsed, we start fresh and keep going.
+// File shape and the save_history switch: see lib/history-file.js.
 function todayKey() { return new Date().toDateString(); }
 
+function historyEnabled() { return config.save_history !== false; }
+
 function loadHistory() {
-  try {
-    if (fs.existsSync(HISTORY_FILE)) {
-      const raw = fs.readFileSync(HISTORY_FILE, 'utf-8');
-      const data = JSON.parse(raw);
-      if (Array.isArray(data.history)) {
-        clipboardHistory = data.history.slice(0, MAX_HISTORY);
-      }
-      if (data.stats && typeof data.stats === 'object') {
-        statsByDate = data.stats;
-        const tk = todayKey();
-        todayStats = statsByDate[tk] || { date: tk, count: 0, words: 0 };
-        todayStats.date = tk;  // ensure shape
-      }
-    }
-  } catch (e) {
-    console.error('History load failed (starting fresh):', e.message);
-    clipboardHistory = [];
-    statsByDate = {};
-    todayStats = { date: todayKey(), count: 0, words: 0 };
-  }
+  const r = loadHistoryFile(HISTORY_FILE, { enabled: historyEnabled(), max: MAX_HISTORY });
+  if (r.error) console.error('History load failed (starting fresh):', r.error);
+  clipboardHistory = r.history;
+  statsByDate = r.stats;
+  const tk = todayKey();
+  todayStats = statsByDate[tk] || { date: tk, count: 0, words: 0 };
+  todayStats.date = tk;  // ensure shape
+  // Switched off: drop dictations stored before (stats are loaded by now).
+  if (r.rewrite) saveHistory();
 }
 
 function saveHistory() {
   if (!HISTORY_FILE) return;  // initPaths() not yet called
+  // Roll today's stats into the persisted map before writing.
+  statsByDate[todayStats.date] = { count: todayStats.count, words: todayStats.words };
   try {
-    // Roll today's stats into the persisted map before writing.
-    statsByDate[todayStats.date] = { count: todayStats.count, words: todayStats.words };
-    // Prune statsByDate to last 90 days to keep file small.
-    const cutoff = Date.now() - 90 * 24 * 3600 * 1000;
-    for (const key of Object.keys(statsByDate)) {
-      const t = Date.parse(key);
-      if (!isNaN(t) && t < cutoff) delete statsByDate[key];
-    }
-    const data = { history: clipboardHistory, stats: statsByDate };
-    const tmp = HISTORY_FILE + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8');
-    fs.renameSync(tmp, HISTORY_FILE);
+    saveHistoryFile(HISTORY_FILE, { history: clipboardHistory, stats: statsByDate, enabled: historyEnabled() });
   } catch (e) {
     console.error('History save failed:', e.message);
   }
 }
 
-// Debounced save: each transcription calls both addToHistory and trackStats,
-// i.e. two writes back-to-back. Coalesce them into one write ~1s later, off
-// the post-transcription hot path. quitApp() flushes synchronously.
-let _saveTimer = null;
-function scheduleSave() {
-  if (_saveTimer) return;
-  _saveTimer = setTimeout(() => { _saveTimer = null; saveHistory(); }, 1000);
-}
+// Each transcription calls both addToHistory and trackStats: one write ~1s
+// later, off the post-transcription hot path. quitApp() flushes synchronously.
+const historySaver = debouncedSave(saveHistory, 1000);
 
 // ── State ──
 let tray = null;
@@ -253,6 +226,7 @@ function loadConfig() {
     agent_token: '',
     agent_send_context: true,
     learn_corrections: true,
+    save_history: true,
     ...config,
   };
   // Legacy AMOLED style ids → style + position (persist so the backend and
@@ -526,13 +500,14 @@ function handlePythonMessage(line) {
         if (overlayReady && overlayWin && !overlayWin.isDestroyed()) overlayWin.webContents.send('attachment', data);
         break;
 
-      case 'mic_fallback':
+      case 'mic_fallback': {
         const [micTitle, micSub] = trayT().micFallback;
         showToast([micTitle.replace('{name}', (data && data.name) || ''), micSub], 'warning', null, 'settings:system');
         break;
+      }
 
       case 'amplitude':
-        if (overlayWin && !overlayWin.isDestroyed()) {
+        if (data && overlayWin && !overlayWin.isDestroyed()) {
           overlayWin.webContents.send('amplitude', data.value, data.bands || null);
         }
         break;
@@ -550,7 +525,7 @@ function handlePythonMessage(line) {
 
       case 'preview':
         // Rolling live transcript while recording – overlay caption only.
-        if (overlayWin && !overlayWin.isDestroyed() && isRecording) {
+        if (data && overlayWin && !overlayWin.isDestroyed() && isRecording) {
           overlayWin.webContents.send('preview-text', data.text);
         }
         break;
@@ -665,7 +640,7 @@ function handlePythonMessage(line) {
         break;
 
       case 'status':
-        console.log('Status:', data.message);
+        console.log('Status:', data && data.message);
         sendToOnboarding('status', data && data.message);
         break;
 
@@ -831,6 +806,7 @@ function createOverlay() {
       preload: PRELOAD,
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
       backgroundThrottling: false,
     },
   });
@@ -996,6 +972,18 @@ function onHotkey(kind) {
   }
 }
 
+// registerHotkeys() runs after every dictation: tell about a taken hotkey
+// once, not each time (again only after it worked in between).
+let hotkeyWarned = null;
+function warnHotkey(hotkey, fallbackOk, invalid) {
+  if (hotkeyWarned === hotkey) return;
+  hotkeyWarned = hotkey;
+  const T = trayT();
+  const [taken, sub] = fallbackOk ? T.hotkeyFallback : T.hotkeyFailed;
+  const title = invalid ? T.hotkeyInvalid : taken;
+  showToast([title.replace('{key}', config.hotkey || hotkey), sub], fallbackOk ? 'warning' : 'error', null, 'settings:general');
+}
+
 function registerHotkeys() {
   globalShortcut.unregisterAll();
   if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
@@ -1004,21 +992,32 @@ function registerHotkeys() {
   const mode = config.mode || 'hold_to_speak';
   console.log(`Registering hotkey: ${hotkey} (mode: ${mode})`);
 
+  // register() throws on an accelerator Electron can't parse (invalid).
+  let success = false;
+  let invalid = false;
   try {
-    const success = globalShortcut.register(hotkey, () => onHotkey('dictate'));
+    success = globalShortcut.register(hotkey, () => onHotkey('dictate'));
+  } catch (e) {
+    console.error('Hotkey registration error:', e);
+    invalid = true;
+  }
 
-    if (!success) {
-      console.error(`✗ Failed to register hotkey: ${hotkey}`);
-      globalShortcut.register('CmdOrCtrl+Shift+Space', () => {
+  if (!success) {
+    console.error(`✗ Failed to register hotkey: ${hotkey}`);
+    let fallbackOk = false;
+    try {
+      fallbackOk = globalShortcut.register('CmdOrCtrl+Shift+Space', () => {
         if (!isRecording) startRecording();
         else stopRecording();
       });
-      console.log('Using fallback: CmdOrCtrl+Shift+Space');
-    } else {
-      console.log(`✓ Hotkey registered: ${hotkey} (${mode})`);
+    } catch (e) {
+      console.error('Fallback hotkey error:', e);
     }
-  } catch (e) {
-    console.error('Hotkey registration error:', e);
+    console.log(fallbackOk ? 'Using fallback: CmdOrCtrl+Shift+Space' : '✗ Fallback hotkey taken too');
+    warnHotkey(hotkey, fallbackOk, invalid);
+  } else {
+    console.log(`✓ Hotkey registered: ${hotkey} (${mode})`);
+    hotkeyWarned = null;
   }
 
   // Command mode: select text, hold the second hotkey, speak an instruction.
@@ -1341,6 +1340,9 @@ function trayT() {
     commandFailed: ['Befehl ohne Antwort', 'Die lokale KI hat nicht rechtzeitig geantwortet. Noch einmal versuchen.'],
     bootUpdated: 'Auf {v} aktualisiert, NoType ist bereit',
     micFallback: ['Mikrofon „{name}“ nicht gefunden', 'NoType nimmt mit dem Standardmikrofon auf.'],
+    hotkeyFallback: ['Hotkey {key} ist schon belegt', 'Diktieren geht vorerst mit Strg+Umschalt+Leertaste: einmal drücken startet, nochmal drücken stoppt. Unter „Allgemein“ einen anderen wählen.'],
+    hotkeyFailed: ['Hotkey {key} ist schon belegt', 'Diktieren per Hotkey geht gerade nicht. Unter „Allgemein“ einen anderen wählen.'],
+    hotkeyInvalid: 'Hotkey {key} wird nicht erkannt',
     actRestart: 'Neu starten', actSetup: 'Einrichten', actOpen: 'Öffnen', actChange: 'Ändern',
     updCheck: 'Nach Updates suchen', updChecking: 'Suche nach Updates …',
     updInstall: '↑  Auf {v} aktualisieren', updDownload: '↑  NoType {v} herunterladen',
@@ -1369,6 +1371,9 @@ function trayT() {
     commandFailed: ['Command got no answer', 'The local AI did not answer in time. Try again.'],
     bootUpdated: 'Updated to {v}, NoType is ready',
     micFallback: ['Microphone “{name}” not found', 'NoType is recording with the default microphone.'],
+    hotkeyFallback: ['Hotkey {key} is already taken', 'Dictate with Ctrl+Shift+Space for now: press once to start, again to stop. Pick another one under “General”.'],
+    hotkeyFailed: ['Hotkey {key} is already taken', 'Dictating by hotkey does not work right now. Pick another one under “General”.'],
+    hotkeyInvalid: 'Hotkey {key} is not recognized',
     actRestart: 'Restart', actSetup: 'Set up', actOpen: 'Open', actChange: 'Change',
     updCheck: 'Check for updates', updChecking: 'Checking for updates …',
     updInstall: '↑  Update to {v}', updDownload: '↑  Download NoType {v}',
@@ -1378,14 +1383,6 @@ function trayT() {
   };
   return config.app_language === 'en' ? en : de;
 }
-
-const MODEL_LABELS = {
-  'tiny': 'Whisper Tiny', 'base': 'Whisper Base', 'small': 'Whisper Small',
-  'medium': 'Whisper Medium', 'large-v2': 'Whisper Large v2', 'large-v3': 'Whisper Large v3',
-  'large-v3-turbo': 'Whisper Large v3 Turbo', 'distil-large-v3': 'Distil Large v3',
-  'distil-large-v3.5': 'Distil Large v3.5', 'german-turbo': 'Large v3 Turbo German',
-};
-function modelLabel(id) { return MODEL_LABELS[id] || id; }
 
 function buildTrayMenu(status = 'ready') {
   const T = trayT();
@@ -1491,6 +1488,7 @@ function openSettings(pane) {
       preload: PRELOAD,
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   });
 
@@ -1538,6 +1536,7 @@ function openOnboarding() {
       preload: PRELOAD,
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
     },
   });
   onboardingWin.loadFile(path.join(__dirname, 'onboarding.html'));
@@ -1586,7 +1585,9 @@ ipcMain.on('save-config', (_, newConfig) => {
   const autostartChanged = typeof newConfig.autostart === 'boolean' && newConfig.autostart !== autostartEnabled();
   const prevTheme = currentTheme();
   const prevGas = currentGas();
+  const prevHistory = historyEnabled();
   config = { ...config, ...newConfig };
+  if (prevHistory && !historyEnabled()) saveHistory();  // drop the stored dictations now
   syncThemeSource();
   if (currentTheme() !== prevTheme || currentGas() !== prevGas) broadcastTheme();
   if (autostartChanged) {
@@ -1619,6 +1620,7 @@ ipcMain.on('save-config', (_, newConfig) => {
 });
 ipcMain.on('get-config', () => pushConfigToSettings());
 ipcMain.on('get-history', () => pushHistoryToSettings());
+ipcMain.on('clear-history', () => clearHistory());
 ipcMain.on('list-devices', () => sendToPython('list_devices'));
 ipcMain.on('list-models', () => sendToPython('list_models'));
 ipcMain.on('hotkey-capture', (_, active) => {
@@ -1690,6 +1692,7 @@ function showSuggestion(items) {
       preload: PRELOAD,
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
       backgroundThrottling: false,
     },
   });
@@ -1754,16 +1757,23 @@ function trackStats(text) {
   }
   todayStats.count++;
   todayStats.words += text.trim().split(/\s+/).length;
-  scheduleSave();  // also persists statsByDate
+  historySaver.schedule();  // also persists statsByDate
 }
 
 // ── Clipboard History ──
 function addToHistory(text) {
   clipboardHistory.unshift({ text, time: Date.now() });
   if (clipboardHistory.length > MAX_HISTORY) clipboardHistory.pop();
-  scheduleSave();
+  historySaver.schedule();
   updateTray('ready');  // Refresh menu with new history
   pushHistoryToSettings();  // dictionary pane: learn from recent dictations
+}
+
+function clearHistory() {
+  clipboardHistory = [];
+  historySaver.flush();
+  updateTray(trayStatus);
+  pushHistoryToSettings();
 }
 
 function pushHistoryToSettings() {
@@ -1805,7 +1815,7 @@ function showToast(msg, type = 'success', stats = null, action = null) {
   const T = trayT();
   const actionLabel = !action ? '' : action === 'restart' ? T.actRestart
     : action === 'settings:cleanup' ? T.actSetup
-    : action === 'settings:system' ? T.actChange : T.actOpen;
+    : action === 'settings:system' || action === 'settings:general' ? T.actChange : T.actOpen;
   const calm = type === 'success';
   const dwell = TOAST_DWELL[type] || TOAST_DWELL.success;
 
@@ -1829,6 +1839,7 @@ function showToast(msg, type = 'success', stats = null, action = null) {
       preload: PRELOAD,
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
       backgroundThrottling: false,
     },
   });
@@ -2048,8 +2059,7 @@ function installUpdate() {
   // starts: NSIS only closes NoType.exe and would find backend.exe still
   // holding its files.
   quitRequested = true;
-  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
-  saveHistory();
+  historySaver.flush();
   globalShortcut.unregisterAll();
   let started = false;
   const run = () => {
@@ -2099,6 +2109,7 @@ function showUpdatePill(kind) {
       preload: PRELOAD,
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
       backgroundThrottling: false,
     },
   });
@@ -2143,8 +2154,7 @@ ipcMain.on('update-action', (_, action) => {
 // ── App Lifecycle ──
 function quitApp() {
   quitRequested = true;  // suppress backend auto-restart
-  if (_saveTimer) { clearTimeout(_saveTimer); _saveTimer = null; }
-  saveHistory();  // final synchronous flush of any pending debounced save
+  historySaver.flush();  // final synchronous write, drops the pending debounced one
   sendToPython('quit');
   globalShortcut.unregisterAll();
   setTimeout(() => {
