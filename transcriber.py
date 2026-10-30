@@ -66,7 +66,10 @@ def pick_language(probs: dict, languages: list, allow_other: bool) -> str:
     user's languages (see above)."""
     weights = {code: share ** SHARE_EXPONENT for code, share in languages}
     best, best_score = languages[0][0], -1.0
-    for code in (set(probs) | set(weights)) if allow_other else weights:
+    # Fixed order so ties go to the user's languages (main one first), then
+    # alphabetically; iterating a set would depend on the hash seed.
+    others = sorted(c for c in probs if c not in weights) if allow_other else []
+    for code in [*weights, *others]:
         score = probs.get(code, 0.0) * weights.get(code, OTHER_WEIGHT)
         if score > best_score:
             best, best_score = code, score

@@ -15,6 +15,7 @@ import ctypes
 import difflib
 import logging
 import re
+import sys
 import threading
 import time
 
@@ -126,7 +127,7 @@ def find_corrections(inserted: str, before: str, after: str):
 
 # ── UI Automation ────────────────────────────────────────────────────
 
-_user32 = ctypes.windll.user32
+_user32 = ctypes.windll.user32 if sys.platform.startswith("win") else None
 _UIA = None
 
 
