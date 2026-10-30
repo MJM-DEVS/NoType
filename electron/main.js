@@ -8,6 +8,7 @@ const { isSameDocument, isAppFile, allowPermission } = require('./lib/guards');
 const { phraseKey } = require('./lib/phrase-key');
 const { modelLabel } = require('./lib/model-labels');
 const { loadHistoryFile, saveHistoryFile, debouncedSave } = require('./lib/history-file');
+const { allowSender, senderLabel, filterConfig } = require('./lib/ipc-guard');
 
 // ── Single-Instance Lock ──
 // Prevents double hotkey registration when boot-autostart and a manual launch collide.
@@ -1581,6 +1582,20 @@ function sendToOnboarding(channel, data) {
 }
 
 // ── IPC from renderers ──
+// Every channel answers only the pages that use it (lib/ipc-guard.js): a
+// toast or a foreign page cannot save settings. Dropped messages log the
+// channel and page name, never the payload.
+function onIpc(channel, handler) {
+  ipcMain.on(channel, (event, ...args) => {
+    const url = (event.senderFrame && event.senderFrame.url) || '';
+    if (!allowSender(channel, url, __dirname)) {
+      console.warn(`IPC '${channel}' from ${senderLabel(url, __dirname)} dropped`);
+      return;
+    }
+    handler(event, ...args);
+  });
+}
+
 // Settings need a config even when the backend is down – answer from our own
 // copy then, instead of letting the form open blank.
 function pushConfigToSettings() {
@@ -1588,7 +1603,11 @@ function pushConfigToSettings() {
   else if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('config', configForSettings(config));
 }
 
-ipcMain.on('save-config', (_, newConfig) => {
+onIpc('save-config', (_, input) => {
+  // Known keys with a fitting type only; the log names the rest, no values.
+  const { config: newConfig, rejected } = filterConfig(input);
+  if (rejected.length) console.warn(`save-config: ignored ${rejected.join(', ')}`);
+  if (!newConfig || !Object.keys(newConfig).length) return;
   // 1) Persist FIRST, here in the main process. This used to only forward to
   //    the backend – and sendToPython() silently drops the message while the
   //    backend is dead or in restart back-off. So a user who picked a smaller
@@ -1631,40 +1650,40 @@ ipcMain.on('save-config', (_, newConfig) => {
     startPython();
   }
 });
-ipcMain.on('get-config', () => pushConfigToSettings());
-ipcMain.on('get-history', () => pushHistoryToSettings());
-ipcMain.on('clear-history', () => clearHistory());
-ipcMain.on('list-devices', () => sendToPython('list_devices'));
-ipcMain.on('list-models', () => sendToPython('list_models'));
-ipcMain.on('hotkey-capture', (_, active) => {
+onIpc('get-config', () => pushConfigToSettings());
+onIpc('get-history', () => pushHistoryToSettings());
+onIpc('clear-history', () => clearHistory());
+onIpc('list-devices', () => sendToPython('list_devices'));
+onIpc('list-models', () => sendToPython('list_models'));
+onIpc('hotkey-capture', (_, active) => {
   // A page is recording a new key combo – the global shortcut must not fire
   // (and start a dictation) while the user presses keys to define it.
   if (active) globalShortcut.unregisterAll();
   else if (!isRecording && !isTranscribing) registerHotkeys();
 });
-ipcMain.on('open-onboarding', () => openOnboarding());
-ipcMain.on('open-settings', () => openSettings());
-ipcMain.on('close-onboarding', () => {
+onIpc('open-onboarding', () => openOnboarding());
+onIpc('open-settings', () => openSettings());
+onIpc('close-onboarding', () => {
   // Finished or dismissed – either way, don't show the wizard again.
   markOnboardingDone();
   if (onboardingWin && !onboardingWin.isDestroyed()) onboardingWin.close();
 });
 // Settings "Send test": the backend posts a fixed test body to the URL and
 // token from the form and answers with agent_result (test: true).
-ipcMain.on('agent-test', (_, cfg) => {
+onIpc('agent-test', (_, cfg) => {
   const data = { url: String((cfg && cfg.url) || ''), token: String((cfg && cfg.token) || ''), version: app.getVersion() };
   if (pythonProcess && pythonProcess.stdin.writable) sendToPython('agent_test', data);
   else if (settingsWin && !settingsWin.isDestroyed()) {
     settingsWin.webContents.send('agent-test-result', { test: true, ok: false, status: null, message: '', error: 'backend' });
   }
 });
-ipcMain.on('ollama-status', () => sendToPython('ollama_status'));
-ipcMain.on('ollama-setup', () => sendToPython('ollama_setup'));
-ipcMain.on('ollama-update', () => sendToPython('ollama_update'));
-ipcMain.on('close-settings', () => {
+onIpc('ollama-status', () => sendToPython('ollama_status'));
+onIpc('ollama-setup', () => sendToPython('ollama_setup'));
+onIpc('ollama-update', () => sendToPython('ollama_update'));
+onIpc('close-settings', () => {
   if (settingsWin && !settingsWin.isDestroyed()) settingsWin.close();
 });
-ipcMain.on('close-toast', () => {
+onIpc('close-toast', () => {
   if (toastWin && !toastWin.isDestroyed()) toastWin.close();
 });
 
@@ -1746,7 +1765,7 @@ function learnDictionary(items) {
   if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('dictionary', entries);
 }
 
-ipcMain.on('suggest-hover', (_, hovering) => {
+onIpc('suggest-hover', (_, hovering) => {
   if (!suggestWin || suggestWin.isDestroyed()) return;
   suggestWin.setIgnoreMouseEvents(!hovering, { forward: true });
   // Reading or aiming at the pill keeps it; leaving gives a short grace.
@@ -1754,7 +1773,7 @@ ipcMain.on('suggest-hover', (_, hovering) => {
   else armSuggestTimer(4000);
 });
 
-ipcMain.on('suggest-answer', (_, learn) => {
+onIpc('suggest-answer', (_, learn) => {
   if (!learn) { closeSuggestion(); return; }
   learnDictionary(suggestItems);
   suggestItems = [];
@@ -1892,14 +1911,14 @@ function showToast(msg, type = 'success', stats = null, action = null) {
   });
 }
 
-ipcMain.on('toast-hover', (_, hovering) => {
+onIpc('toast-hover', (_, hovering) => {
   if (!toastWin || toastWin.isDestroyed()) return;
   toastWin.setIgnoreMouseEvents(!hovering, { forward: true });
   if (hovering) { if (toastTimer) clearTimeout(toastTimer); toastTimer = null; }
   else armToastTimer(4000);
 });
 
-ipcMain.on('toast-action', (_, action) => {
+onIpc('toast-action', (_, action) => {
   if (toastWin && !toastWin.isDestroyed()) toastWin.close();
   if (action === 'restart') { app.relaunch(); quitApp(); }
   else if (typeof action === 'string' && action.startsWith('settings:')) openSettings(action.slice(9));
@@ -2146,14 +2165,14 @@ function showUpdatePill(kind) {
   win.on('closed', () => { if (updateWin === win) closeUpdatePill(); });
 }
 
-ipcMain.on('update-hover', (_, hovering) => {
+onIpc('update-hover', (_, hovering) => {
   if (!updateWin || updateWin.isDestroyed()) return;
   updateWin.setIgnoreMouseEvents(!hovering, { forward: true });
   if (hovering) { if (updateWinTimer) clearTimeout(updateWinTimer); updateWinTimer = null; }
   else armUpdatePillTimer(5000);
 });
 
-ipcMain.on('update-action', (_, action) => {
+onIpc('update-action', (_, action) => {
   if (action === 'check') checkForUpdate(true);
   else if (action === 'status') pushUpdateStatus();
   else if (action === 'dismiss') closeUpdatePill();
