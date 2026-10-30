@@ -1,11 +1,11 @@
 <div align="center">
 
-<img src="docs/assets/banner.png" alt="NoType: voice dictation that never leaves your PC" width="100%" />
+<img src="docs/assets/banner.png" alt="NoType: private voice dictation that runs on your PC" width="100%" />
 
 **Hold a key. Say what you're thinking. Let go. Your words appear wherever your cursor is.**
 
 Free voice dictation for Windows 11 that runs entirely on your own PC.<br/>
-No cloud, no subscription, no account. Nothing you say ever leaves your computer.
+No cloud, no subscription, no account. What you say stays on your computer, unless you send it somewhere yourself.
 
 <br/>
 
@@ -15,7 +15,7 @@ No cloud, no subscription, no account. Nothing you say ever leaves your computer
 
 [![Latest release](https://img.shields.io/github/v/release/MJM-DEVS/NoType?label=latest&color=00d4aa)](https://github.com/MJM-DEVS/NoType/releases/latest)
 ![Windows 11](https://img.shields.io/badge/Windows%2011-x64-0078D6?logo=windows11&logoColor=white)
-![100% local](https://img.shields.io/badge/privacy-100%25%20local-00d4aa)
+![Dictation runs locally](https://img.shields.io/badge/dictation-runs%20locally-00d4aa)
 ![99 languages](https://img.shields.io/badge/languages-99-7f7bff)
 [![License](https://img.shields.io/badge/license-MIT%20%2B%20Commons%20Clause-blue)](#license)
 [![GitHub stars](https://img.shields.io/github/stars/MJM-DEVS/NoType?style=social)](https://github.com/MJM-DEVS/NoType/stargazers)
@@ -36,7 +36,7 @@ You hold a shortcut, talk, and let go. A small overlay shows that NoType is list
 
 What makes it different from cloud dictation tools:
 
-- 🔒 **Completely private.** Speech recognition and AI cleanup run on your own graphics card. There is no server, no telemetry and no account.
+- 🔒 **Private.** Speech recognition and AI cleanup run on your own graphics card. There is no NoType server, no telemetry and no account. The few things that do go online, like the update check, are [listed below](#your-privacy).
 - 💸 **Free, no subscription.** Install it once and use it for as long as you like. The speech models are free and are downloaded once.
 - ⚡ **Fast.** On a modern NVIDIA graphics card your text usually appears in well under a second.
 - 🌍 **Works in any app and 99 languages,** including German with English terms mixed in (or the other way around).
@@ -122,7 +122,7 @@ The local AI rewrites your selection in place. With nothing selected, it writes 
 Dictating a prompt into ChatGPT or Claude Code? Copy what you mean while you speak. Press <kbd>Win</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd> for a screenshot, or select an error message and press <kbd>Ctrl</kbd> + <kbd>C</kbd>. Each copy appears as a small chip above the overlay and goes along with your sentence:
 
 - **ChatGPT, Claude, Gemini and other AI apps and sites** get images pasted in and copied text quoted below your sentence.
-- **Terminals** such as Claude Code or Codex get the file path in front of your sentence, so the agent can open the screenshot itself. Code editors like VS Code or Cursor get file paths as well.
+- **Terminals** such as Claude Code or Codex get the file path in front of your sentence, so the agent can open the screenshot itself. Short one-line text goes in quoted after your sentence; longer text, or text with a line break, a double quote or a trailing backslash, is saved as a `.txt` file and passed by path the same way. Code editors like VS Code or Cursor get file paths as well.
 - **Any other browser tab** gets images pasted in and text quoted, like an AI site.
 
 Anything you copied up to a minute before you started counts too, so with hold-to-talk you can take the screenshot first and then speak. In AI apps and terminals this goes for text and images, everywhere else for images only. Up to five copies go along per dictation, three of them images.
@@ -186,7 +186,7 @@ User-Agent: NoType/<version>
 Authorization: Bearer <token>
 ```
 
-The `Authorization` header is only sent when you entered a token.
+The `Authorization` header is only sent when you entered a token. With a token, use an `https://` URL, or plain `http://` only to this PC or your local network (`localhost`, `192.168.x.x`, `10.x.x.x`, `nas.local`, a name without dots). NoType refuses to send a token over plain `http://` to any other host.
 
 ```json
 {
@@ -305,16 +305,16 @@ Everything else stays in `%APPDATA%\NoType\` on your PC:
 | Data | Where it lives |
 |---|---|
 | Settings | `settings.json` (with automatic backups) |
-| Dictation history & stats | `history.json`, the last 10 entries |
+| Dictation history & stats | `history.json`, the last 10 entries; switch saving off or clear it under **Settings → Dictionary** (the stats stay) |
 | Diagnostic log | `notype.log`, rotating; timings and errors only, never your dictated text |
 | AI engine & model | the `ollama\` subfolder |
-| Screenshots and copied text for AI apps | the `attachments\` subfolder, each file deleted after 24 hours |
+| Screenshots and copied text for AI apps | the `attachments\` subfolder, each file deleted after roughly 24 hours |
 
 **Uninstalling removes this whole folder**, NoType's autostart entry and its update cache in `%LOCALAPPDATA%\notype-updater\` (updates keep all three). The speech models are the exception: they live in the shared Hugging Face cache at `%USERPROFILE%\.cache\huggingface\hub\`, which other apps may use too, so the uninstaller leaves it alone. To free the space, delete the folders of the models you downloaded in NoType there; their names contain `whisper`, for example `models--mobiuslabsgmbh--faster-whisper-large-v3-turbo`. The portable version has no uninstaller: delete its folder and `%APPDATA%\NoType\` by hand.
 
-NoType pastes through the clipboard, so the dictated text stays there afterwards and you can paste it again. If you use Windows clipboard history or sync across devices, it ends up there too. To keep the clipboard out of it, choose **Always type** under **Settings → System**.
+NoType pastes through the clipboard, so the dictated text stays there afterwards and you can paste it again. It marks what it pastes so Windows leaves it out of clipboard history (Win+V) and doesn't sync it across devices. Entries you copy again from the tray history are not marked. To leave the clipboard untouched, choose **Always type** under **Settings → System**.
 
-To send screenshots and copied text along to AI apps ([see above](#show-ai-apps-what-you-are-talking-about)), NoType notes when something is copied. It reads the clipboard only while you dictate into an AI app, a terminal, a code editor or a browser, and only copies made from a minute before the start until your text is in. Terminals and editors need a file to open, so those copies are saved to `attachments\` and deleted after 24 hours. The log only notes whether an item was an image or text, never its content. You can switch this off under **Settings → General**.
+To send screenshots and copied text along to AI apps ([see above](#show-ai-apps-what-you-are-talking-about)), NoType notes when something is copied. It reads the clipboard only while you dictate into an AI app, a terminal, a code editor or a browser, and only copies made from a minute before the start until your text is in. Terminals and editors need a file to open, so those copies are saved to `attachments\` and deleted after roughly 24 hours. The log only notes whether an item was an image or text, never its content. You can switch this off under **Settings → General**.
 
 To suggest corrections, NoType reads the text field you dictated into for up to a minute afterwards and compares only the dictated part. It stops as soon as you switch fields or start a new dictation. It never reads password fields and keeps nothing unless you click **Learn**. You can switch this off under **Settings → Dictionary**.
 
@@ -442,105 +442,13 @@ Turn on **Settings → System → GPU safe mode** and restart the app. This move
 
 ## For developers
 
-NoType is a hybrid app. A **Python backend** handles audio capture, [faster-whisper](https://github.com/SYSTRAN/faster-whisper) inference, text insertion and the Ollama lifecycle. An **Electron frontend** handles the tray, overlay, settings and global hotkeys. The two talk newline-delimited JSON over stdin/stdout.
+NoType is a hybrid app: a **Python backend** (audio, [faster-whisper](https://github.com/SYSTRAN/faster-whisper), text insertion, Ollama) and an **Electron frontend** (tray, overlay, settings, hotkeys) that talk JSON over stdin/stdout.
 
-| Layer | Tech |
-|---|---|
-| Speech recognition | faster-whisper (CTranslate2), CUDA 12 with cuBLAS/cuDNN, automatic CPU fallback |
-| AI cleanup & command mode | Ollama (portable, managed by the app) with Qwen 3 / Qwen 3.5 / Gemma 4 |
-| Audio | sounddevice at 16 kHz, live spectrum bands for the overlay |
-| Text insertion | Win32 `SendInput` + clipboard, Unicode typing fallback |
-| Correction learning | Windows UI Automation (reads the dictated field only, never password fields) |
-| Frontend | Electron 33, plain HTML/CSS/JS, no framework |
-| Packaging | PyInstaller (backend) + electron-builder (NSIS installer) |
-
-```mermaid
-flowchart LR
-    subgraph Electron["Electron frontend (main.js)"]
-        HK["Global hotkeys"]
-        TR["System tray"]
-        OV["Overlay + live transcript"]
-        ST["Settings + setup guide"]
-    end
-
-    subgraph Python["Python backend (backend.py)"]
-        AR["AudioRecorder (sounddevice, 16 kHz)"]
-        WT["Transcriber (faster-whisper / CUDA)"]
-        PP["Post-processing (rules + dictionary + local LLM)"]
-        TX["Text output (SendInput)"]
-        CW["Correction watch (UI Automation)"]
-    end
-
-    HK -- "start / stop" --> Electron
-    Electron <== "JSON IPC (stdin/stdout)" ==> Python
-    AR -- "spectrum + preview" --> OV
-    WT --> PP --> TX --> CW
-```
-
-### Build from source
-
-Prerequisites: Python 3.12, Node.js 18+, optionally an NVIDIA GPU with CUDA.
-
-```bash
-# Backend
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-pyinstaller --noconfirm backend.spec        # → dist/backend/
-
-# Frontend
-cd electron
-npm install
-npm start                                    # dev mode
-npm run build                                # → dist/NoType-Setup-<version>.exe
-npm run build:dir                            # → dist/win-unpacked/ (portable)
-```
-
-### Project structure
-
-```
-NoType/
-├── backend.py            # IPC loop, recording, transcription orchestration
-├── audio_recorder.py     # sounddevice capture, spectrum bands, rolling preview window
-├── transcriber.py        # faster-whisper wrapper, language mix, batched long dictations, cuBLAS fallback
-├── hallucinations.py     # known Whisper hallucinations ("Thanks for watching!", subtitle credits)
-├── spoken_punctuation.py # "question mark", "neue Zeile" … become characters (de, en, pl)
-├── postprocess.py        # rule cleanup + local LLM polish and command mode via Ollama
-├── dictionary.py         # learned corrections ("heard → meant"), applied to every dictation
-├── correction_watch.py   # spots fixes typed right after a dictation (UI Automation)
-├── ollama_manager.py     # portable Ollama install, update, lifecycle (job object), model pull
-├── text_output.py        # clipboard + SendInput paste/copy, Unicode typing fallback
-├── context_capture.py    # copies and screenshots that go along into AI apps and terminals
-├── agent_webhook.py      # agent hotkey: POSTs a dictation to the user's URL, reads the reply
-├── escape_hook.py        # low-level keyboard hook: Esc cancels a dictation
-├── output_mute.py        # mutes the speakers while recording (Core Audio)
-├── config.py             # atomic settings with rolling backups (%APPDATA%/NoType)
-├── backend.spec          # PyInstaller build
-├── docs/assets/          # screenshots and demo used in this README
-└── electron/
-    ├── main.js           # tray, overlay, hotkeys, IPC, lifecycle, GPU safety
-    ├── preload.js        # contextBridge IPC surface
-    ├── model-catalog.js  # the ten speech models and their metadata
-    ├── overlay.html      # 9 spectrum-reactive overlay styles + live transcript
-    ├── sprites.js        # pixel art for the Dragon and Mimic overlays
-    ├── settings.html     # settings window
-    ├── onboarding.html   # first-run setup guide
-    ├── suggest.html      # "learn this correction?" prompt
-    ├── update.html       # "new version available" prompt
-    ├── toast.html        # notification toast
-    ├── installer.nsh     # uninstaller step: autostart entry and update cache
-    └── package.json      # electron-builder (NSIS installer, GitHub update feed)
-```
-
-### Reliability engineering
-
-- Serialized inference (the CUDA model is not thread-safe); live preview and final pass share one lock.
-- Startup inference self-test; a cuBLAS compute-type rejection triggers an automatic, persisted float16 fallback.
-- Backend circuit breaker with exponential backoff and a give-up threshold; IPC ping/pong watchdog.
-- Ollama is bound to the backend via a kill-on-close Job Object, so force-killing the app cannot orphan it.
-- Atomic settings writes with three rolling backups; overlay rendering avoids compositor constructs that provoke GPU driver timeouts.
-
-### Contributing
+- **[Development guide](docs/development.md):** architecture, building from source on Windows (Python 3.12, Node.js 18+), what you can test on Linux, project structure.
+- **[Configuration reference](docs/configuration.md):** every key in `settings.json`.
+- **[Contributing](CONTRIBUTING.md):** bug reports, pull requests, commit style.
+- **[Security](SECURITY.md):** how to report a problem, and what NoType does with the network, the clipboard and your settings.
+- **[Releasing](RELEASING.md)** and the **[Changelog](CHANGELOG.md)**.
 
 Bug reports and ideas are welcome. Please [open an issue](https://github.com/MJM-DEVS/NoType/issues) and include `%APPDATA%\NoType\notype.log` if something breaks (it contains no dictated text). Pull requests are welcome too; by submitting one, you agree that your contribution is licensed under the same terms as the project.
 

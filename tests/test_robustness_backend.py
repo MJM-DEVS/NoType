@@ -1,0 +1,183 @@
+import os
+import tempfile
+
+_TMP = tempfile.mkdtemp(prefix="notype-test-")
+os.environ["APPDATA"] = _TMP
+os.environ["XDG_CONFIG_HOME"] = _TMP
+
+import threading  # noqa: E402
+from unittest import mock  # noqa: E402
+
+import numpy as np  # noqa: E402
+import pytest  # noqa: E402
+
+import _robustness_stubs  # noqa: E402
+
+backend = _robustness_stubs.import_backend()
+
+
+@pytest.fixture
+def b(monkeypatch):
+    """A Backend with every Windows/IO side mocked and sent messages recorded."""
+    monkeypatch.setattr(backend, "save_config", mock.Mock())
+    monkeypatch.setattr(backend, "insert_text", mock.Mock(return_value=True))
+    inst = backend.Backend()
+    inst.config = dict(backend.load_config())
+    inst.config.update(cleanup_mode="fast", spoken_punctuation=False, learn_corrections=True)
+    inst.sent = []
+    inst.send = lambda t, d=None: inst.sent.append((t, d or {}))
+    inst.context = mock.MagicMock()
+    inst.corrections = mock.MagicMock()
+    inst.esc_hook = mock.MagicMock()
+    inst.muter = mock.MagicMock()
+    return inst
+
+
+def _stop_with(b, seconds, text="hallo welt", fell_back_to=None, **result):
+    b.recorder = mock.Mock()
+    b.recorder.stop.return_value = np.zeros(int(seconds * backend.SAMPLE_RATE), dtype=np.float32)
+    b.transcriber = mock.Mock(is_loaded=True, fell_back_to=fell_back_to)
+    b.transcriber.transcribe.return_value = {
+        "text": text, "beam": 1, "compute_type": "float16", "duration": seconds,
+        "language": "de", **result}
+    b.handle_stop_recording()
+    return [d for t, d in b.sent if t == "transcription_done"]
+
+
+def test_min_length_counts_samples_not_wall_clock(b):
+    # Held for long by the wall clock (an old start time from before the
+    # change, or a slow mic open), but only 0.2 s of audio arrived: only the
+    # samples count, backend no longer reads _record_start_time.
+    b._record_start_time = 0
+    done = _stop_with(b, 0.2)
+    assert done == [{"text": "", "empty": True, "reason": "too_short"}]
+    b.transcriber.transcribe.assert_not_called()
+
+
+def test_enough_audio_is_transcribed(b):
+    done = _stop_with(b, 1.0)
+    assert done and done[0]["text"] == "hallo welt"
+
+
+def test_failed_save_keeps_transcribed_text(b):
+    backend.save_config.side_effect = OSError("disk full")
+    done = _stop_with(b, 1.0, compute_fallback=True, fell_back_to="float16")
+    assert done and done[0]["text"] == "hallo welt"
+    backend.insert_text.assert_called_once()
+    assert b.config["compute_type"] == "float16"
+
+
+def test_fallback_from_a_preview_pass_is_saved(b):
+    # The preview pass reloaded float16, so the final result itself carries
+    # compute_fallback=False; the transcriber's flag still gets persisted.
+    b.config["compute_type"] = "int8_float16"
+    _stop_with(b, 1.0, compute_fallback=False, fell_back_to="float16")
+    assert b.config["compute_type"] == "float16"
+    backend.save_config.assert_called_once()
+    assert b.transcriber.fell_back_to is None
+
+
+def test_no_fallback_saves_nothing(b):
+    b.config["compute_type"] = "int8_float16"
+    _stop_with(b, 1.0)
+    assert b.config["compute_type"] == "int8_float16"
+    backend.save_config.assert_not_called()
+
+
+def test_broken_dictionary_entries_do_not_fail_dictation(b):
+    b.config["dictionary"] = ["oops", {"from": "welt", "to": "Welt"}, 42]
+    done = _stop_with(b, 1.0)
+    assert done and done[0]["text"] == "hallo Welt"
+    assert not [d for t, d in b.sent if t == "error"]
+
+
+def test_dictionary_not_a_list(b):
+    b.config["dictionary"] = {"from": "welt", "to": "Welt"}
+    done = _stop_with(b, 1.0)
+    assert done and done[0]["text"] == "hallo welt"
+
+
+def test_handle_save_config_survives_save_error(b, monkeypatch):
+    backend.save_config.side_effect = OSError("locked")
+    monkeypatch.setattr(b, "init_transcriber", mock.Mock())
+    b.handle_save_config({"hotkey": "f9"})
+    assert b.config["hotkey"] == "f9"
+    # Electron already wrote settings.json: logged only, no error in the UI.
+    assert not [d for t, d in b.sent if t == "error"]
+    assert [t for t, _ in b.sent][-1] == "config_saved"
+
+
+def test_selftest_survives_save_error(b):
+    backend.save_config.side_effect = OSError("locked")
+    b.transcriber = mock.Mock(fell_back_to="float16")
+    b.transcriber.transcribe.return_value = {"compute_fallback": True,
+                                             "compute_type": "float16"}
+    b._inference_selftest()  # must not raise
+    assert b.config["compute_type"] == "float16"
+
+
+def test_init_transcriber_runs_one_load_and_skips_superseded(b, monkeypatch):
+    """Three model changes while the first load runs: loads never overlap,
+    the middle request is skipped, the newest one loads last."""
+    started, release = threading.Event(), threading.Event()
+    active, max_active, loaded = [0], [0], []
+    lock = threading.Lock()
+
+    def fake_load():
+        with lock:
+            active[0] += 1
+            max_active[0] = max(max_active[0], active[0])
+        size = b.config["model_size"]
+        if size == "small":
+            started.set()
+            release.wait(5)
+        loaded.append(size)
+        with lock:
+            active[0] -= 1
+
+    monkeypatch.setattr(b, "_load_transcriber", fake_load)
+    b.config["model_size"] = "small"
+    first = threading.Thread(target=b.init_transcriber)
+    first.start()
+    assert started.wait(5)
+    waiting = []
+    for size in ("medium", "large-v3"):
+        b.config["model_size"] = size
+        t = threading.Thread(target=b.init_transcriber)
+        t.start()
+        waiting.append(t)
+    # both requests have taken their generation number before the release
+    for _ in range(500):
+        if b._model_generation == 3:
+            break
+        threading.Event().wait(0.01)
+    release.set()
+    for t in [first, *waiting]:
+        t.join(5)
+    assert max_active[0] == 1
+    assert loaded == ["small", "large-v3"]
+
+
+def test_record_limit_tells_electron(b):
+    b._on_record_limit()
+    assert b.sent == [("recording_limit", {"seconds": backend.MAX_RECORD_SECONDS})]
+
+
+def test_recorders_get_the_limit_callback(b, monkeypatch):
+    rec_cls = mock.Mock()
+    monkeypatch.setattr(backend, "AudioRecorder", rec_cls)
+    monkeypatch.setattr(backend, "refresh_devices", mock.Mock())
+    b.config["mic_device_name"] = None
+    b._open_recorder()
+    assert rec_cls.call_args.kwargs["on_limit"] == b._on_record_limit
+
+
+def test_chosen_mic_recorder_gets_the_limit_callback(b, monkeypatch):
+    rec_cls = mock.Mock()
+    monkeypatch.setattr(backend, "AudioRecorder", rec_cls)
+    monkeypatch.setattr(backend, "refresh_devices", mock.Mock())
+    monkeypatch.setattr(backend, "find_input_device", mock.Mock(return_value=3))
+    b.config["mic_device_name"] = "Headset"
+    b._open_recorder()
+    assert rec_cls.call_args.kwargs["device_index"] == 3
+    assert rec_cls.call_args.kwargs["on_limit"] == b._on_record_limit

@@ -47,7 +47,8 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from audio_recorder import (AudioRecorder, refresh_devices, input_devices,
-                            find_input_device, input_device_name)
+                            find_input_device, input_device_name, SAMPLE_RATE,
+                            MAX_RECORD_SECONDS)
 from transcriber import Transcriber, normalize_languages
 from text_output import insert_text, copy_selection
 from config import load_config, save_config, CONFIG_DIR
@@ -109,7 +110,11 @@ class Backend:
         self.config = load_config()
         self.recorder = None
         self.transcriber = None
-        self._amplitude_thread = None
+        # init_transcriber() runs on threads (start, every model change): one
+        # load at a time, and a load a newer request superseded is skipped.
+        self._model_load_lock = threading.Lock()
+        self._model_generation_lock = threading.Lock()
+        self._model_generation = 0
         self._running = True
         # Dictionary stage 2: fixes the user types right after a dictation
         # are offered as dictionary entries (Electron asks first).
@@ -167,8 +172,30 @@ class Backend:
         except Exception:
             pass
 
+    def _save_config(self) -> bool:
+        """save_config() that never raises: a full disk or a locked file must
+        not cost a finished dictation or abort a handler half-way."""
+        try:
+            save_config(self.config)
+            return True
+        except Exception as e:
+            logger.warning(f"Saving settings failed: {e}")
+            return False
+
     def init_transcriber(self):
-        """Load Whisper model."""
+        """Load the Whisper model from the config. Thread-safe: loads run one
+        after the other, and when two model changes queue up only the newest
+        one loads (so a slow older load can't win and leave the wrong model)."""
+        with self._model_generation_lock:
+            self._model_generation += 1
+            generation = self._model_generation
+        with self._model_load_lock:
+            if generation != self._model_generation:
+                logger.info("Model load superseded by a newer request, skipped")
+                return
+            self._load_transcriber()
+
+    def _load_transcriber(self):
         model_size = self.config.get("model_size", "small")
         self.send("status", {"message": f"Loading model '{model_size}'..."})
         logger.info(f"Loading model: {model_size}")
@@ -210,10 +237,7 @@ class Backend:
                 beam_size="1", vad_filter=False,
             )
             if result.get("compute_fallback"):
-                self.config["compute_type"] = result["compute_type"]
-                save_config(self.config)
-                logger.info(f"Selftest downgraded compute_type to "
-                            f"{result['compute_type']} (persisted)")
+                self._persist_compute_fallback()
             else:
                 logger.info("Inference selftest OK")
         except Exception as e:
@@ -221,15 +245,28 @@ class Backend:
             # will surface (and be handled) on the first dictation anyway.
             logger.warning(f"Inference selftest failed (non-fatal): {e}")
 
-    def _amplitude_sender(self):
-        """Send amplitude data to Electron while recording."""
-        while self._running and self.recorder and self.recorder.is_recording:
-            # Get amplitude from recorder's internal state
-            time.sleep(0.04)  # ~25fps
+    def _persist_compute_fallback(self):
+        """Save the compute type a cuBLAS fallback reload switched to (in any
+        pass, also a preview), so the next app start doesn't repeat the failed
+        load+retry cycle. A failed save must not cost a finished dictation."""
+        t = self.transcriber
+        fell_back_to = getattr(t, "fell_back_to", None)
+        if not fell_back_to:
+            return
+        t.fell_back_to = None
+        self.config["compute_type"] = fell_back_to
+        if self._save_config():
+            logger.info(f"Persisted compute_type fallback: {fell_back_to}")
 
     def _on_amplitude(self, amplitude, bands=None):
         """Called by AudioRecorder per block: level + spectrum for the overlay."""
         self.send("amplitude", {"value": round(amplitude, 4), "bands": bands or []})
+
+    def _on_record_limit(self):
+        """The take hit MAX_RECORD_SECONDS (audio thread): Electron only warns.
+        It must not stop on its own (a forgotten take would land in whatever
+        window has focus); the user's stop transcribes the audio up to the cap."""
+        self.send("recording_limit", {"seconds": MAX_RECORD_SECONDS})
 
     def handle_start_recording(self, command: bool = False, agent: bool = False):
         """Start audio recording. `command`: the command hotkey started it,
@@ -240,7 +277,6 @@ class Backend:
             self.recorder.stop()  # stray take – the rescan needs every stream closed
         self._cancel_requested = False
         self.recorder = self._open_recorder()
-        self._record_start_time = time.time()
         self.send("recording_started")
         # After recording_started, so an Esc can never reach Electron first.
         self.esc_hook.arm()
@@ -281,7 +317,8 @@ class Backend:
         if name:
             index = find_input_device(name)
             if index is not None:
-                rec = AudioRecorder(on_amplitude=self._on_amplitude, device_index=index)
+                rec = AudioRecorder(on_amplitude=self._on_amplitude, device_index=index,
+                                    on_limit=self._on_record_limit)
                 try:
                     rec.start()
                     self._mic_missing = None
@@ -292,7 +329,7 @@ class Backend:
             if self._mic_missing != name:  # tell once, not on every dictation
                 self._mic_missing = name
                 self.send("mic_fallback", {"name": name})
-        rec = AudioRecorder(on_amplitude=self._on_amplitude)
+        rec = AudioRecorder(on_amplitude=self._on_amplitude, on_limit=self._on_record_limit)
         rec.start()
         return rec
 
@@ -488,8 +525,10 @@ class Backend:
         self.send("transcribing")
 
         try:
-            # Check min recording length first (before expensive transcription)
-            duration = time.time() - getattr(self, '_record_start_time', 0)
+            # Check min recording length first (before expensive transcription).
+            # Counted in samples: wall-clock time also counts pauses and the
+            # time the mic took to open.
+            duration = len(audio) / SAMPLE_RATE
             if duration < 0.5:
                 logger.info(f"Recording too short ({duration:.1f}s), discarding")
                 self.send("transcription_done", {"text": "", "empty": True, "reason": "too_short", **done})
@@ -506,6 +545,8 @@ class Backend:
             beam_size = self.config.get("beam_size", "auto")
             vad_sensitivity = self.config.get("vad_sensitivity", 300)
             entries = self.config.get("dictionary") or []
+            if not isinstance(entries, list):  # hand-edited settings.json
+                entries = []
             # Learned spellings join the vocabulary as a hint for Whisper.
             initial_prompt = dictionary.whisper_prompt(
                 self.config.get("initial_prompt", ""), entries)
@@ -527,13 +568,9 @@ class Backend:
                 "duration": result["duration"],
             }
 
-            # The transcriber downgraded an unsupported compute type mid-call
-            # (cuBLAS refusal) – persist the working one so the next app start
-            # doesn't repeat the failed load+retry cycle.
-            if result.get("compute_fallback"):
-                self.config["compute_type"] = result["compute_type"]
-                save_config(self.config)
-                logger.info(f"Persisted compute_type fallback: {result['compute_type']}")
+            # The transcriber downgraded an unsupported compute type (cuBLAS
+            # refusal), in this pass or in a preview pass before it.
+            self._persist_compute_fallback()
 
             if self._cancelled({**done, **stats}):
                 return
@@ -591,7 +628,8 @@ class Backend:
                     stats["attachments"] = len(items)
                 if inserted and self.config.get("learn_corrections", True):
                     self.corrections.watch(
-                        text, known={(e.get("from"), e.get("to")) for e in entries})
+                        text, known={(e.get("from"), e.get("to"))
+                                     for e in entries if isinstance(e, dict)})
                 self.send("transcription_done", {"text": text, **stats})
             else:
                 logger.info("No speech detected")
@@ -712,7 +750,7 @@ class Backend:
                 warm_up(self._llm_model())
                 # Setup was an explicit user action – switch cleanup to AI.
                 self.config["cleanup_mode"] = "ai"
-                save_config(self.config)
+                self._save_config()  # a failure must not skip the final status
                 self.send("config", self.config)
             # "final" marks end-of-setup so the UI can unlock its button –
             # routine status refreshes while setup runs are ignored there.
@@ -745,7 +783,10 @@ class Backend:
         old_cleanup = self.config.get("cleanup_mode", "fast")
         old_llm = self._llm_model()
         self.config.update(new_config)
-        save_config(self.config)
+        # Electron has already written settings.json itself; a failed save
+        # here only means our copy (and its backups) lags behind, so it is
+        # logged by _save_config() and not shown as an error.
+        self._save_config()
 
         # Different cleanup LLM while AI mode is on → preload it (if pulled)
         # so the next dictation doesn't pay the cold start; the old model's

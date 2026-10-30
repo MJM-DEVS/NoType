@@ -18,6 +18,10 @@ CHANNELS = 1
 DTYPE = "float32"
 BLOCK_SIZE = 512   # ~32ms chunks at 16kHz → ~31 visualizer updates/s
 N_BANDS = 20       # spectrum bands sent to the overlay
+# Longest take kept in memory (~58 MB float32). A forgotten toggle recording
+# would otherwise grow without end (1 h ~ 230 MB, plus a copy on stop).
+MAX_RECORD_SECONDS = 15 * 60
+MAX_RECORD_SAMPLES = MAX_RECORD_SECONDS * SAMPLE_RATE
 
 
 class SpectrumAnalyzer:
@@ -77,18 +81,25 @@ class SpectrumAnalyzer:
 
 
 class AudioRecorder:
-    def __init__(self, on_amplitude=None, device_index=None):
+    def __init__(self, on_amplitude=None, device_index=None, on_limit=None):
         """
         Args:
             on_amplitude: Optional callback(float, list[float]) called for each
                           audio block with the RMS amplitude 0.0-1.0 and
                           N_BANDS spectrum levels 0.0-1.0 (overlay visualizer).
             device_index: Optional int for specific input device. None = system default.
+            on_limit: Optional callback() called once when the take reaches
+                      MAX_RECORD_SECONDS. Later blocks are dropped and no more
+                      levels are sent; the audio up to the limit stays and
+                      stop() returns it as usual.
         """
         self._on_amplitude = on_amplitude
+        self._on_limit = on_limit
         self._analyzer = SpectrumAnalyzer()
         self._device_index = device_index
         self._frames = []
+        self._samples = 0
+        self._limit_reached = False
         self._recording = False
         self._paused = False
         self._stream = None
@@ -104,15 +115,33 @@ class AudioRecorder:
             except Exception:
                 pass
 
+        hit_limit = False
         with self._lock:
-            if self._recording and not self._paused:
-                self._frames.append(indata.copy())
+            if self._recording and not self._paused and not self._limit_reached:
+                block = indata[:MAX_RECORD_SAMPLES - self._samples]
+                self._frames.append(block.copy())
+                self._samples += len(block)
+                hit_limit = self._limit_reached = self._samples >= MAX_RECORD_SAMPLES
 
-        # Level + spectrum for the overlay visualizer
+        if hit_limit:
+            logger.warning(f"Recording reached {MAX_RECORD_SECONDS // 60} min, "
+                           f"further audio is dropped")
+            if self._on_limit:
+                try:
+                    self._on_limit()
+                except Exception:
+                    pass
+
+        # Level + spectrum for the overlay visualizer. Past the cap nothing is
+        # recorded, so one flat update and then silence: the overlay must not
+        # look as if the take still grows.
         if self._on_amplitude and self._recording and not self._paused:
             try:
-                amplitude, bands = self._analyzer.process(indata[:, 0])
-                self._on_amplitude(amplitude, bands)
+                if hit_limit:
+                    self._on_amplitude(0.0, [0.0] * N_BANDS)
+                elif not self._limit_reached:
+                    amplitude, bands = self._analyzer.process(indata[:, 0])
+                    self._on_amplitude(amplitude, bands)
             except Exception:
                 pass
 
@@ -120,6 +149,8 @@ class AudioRecorder:
         """Start recording from the selected microphone."""
         with self._lock:
             self._frames = []
+            self._samples = 0
+            self._limit_reached = False
             self._recording = True
             self._paused = False
 
@@ -133,8 +164,21 @@ class AudioRecorder:
         if self._device_index is not None:
             kwargs["device"] = self._device_index
 
-        self._stream = sd.InputStream(**kwargs)
-        self._stream.start()
+        stream = None
+        try:
+            stream = sd.InputStream(**kwargs)
+            stream.start()
+        except Exception:
+            # No mic / device busy: don't stay "recording" without a stream.
+            with self._lock:
+                self._recording = False
+            if stream is not None:
+                try:
+                    stream.close()
+                except Exception:
+                    pass
+            raise
+        self._stream = stream
 
     def get_recent_audio(self, max_seconds: float = 8.0) -> np.ndarray:
         """Snapshot of the most recent `max_seconds` of buffered audio.
@@ -187,6 +231,7 @@ class AudioRecorder:
                 return np.array([], dtype=np.float32)
             audio = np.concatenate(self._frames, axis=0).flatten()
             self._frames = []
+            self._samples = 0
 
         return audio
 

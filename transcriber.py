@@ -3,6 +3,7 @@ NoType – Whisper Transcription Engine
 Uses faster-whisper with CUDA for local speech-to-text.
 """
 
+import gc
 import logging
 import os
 import threading
@@ -66,7 +67,10 @@ def pick_language(probs: dict, languages: list, allow_other: bool) -> str:
     user's languages (see above)."""
     weights = {code: share ** SHARE_EXPONENT for code, share in languages}
     best, best_score = languages[0][0], -1.0
-    for code in (set(probs) | set(weights)) if allow_other else weights:
+    # Fixed order so ties go to the user's languages (main one first), then
+    # alphabetically; iterating a set would depend on the hash seed.
+    others = sorted(c for c in probs if c not in weights) if allow_other else []
+    for code in [*weights, *others]:
         score = probs.get(code, 0.0) * weights.get(code, OTHER_WEIGHT)
         if score > best_score:
             best, best_score = code, score
@@ -115,8 +119,12 @@ COMPUTE_TYPES = {
 class Transcriber:
     # Class-level cache so reopening the settings panel or saving an unchanged
     # model_size doesn't reload the model from disk. Keyed by the trio that
-    # uniquely identifies a loaded WhisperModel instance. The lock prevents two
-    # concurrent load_model() calls from racing the dict.
+    # uniquely identifies a loaded WhisperModel instance. Holds ONE model:
+    # switching models drops the cache's reference to the old one before the
+    # new one loads. The old model is only freed once nothing else holds it
+    # (a dictation or preview still running on it keeps it alive until it
+    # ends). The lock prevents two concurrent load_model() calls from racing
+    # the dict.
     _model_cache: dict = {}
     _cache_lock = threading.Lock()
     # SERIALISES every call to `self._model.transcribe(...)`. faster-whisper's
@@ -143,6 +151,15 @@ class Transcriber:
         self.forced_language = entry["lang"]
         self._model = None
         self._batched = None
+        # True while transcribe() swaps in a float16 model: the model is
+        # gone for a moment, but callers should wait for it, not give up.
+        # No lock of its own: it is only written under inference_lock, and
+        # reading a bool is atomic under the GIL.
+        self._reloading = False
+        # Compute type a cuBLAS fallback reload switched to ("float16"), set
+        # by whichever pass did it (also a preview pass, whose result nobody
+        # reads). The backend persists it and resets it to None.
+        self.fell_back_to = None
 
         # Auto-detect device
         if device == "auto":
@@ -191,6 +208,13 @@ class Transcriber:
         cache_key = (self._repo, self.device, self.compute_type)
         with Transcriber._cache_lock:
             cached = Transcriber._model_cache.get(cache_key)
+            evict = cached is None and bool(Transcriber._model_cache)
+            if evict:
+                Transcriber._model_cache.clear()
+        if evict:
+            # Free the previous model before the new one loads (it is gone
+            # once no Transcriber holds it any more).
+            gc.collect()
         if cached is not None:
             self._model = cached
             logger.info(f"Model cache hit: {self.model_size} / {self.device} / {self.compute_type}")
@@ -229,6 +253,7 @@ class Transcriber:
                 raise
 
         with Transcriber._cache_lock:
+            Transcriber._model_cache.clear()
             Transcriber._model_cache[cache_key] = self._model
 
         if on_progress:
@@ -244,16 +269,23 @@ class Transcriber:
         - Short (<10s): beam=1 (greedy, fastest, fine for short phrases)
         - Medium (10-30s): beam=3 (balanced)
         - Long (>30s): beam=5 (best quality for complex text)
+
+        A number outside 1..10 or garbage in the config counts as "auto".
         """
-        if beam_size_setting == "auto":
-            if audio_duration < 10:
-                return 1
-            elif audio_duration < 30:
-                return 3
-            else:
-                return 5
+        if beam_size_setting != "auto":
+            try:
+                beam = int(beam_size_setting)
+            except (TypeError, ValueError):
+                beam = 0
+            if 1 <= beam <= 10:
+                return beam
+            logger.warning(f"Invalid beam_size {beam_size_setting!r}, using auto")
+        if audio_duration < 10:
+            return 1
+        elif audio_duration < 30:
+            return 3
         else:
-            return int(beam_size_setting)
+            return 5
 
     def _choose_language(self, audio, languages, allow_other: bool,
                          vad_filter: bool, vad_sensitivity: int):
@@ -375,8 +407,14 @@ class Transcriber:
             Dict with 'text', 'beam', 'compute_type', 'duration', 'vad_ms',
             'language'.
         """
-        if self._model is None:
+        if not self.is_loaded:
             raise RuntimeError("Model not loaded. Call load_model() first.")
+
+        # From the config: a string or garbage must not fail the dictation.
+        try:
+            vad_sensitivity = max(int(vad_sensitivity), 0)
+        except (TypeError, ValueError):
+            vad_sensitivity = 300
 
         if len(audio) == 0:
             return {"text": "", "beam": 0, "compute_type": self.compute_type,
@@ -395,10 +433,14 @@ class Transcriber:
         # names, jargon, etc.) – the simplest form of vocabulary customization
         # without fine-tuning.
         prompt = initial_prompt.strip() if initial_prompt else None
+        tried_compute = self.compute_type
 
         # Inference is serialised via the class-level lock – see comment above.
         def _run_inference():
             with Transcriber.inference_lock:
+                # A float16 reload that failed leaves no model behind.
+                if self._model is None:
+                    raise RuntimeError("Model not loaded. Call load_model() first.")
                 language = self._choose_language(audio, languages, allow_other,
                                                  vad_filter, vad_sensitivity)
                 if batched:
@@ -422,16 +464,27 @@ class Transcriber:
             # model LOADED fine (e.g. Blackwell GPUs + int8_float16 raise
             # CUBLAS_STATUS_NOT_SUPPORTED on the first matmul). Reload as
             # float16 and retry once instead of failing the dictation.
-            if "CUBLAS" not in str(e).upper() or self.compute_type == "float16":
+            if "CUBLAS" not in str(e).upper() or tried_compute == "float16":
                 raise
-            logger.warning(f"cuBLAS rejected compute_type={self.compute_type}, "
-                           f"falling back to float16: {e}")
-            with Transcriber._cache_lock:
-                Transcriber._model_cache.pop(
-                    (self._repo, self.device, self.compute_type), None)
-            self._model = None
-            self.compute_type = "float16"
-            self.load_model()
+            # Swap the model under the inference lock: a preview pass running
+            # in parallel waits for the reload instead of finding no model.
+            with Transcriber.inference_lock:
+                # The other pass may have hit the same error and reloaded already.
+                if self.compute_type == tried_compute:
+                    logger.warning(f"cuBLAS rejected compute_type={self.compute_type}, "
+                                   f"falling back to float16: {e}")
+                    with Transcriber._cache_lock:
+                        Transcriber._model_cache.pop(
+                            (self._repo, self.device, self.compute_type), None)
+                    self._reloading = True
+                    try:
+                        self._model = None
+                        self._batched = None  # holds the old model, too
+                        self.compute_type = "float16"
+                        self.load_model()
+                        self.fell_back_to = self.compute_type
+                    finally:
+                        self._reloading = False
             compute_fallback = True
             segments, info = _run_inference()
 
@@ -462,7 +515,7 @@ class Transcriber:
 
     @property
     def is_loaded(self) -> bool:
-        return self._model is not None
+        return self._model is not None or self._reloading
 
     def get_device_info(self) -> str:
         """Return a string describing the current device setup."""

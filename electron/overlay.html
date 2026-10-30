@@ -2,6 +2,8 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
+<!-- Local page only: no remote code, no network. Inline scripts and styles need 'unsafe-inline'. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; frame-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NoType Overlay</title>
 <style>
@@ -503,6 +505,7 @@ const I18N_AGENT = {
     listen: 'Für deinen Agenten…', proc: 'Sende…', done: 'Gesendet', rec: 'Agent', procL: 'Sende', doneL: 'Gesendet', failL: 'Fehler',
     err: {
       no_url: 'Agent-URL fehlt (Einstellungen › Allgemein)', bad_url: 'Agent-URL ist ungültig',
+      insecure_url: 'Token nur über https senden',
       http: 'Fehler: HTTP {status}', timeout: 'Keine Antwort (Zeitüberschreitung)',
       tls: 'TLS-Fehler, Zertifikat prüfen', unreachable: 'Nicht erreichbar',
     },
@@ -511,6 +514,7 @@ const I18N_AGENT = {
     listen: 'Speak to your agent…', proc: 'Sending…', done: 'Sent', rec: 'Agent', procL: 'Sending', doneL: 'Sent', failL: 'Error',
     err: {
       no_url: 'Agent URL missing (Settings › General)', bad_url: 'Agent URL is not valid',
+      insecure_url: 'Token only goes over https',
       http: 'Error: HTTP {status}', timeout: 'No answer (timed out)',
       tls: 'TLS error, check the certificate', unreachable: 'Unreachable',
     },

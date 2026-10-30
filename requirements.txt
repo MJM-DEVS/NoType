@@ -1,6 +1,9 @@
-faster-whisper
+# Runtime dependencies of the Python backend (Windows 11, Python 3.12).
+# Lower bounds only where the code needs them; not tested on Windows in this form.
+# Build tools (PyInstaller, bundled cuBLAS) are in requirements-build.txt.
+
+faster-whisper>=1.1  # transcriber.py uses BatchedInferencePipeline (added in 1.1.0)
 sounddevice
 numpy
 pyperclip
-pyinstaller
 comtypes
