@@ -67,3 +67,9 @@ test('the unused registerHotkey is gone, senders still send', () => {
     ['agent-test', { url: 'https://x', token: '' }],
   ]);
 });
+
+test('clearHistory sends no arguments', () => {
+  const { api, ipcRenderer } = loadPreload();
+  api.clearHistory('ignored');
+  assert.deepStrictEqual(ipcRenderer.sent, [['clear-history']]);
+});

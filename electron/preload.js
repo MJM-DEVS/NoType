@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('notype', {
   saveConfig: (config) => ipcRenderer.send('save-config', config),
   getConfig: () => ipcRenderer.send('get-config'),
   getHistory: () => ipcRenderer.send('get-history'),
+  clearHistory: () => ipcRenderer.send('clear-history'),
   listDevices: () => ipcRenderer.send('list-devices'),
   listModels: () => ipcRenderer.send('list-models'),
   // While a page captures a new hotkey, the global shortcut must not fire.
