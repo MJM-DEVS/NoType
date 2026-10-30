@@ -32,6 +32,7 @@ python tools/gen_config_docs.py --check   # exit 1 if it is out of date
 | `initial_prompt` | `""` | custom-vocab bias for Whisper |
 | `dictionary` | `[]` | learned corrections [{"from": heard, "to": meant}] |
 | `learn_corrections` | `true` | offer fixes typed right after a dictation |
+| `save_history` | `true` | keep the last 10 dictations in history.json (Electron side) |
 | `command_enabled` | `true` | command mode: rewrite the selection by voice |
 | `command_hotkey` | `"ctrl+alt+space"` | Command mode hotkey |
 | `agent_enabled` | `false` | agent hotkey: POST the dictation to agent_url instead of typing it |
