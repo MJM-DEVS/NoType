@@ -29,7 +29,10 @@ def test_foreign_stub_is_swapped_for_the_import_and_put_back(monkeypatch):
 
     assert callable(backend.insert_text)
     assert sys.modules["text_output"] is foreign
-    assert {n for n in _STUB_NAMES if n in sys.modules} == before
+    # Modules that really import on this platform (e.g. after the Linux
+    # import guards) may stay; our stubs (no __file__) must not.
+    added = {n for n in _STUB_NAMES if n in sys.modules} - before
+    assert all(getattr(sys.modules[n], "__file__", None) for n in added)
 
 
 def test_foreign_stub_with_needed_names_is_used(monkeypatch):
