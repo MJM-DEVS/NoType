@@ -30,36 +30,32 @@ This writes `dist\backend\backend.exe` with an `_internal\` folder. `backend.spe
 
 Check that `dist\backend\backend.exe` exists before the next step. electron-builder copies `..\dist\backend` into `resources\backend\` (`extraResources`); without it the app has no backend.
 
-## 3. Build the installer
+## 3. Build the installer and the portable ZIP
 
 ```bat
 cd electron
 npm install
-npm run build -- --publish never
+npm run build
 ```
 
 Output in `dist\`:
 
 | File | What it is |
 |---|---|
-| `NoType-Setup-<version>.exe` | NSIS installer (`win.artifactName`) |
+| `NoType-Setup-<version>.exe` | NSIS installer (`nsis.artifactName`) |
 | `NoType-Setup-<version>.exe.blockmap` | lets electron-updater download only changed blocks |
 | `latest.yml` | update feed: version, file name, size and SHA-512 of the installer |
-| `win-unpacked\` | the unpacked app, used for the portable ZIP |
+| `NoType-<version>-portable.zip` | portable ZIP of `win-unpacked\` (`zip` target, `win.artifactName`) |
+| `win-unpacked\` | the unpacked app the ZIP is made from |
+
+`latest.yml` must name only the installer, not the ZIP. `npm install` is needed for `@electron/fuses`, which the afterPack hook (`electron/build-resources/fuses.js`) uses; without it the build stops.
 
 > [!WARNING]
-> **About `--publish`.** `package.json` has a GitHub publish target with `"releaseType": "release"`. `npm run build` alone passes no `--publish` flag, and electron-builder then decides by itself whether to upload, depending on the environment (for example a detected CI and a `GH_TOKEN`). Pass `--publish never` for local builds so nothing is uploaded by accident. With `--publish always` and a token, electron-builder would upload to a GitHub release for the tag and, because of `releaseType: release`, not as a draft. Every installed copy would then be offered that version on its next check. (*Derived* from the configuration and electron-builder's documented behavior; not tried.)
+> **About `--publish`.** `package.json` has a GitHub publish target with `"releaseType": "release"`. Without a `--publish` flag, electron-builder decides by itself whether to upload, depending on the environment (for example a detected CI and a `GH_TOKEN`). That is why `npm run build` and `npm run build:dir` pass `--publish never`; don't call `electron-builder` directly without it. With `--publish always` and a token, electron-builder would upload to a GitHub release for the tag and, because of `releaseType: release`, not as a draft. Every installed copy would then be offered that version on its next check. (*Derived* from the configuration and electron-builder's documented behavior; not tried.)
 
-## 4. Make the portable ZIP
+## 4. Check the portable ZIP
 
-The portable ZIP is **not** an electron-builder target; `win.target` only lists `nsis`. It has to be made by hand from `dist\win-unpacked\` (*derived* from the README, which names it `NoType-<version>-portable.zip`):
-
-```powershell
-# from the repository root
-Compress-Archive -Path dist\win-unpacked\* -DestinationPath dist\NoType-3.4.0-portable.zip
-```
-
-Compare the folder layout inside with the ZIP of the previous release.
+Before the first release built this way, compare the folder layout inside `NoType-<version>-portable.zip` with the ZIP of the previous release. `NoType.exe` should sit at the top level.
 
 How the app tells the two apart (`electron/main.js`): it updates itself only when `Uninstall NoType.exe` sits next to `NoType.exe`. `win-unpacked` has no uninstaller, so the portable version only links to the release page. Don't add one to the ZIP.
 

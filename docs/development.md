@@ -10,7 +10,7 @@ NoType is a hybrid app. A **Python backend** handles audio capture, [faster-whis
 | Text insertion | Win32 `SendInput` + clipboard, Unicode typing fallback |
 | Correction learning | Windows UI Automation (reads the dictated field only, never password fields) |
 | Frontend | Electron 33, plain HTML/CSS/JS, no framework |
-| Packaging | PyInstaller (backend) + electron-builder (NSIS installer) |
+| Packaging | PyInstaller (backend) + electron-builder (NSIS installer, portable ZIP) |
 
 ```mermaid
 flowchart LR
@@ -59,11 +59,17 @@ To build the installer:
 pip install -r requirements-build.txt
 pyinstaller --noconfirm backend.spec
 
-:: writes dist\NoType-Setup-<version>.exe, or dist\win-unpacked\ with build:dir
+:: build writes dist\NoType-Setup-<version>.exe and dist\NoType-<version>-portable.zip,
+:: build:dir only the unpacked app in dist\win-unpacked\ (for testing)
 cd electron
 npm run build
 npm run build:dir
 ```
+
+- Both build scripts pass `--publish never`, so a `GH_TOKEN` or a detected CI never uploads anything. Releases are uploaded to GitHub by hand.
+- The portable ZIP is an electron-builder target and is built on every `npm run build`. With the CUDA DLLs it is at least as large as the installer (about 1 GB), so a build takes longer and needs that much more disk space.
+- Run `npm install` again after pulling: it brings `@electron/fuses`, which the afterPack hook `build-resources/fuses.js` needs. Without it the build stops there.
+- The hook turns off the `RunAsNode`, `NODE_OPTIONS` and `--inspect` fuses in `NoType.exe`. The app is not packed into an asar archive, so this does not protect `resources\app\` itself.
 
 - `requirements-build.txt` adds PyInstaller and `nvidia-cublas-cu12`. `backend.spec` copies `cublas64_12.dll` and `cublasLt64_12.dll` from that package next to the CTranslate2 DLLs and stops with an error when they are missing, because without them the GPU path silently falls back to the CPU on most PCs.
 - On a PC without a CUDA 12 toolkit on `PATH` the bundled DLLs are the only cuBLAS; if loading the model on the GPU fails anyway, the backend retries on the CPU (`init_transcriber` in `backend.py`) and reports `CPU (int8)` as the device.
@@ -148,10 +154,11 @@ NoType/
     ├── suggest.html       # "learn this correction?" prompt
     ├── update.html        # "new version available" prompt
     ├── toast.html         # notification toast
-    ├── installer.nsh      # uninstaller step: autostart entry and update cache
+    ├── installer.nsh      # installer steps: leftover backend, autostart entry, update cache
+    ├── build-resources/   # fuses.js: afterPack hook, turns off RunAsNode and Node debug options
     ├── lib/, test/        # if present: helper modules and their tests
     ├── assets/            # icons, tray icons, Quicksand font (OFL)
-    └── package.json       # electron-builder (NSIS installer, GitHub update feed)
+    └── package.json       # electron-builder (NSIS installer, portable ZIP, GitHub update feed)
 ```
 
 ## Reliability engineering
