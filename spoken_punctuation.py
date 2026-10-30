@@ -86,7 +86,7 @@ _COMMANDS = {
 }
 
 # After these words the command word is meant literally ("das Komma",
-# "eine neue Zeile", "the period", "trial period").
+# "eine neue Zeile", "the period").
 _LITERAL_AFTER = {
     "de": {"der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "einem",
            "eines", "kein", "keine", "keinen", "jeden", "jedem", "dieses", "diesen",
@@ -97,8 +97,8 @@ _LITERAL_AFTER = {
     "pl": {"ta", "ten", "tę", "jedna", "jedną", "jeden", "czarna", "czarną",
            "każda", "każdy", "ostatnia", "ostatni"},
 }
-# Like _LITERAL_AFTER, but only before "period" ("trial period", "no period").
-# "No comma thanks" is still a comma.
+# Like _LITERAL_AFTER, but only before "period" and "full stop" ("trial
+# period", "no period"). "No comma thanks" and "Reporting colon" stay commands.
 _LITERAL_BEFORE_PERIOD = {
     "en": {"trial", "grace", "time", "waiting", "notice", "test", "billing",
            "reporting", "no"},
@@ -151,7 +151,7 @@ def apply(text: str, language: str | None) -> str:
         prev_word = re.search(r"(\w+)\W*$", before)
         if not m.group("pre") and prev_word and (
                 prev_word.group(1).lower() in literal
-                or kind == "period" and prev_word.group(1).lower() in period_literal):
+                or sym == "." and prev_word.group(1).lower() in period_literal):
             return m.group(0)
         if kind == "period":
             isolated = bool(m.group("pre"))

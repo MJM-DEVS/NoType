@@ -28,6 +28,15 @@ def test_amara_credit_after_real_sentence_keeps_the_sentence():
         == "Wir sehen uns morgen."
 
 
+@pytest.mark.parametrize("text, kept", [
+    ("我们明天见。字幕由Amara.org社区提供", "我们明天见。"),
+    ("また明日。Amara.orgコミュニティによる字幕", "また明日。"),
+    ("本当？Amara.orgコミュニティによる字幕", "本当？"),
+])
+def test_cjk_amara_credit_after_real_sentence_keeps_the_sentence(text, kept):
+    assert strip_credits(text) == kept
+
+
 @pytest.mark.parametrize("text", [
     "Ich wohne in Samara.org ist keine Seite.",
     "Schau auf tamara.org nach.",

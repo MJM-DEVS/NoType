@@ -35,6 +35,14 @@ def test_literal_words_still_keep_period_and_article_phrases(text):
     assert apply(text, "en") == text
 
 
+def test_colon_after_period_only_literal_is_a_command():
+    assert apply("Reporting colon new line Revenue is up", "en") == "Reporting:\nRevenue is up"
+
+
+def test_full_stop_after_period_only_literal_stays_literal():
+    assert apply("We need a test full stop", "en") == "We need a test full stop"
+
+
 def test_period_after_period_only_literal_before_another_command():
     # Whisper set "period" apart: still a command after "test".
     assert apply("This is a test. Period. New paragraph Bye", "en") == "This is a test.\n\nBye"

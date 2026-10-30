@@ -10,14 +10,18 @@ os.environ["APPDATA"] = _CONFIG_ROOT
 os.environ["XDG_CONFIG_HOME"] = _CONFIG_ROOT
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# correction_watch reads ctypes.windll at import; only find_corrections() is
-# tested here, which never touches it.
-if not hasattr(ctypes, "windll"):
-    ctypes.windll = types.SimpleNamespace(user32=None)
-
 import pytest  # noqa: E402
 
-from correction_watch import find_corrections  # noqa: E402
+# correction_watch reads ctypes.windll at import; only find_corrections() is
+# tested here, which never touches it. Stub it for the import only.
+_had_windll = hasattr(ctypes, "windll")
+if not _had_windll:
+    ctypes.windll = types.SimpleNamespace(user32=None)
+try:
+    from correction_watch import find_corrections  # noqa: E402
+finally:
+    if not _had_windll:
+        del ctypes.windll
 
 
 def fix(inserted, after, prefix="", suffix=""):
@@ -64,6 +68,18 @@ def test_fix_of_last_word_then_typing_on_before_unchanged_suffix():
 def test_multi_word_meant_at_the_end():
     assert fix("Wir fliegen nach Nju Jork", "Wir fliegen nach New York") \
         == [("Nju Jork", "New York")]
+
+
+@pytest.mark.parametrize("heard, meant", [
+    ("whatsapp web", "WhatsApp Web"),
+    ("visual studio", "Visual Studio"),
+    ("new york", "New York"),
+    ("Doc Ker Kompose", "Docker Compose"),
+])
+@pytest.mark.parametrize("typed_on", ["", " und noch mehr Text danach"])
+def test_multi_word_fix_at_the_end_kept_whole(heard, meant, typed_on):
+    assert fix("Wir nutzen " + heard, "Wir nutzen " + meant + typed_on) \
+        == [(heard, meant)]
 
 
 @pytest.mark.parametrize("after", [

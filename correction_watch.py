@@ -111,15 +111,20 @@ def find_corrections(inserted: str, before: str, after: str):
             return None
         heard = old_region[old_tok[i1].start():old_tok[i2 - 1].end()]
         # Fixed words that end the dictation merge with whatever the user
-        # typed on after them: try the shortest new phrase first.
+        # typed on after them: take the new phrase closest to what was heard
+        # ("Kubernetes" of "Kubernetes und so", but all of "WhatsApp Web").
         ends = range(j1 + 1, j2 + 1) if i2 == len(old_tok) else (j2,)
+        best, best_key = None, None
         for j in ends:
             if j - j1 > MAX_PHRASE_WORDS:
                 break
             meant = new_region[new_tok[j1].start():new_tok[j - 1].end()]
             if _is_fix(heard, meant):
-                return heard, meant
-        return None
+                # On a tie the longer phrase wins.
+                key = (difflib.SequenceMatcher(None, _norm(heard), _norm(meant)).ratio(), j)
+                if best_key is None or key > best_key:
+                    best, best_key = (heard, meant), key
+        return best
 
     # A fixed word is still there, just spelled right.
     removed = sum(op[2] - op[1] for op in inside
