@@ -26,8 +26,10 @@ _TAIL = r"[^.!?\n。]*[.!?。]?"
 _CREDITS_RE = re.compile(
     "(?:" + "|".join([
         # up to a few words before it ("Untertitel der …", "Napisy stworzone
-        # przez społeczność …"), but never across a sentence end
-        r"(?:[^\s.!?]+\s+){0,7}[^\s.!?]*?\bamara\s?\.?\s?org\b",
+        # przez społeczność …"), but never across a sentence end (also 。！？).
+        # Only ASCII letters, digits and "_" bound the name: CJK sits right
+        # next to it ("字幕由Amara.org社区提供").
+        r"(?:[^\s.!?。！？]+\s+){0,7}[^\s.!?。！？]*?(?<![a-z0-9_])amara\s?\.?\s?org(?![a-z0-9_])",
         r"\buntertitel(?:ung)?\s+(?:im\s+auftrag\s+)?(?:des|der|von|vom)\s+"
         r"(?:zdf|ard|wdr|ndr|swr|mdr|br|hr|rbb|sr|funk)\b",
         r"untertitel\w*\s*(?:von|:)\s*stephanie\s+geiges",
