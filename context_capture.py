@@ -9,9 +9,11 @@ hold-to-speak the hands are on the hotkey, so it's snip first, then speak.
   chat apps (ChatGPT, Claude, Gemini, … as app or browser tab): images are
       pasted like Ctrl+V, copied text is quoted under the sentence.
   terminals (Claude Code, Codex, …): images are saved as PNG and their paths
-      go in front of the sentence; the CLI reads them from disk. Long or
-      multi-line text goes to a .txt file the same way (a multi-line paste
-      would run each line in a plain shell).
+      go in front of the sentence; the CLI reads them from disk. Short
+      one-line text goes in quoted after the sentence; long or multi-line
+      text, or text with a double quote or a trailing backslash, goes to a
+      .txt file the same way (a multi-line paste would run each line in a
+      plain shell, a quote would end the "…" around it).
 
 Browser tabs whose title doesn't name an AI site (ChatGPT titles its tabs
 after the chat) and code editors take what is copied during the recording,
@@ -57,7 +59,13 @@ MAX_ITEMS = 5
 MAX_IMAGES = 3
 MAX_TEXT = 20000         # chars kept from one copy
 INLINE_MAX = 160         # terminal: shorter one-line text goes inline
+# … unless it holds a character that would end the "…" around it: a straight
+# or typographic double quote (PowerShell treats “ ” „ like "), a line break,
+# or a trailing backslash that would escape the closing quote. Such text goes
+# to a .txt file. $ % ! stay inline: "KeyError: 'id'", 100%, $PATH.
+_INLINE_UNSAFE = re.compile(r'["“”„\r\n]|\\$')
 KEEP_FILES_S = 24 * 3600
+CLEANUP_EVERY_S = 3600   # old attachment files are also swept on this timer
 THUMB_W, THUMB_H = 96, 64  # overlay chip thumbnail (2× its CSS size)
 
 CF_UNICODETEXT = 13
@@ -428,7 +436,11 @@ class ContextCapture:
         # duplicate doesn't come back as the next dictation's look-back.
         self._seen = {}
         self._session = None
-        self._cleaned_at = 0.0
+        self._cleanup_lock = threading.Lock()
+        self._stopped = threading.Event()
+        # Swept at start and then hourly, not just on the next save: a file
+        # must not outlive KEEP_FILES_S because nothing was copied since.
+        threading.Thread(target=self._sweep, name="attachment-cleanup", daemon=True).start()
         if _WIN:
             threading.Thread(target=self._watch, name="clipboard-watch", daemon=True).start()
 
@@ -562,7 +574,7 @@ class ContextCapture:
         if clip.kind == "text":
             text = clip.text
             path = ""
-            if target.paths and ("\n" in text.strip() or len(text.strip()) > INLINE_MAX):
+            if target.paths and not _inline_ok(text):
                 path = self._save(text.encode("utf-8"), "txt")
             return Attachment("text", seq, "text", text=text, path=path)
         px = dib_to_pixels(clip.formats.get(CF_DIB))
@@ -587,24 +599,42 @@ class ContextCapture:
             f.write(data)
         return path
 
+    def _sweep(self):
+        while not self._stopped.is_set():
+            self._cleanup()
+            self._stopped.wait(CLEANUP_EVERY_S)
+
+    def stop_cleanup(self):
+        """Ends the cleanup timer (tests; the app just exits)."""
+        self._stopped.set()
+
     def _cleanup(self):
-        now = time.time()
-        if now - self._cleaned_at < 3600:
-            return
-        self._cleaned_at = now
-        try:
-            for name in os.listdir(self._folder):
+        """Delete our files older than KEEP_FILES_S (one listdir, cheap)."""
+        with self._cleanup_lock:
+            now = time.time()
+            try:
+                names = os.listdir(self._folder)
+            except OSError:
+                return  # no folder yet: nothing saved
+            for name in names:
                 p = os.path.join(self._folder, name)
-                if name.startswith("notype-") and now - os.path.getmtime(p) > KEEP_FILES_S:
-                    os.remove(p)
-        except OSError as e:
-            logger.debug(f"Attachment cleanup: {e}")
+                try:
+                    if name.startswith("notype-") and now - os.path.getmtime(p) > KEEP_FILES_S:
+                        os.remove(p)
+                except OSError as e:  # in use or gone: next round
+                    logger.debug(f"Attachment cleanup: {e}")
 
 
 # ── Insertion ─────────────────────────────────────────────────────
 
 def _path_arg(path: str) -> str:
     return f'"{path}"' if " " in path else path
+
+
+def _inline_ok(text: str) -> bool:
+    """Short one-line text that can go in quoted, as is, after the sentence."""
+    text = text.strip()
+    return len(text) <= INLINE_MAX and not _INLINE_UNSAFE.search(text)
 
 
 def _quote(text: str) -> str:
@@ -617,6 +647,7 @@ def compose(text: str, items, target: Target) -> str:
     texts = [a for a in items if a.kind == "text"]
     if target.paths:
         front = [_path_arg(a.path) for a in items if a.path]
+        # Text without a path passed _inline_ok in _attachment (same target).
         inline = "".join(f' "{a.text.strip()}"' for a in texts if not a.path)
         return " ".join(front + [text]) + inline
     return text + "".join("\n\n" + _quote(a.text) for a in texts)

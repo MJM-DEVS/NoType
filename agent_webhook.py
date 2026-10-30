@@ -12,6 +12,7 @@ answer. Never the dictated text, the token, the answer or the full URL
 (webhook URLs often carry a secret in their path or query).
 """
 
+import ipaddress
 import json
 import logging
 import re
@@ -22,6 +23,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime
+
+import loopback
 
 logger = logging.getLogger("NoType.Agent")
 
@@ -105,6 +108,9 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 _opener = urllib.request.build_opener(_NoRedirect)
+# A webhook on this machine (n8n on localhost, …) is reached directly, never
+# through a system proxy.
+_local_opener = urllib.request.build_opener(_NoRedirect, urllib.request.ProxyHandler({}))
 
 
 def _host(url: str) -> str:
@@ -122,6 +128,19 @@ def _is_timeout(err) -> bool:
     return isinstance(err, (TimeoutError, socket.timeout))
 
 
+def _is_private_host(host: str | None) -> bool:
+    """True for this machine and the local network: loopback, private and
+    link-local addresses, *.local and single-label names (NAS, WSL host)."""
+    host = (host or "").strip("[]").rstrip(".").lower()
+    if loopback.is_loopback_host(host):
+        return True
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return host.endswith(".local") or (bool(host) and "." not in host)
+    return ip.is_private or ip.is_link_local or ip.is_loopback
+
+
 def post(url: str, payload: dict, token: str = "", version: str = "",
          timeout: float = TIMEOUT_S) -> dict:
     """POST `payload` as JSON to `url`. Never raises.
@@ -130,7 +149,11 @@ def post(url: str, payload: dict, token: str = "", version: str = "",
       ok       True for a 2xx answer
       status   HTTP status code, None when there was no answer
       message  the line to show (see extract_message), '' for none
-      error    '' | no_url | bad_url | http | timeout | tls | unreachable
+      error    '' | no_url | bad_url | insecure_url | http | timeout | tls | unreachable
+
+    A token only goes out over https, or over http to this machine or the
+    local network (see _is_private_host). A plain http URL to a public host
+    with a token set counts as insecure_url.
     """
     url = (url or "").strip()
     if not url:
@@ -142,12 +165,17 @@ def post(url: str, payload: dict, token: str = "", version: str = "",
         valid = False
     if not valid:
         return _result(False, error="bad_url")
+    local = loopback.is_loopback_host(parts.hostname)
+    token = (token or "").strip()
+    if token and parts.scheme == "http" and not _is_private_host(parts.hostname):
+        logger.warning(f"Agent: not sending the token over plain http to {parts.hostname}, "
+                       "use https (or a local network address)")
+        return _result(False, error="insecure_url")
 
     headers = {
         "Content-Type": "application/json",
         "User-Agent": f"NoType/{version}" if version else "NoType",
     }
-    token = (token or "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -157,7 +185,7 @@ def post(url: str, payload: dict, token: str = "", version: str = "",
     started = time.perf_counter()
     ms = lambda: int((time.perf_counter() - started) * 1000)  # noqa: E731
     try:
-        with _opener.open(request, timeout=timeout) as resp:
+        with (_local_opener if local else _opener).open(request, timeout=timeout) as resp:
             status = resp.status
             answer = resp.read(MAX_ANSWER_BYTES)
             ctype = resp.headers.get("Content-Type", "")
