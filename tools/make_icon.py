@@ -10,6 +10,10 @@ Pillow. Nothing is re-drawn in Python.
   Tray icon → circle    (compact badge reads best at 16px) → tray-16/32/64.png
 
 Run after changing the SVGs — build helper, not runtime code.
+
+Needs `npm install` in electron/. Since Electron 42 that no longer downloads
+the Electron binary; the first run fetches it via the package's install-electron
+script (the former postinstall).
 """
 
 import os
@@ -19,7 +23,8 @@ from PIL import Image
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(TOOLS)
 ASSETS = os.path.join(ROOT, "electron", "assets")
-ELECTRON = os.path.join(ROOT, "electron", "node_modules", "electron", "dist", "electron.exe")
+ELECTRON_PKG = os.path.join(ROOT, "electron", "node_modules", "electron")
+ELECTRON = os.path.join(ELECTRON_PKG, "dist", "electron.exe")
 RASTERIZER = os.path.join(TOOLS, "svg_to_png.js")
 
 os.makedirs(ASSETS, exist_ok=True)
@@ -32,7 +37,14 @@ def _render(svg_name, out_path, size=1024):
     return Image.open(out_path).convert("RGBA")
 
 
+def _ensure_electron():
+    """Download the Electron binary on first use (no postinstall since Electron 42)."""
+    if not os.path.exists(ELECTRON):
+        subprocess.run(["node", os.path.join(ELECTRON_PKG, "install.js")], check=True)
+
+
 def main():
+    _ensure_electron()
     app_master = os.path.join(TOOLS, "_app_master.png")
     tray_master = os.path.join(TOOLS, "_tray_master.png")
     app = _render("icon-squircle.svg", app_master, 1024)

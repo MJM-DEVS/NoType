@@ -1452,7 +1452,9 @@ function buildTrayMenu(status = 'ready') {
       items.push({
         label: `  ${time}  ${preview}`,
         click: () => {
-          require('electron').clipboard.writeText(entry.text);
+          // Async since Electron 44; a rejection must not become unhandled.
+          require('electron').clipboard.writeText(entry.text)
+            .catch((e) => console.error('Clipboard write failed:', String((e && e.message) || e)));
         },
       });
     });
