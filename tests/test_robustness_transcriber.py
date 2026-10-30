@@ -14,9 +14,8 @@ import pytest  # noqa: E402
 
 import _robustness_stubs  # noqa: E402
 
-_robustness_stubs.stub_faster_whisper()
-import transcriber  # noqa: E402
-from transcriber import Transcriber  # noqa: E402
+transcriber = _robustness_stubs.import_transcriber()
+Transcriber = transcriber.Transcriber
 
 
 class FakeModel:
@@ -75,3 +74,9 @@ def test_invalid_config_values_do_not_fail_transcription():
     assert result["beam"] == 1
     assert result["vad_ms"] == 300
     assert t._model.calls[0]["vad_parameters"]["min_silence_duration_ms"] == 300
+
+
+def test_invalid_vad_sensitivity_with_empty_audio():
+    t = _loaded("small")
+    result = t.transcribe(np.zeros(0, dtype=np.float32), vad_sensitivity="x")
+    assert result["vad_ms"] == 300

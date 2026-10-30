@@ -19,6 +19,13 @@ _WORD_RE = re.compile(r"\w+", re.UNICODE)
 # Words and single punctuation marks; hyphens count as spacing.
 _TOKEN_RE = re.compile(r"\w+|[^\w\s\-]", re.UNICODE)
 
+# Commas, quotes and brackets around a "from" phrase are dropped (a phrase
+# picked from a dictation often carries them). Apostrophes ("Hans'") and
+# symbols like "#" and "+" are kept.
+_EDGE_PUNCT = ",;:\"„“”«»()[]{}"
+# Dropped at the end only after two or more words, see _trim_heard().
+_END_PUNCT = ".!?"
+
 # (entries key, compiled regex, replacement per group) – rebuilt only when
 # the dictionary changes.
 _cache = (None, None, [])
@@ -35,12 +42,26 @@ def _body(phrase: str) -> str | None:
     return r"[\s\-]*".join(re.escape(t) for t in tokens)
 
 
+def _trim_heard(heard: str) -> str:
+    """The "from" phrase without punctuation at its edges; punctuation inside
+    ("Node.js", "Dr. Müller") always stays. A final ".", "!" or "?" is
+    dropped only after two or more words ("kuber netis." from the end of a
+    sentence); a single word keeps it, it may be an abbreviation or a name
+    ("Dr.", "z.B.", "Yahoo!"). Symbols ("C#", "c++", ".NET") are never
+    trimmed."""
+    heard = heard.strip(_EDGE_PUNCT + " \t")
+    if len(heard.split()) > 1:
+        heard = heard.rstrip(_END_PUNCT + _EDGE_PUNCT + " \t")
+    return heard
+
+
 def _normalize(entries) -> tuple:
     pairs = []
     for e in (entries or [])[:MAX_ENTRIES]:
         if not isinstance(e, dict):
             continue
-        heard, meant = str(e.get("from", "")).strip(), str(e.get("to", "")).strip()
+        heard = _trim_heard(str(e.get("from", "")).strip())
+        meant = str(e.get("to", "")).strip()
         # Case-only fixes ("whatsapp" → "WhatsApp") are legitimate entries.
         if heard and meant and heard != meant:
             pairs.append((heard, meant))

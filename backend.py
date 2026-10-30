@@ -238,9 +238,9 @@ class Backend:
             )
             if result.get("compute_fallback"):
                 self.config["compute_type"] = result["compute_type"]
-                save_config(self.config)
-                logger.info(f"Selftest downgraded compute_type to "
-                            f"{result['compute_type']} (persisted)")
+                if self._save_config():
+                    logger.info(f"Selftest downgraded compute_type to "
+                                f"{result['compute_type']} (persisted)")
             else:
                 logger.info("Inference selftest OK")
         except Exception as e:
@@ -777,9 +777,10 @@ class Backend:
         old_cleanup = self.config.get("cleanup_mode", "fast")
         old_llm = self._llm_model()
         self.config.update(new_config)
-        # Not saved: the settings still apply until the next start.
-        if not self._save_config():
-            self.send("error", {"message": "Saving settings failed"})
+        # Electron has already written settings.json itself; a failed save
+        # here only means our copy (and its backups) lags behind, so it is
+        # logged by _save_config() and not shown as an error.
+        self._save_config()
 
         # Different cleanup LLM while AI mode is on → preload it (if pulled)
         # so the next dictation doesn't pay the cold start; the old model's

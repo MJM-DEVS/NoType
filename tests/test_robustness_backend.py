@@ -45,7 +45,9 @@ def _stop_with(b, seconds, text="hallo welt", **result):
 
 
 def test_min_length_counts_samples_not_wall_clock(b):
-    # Held for long (wall clock), but only 0.2 s of audio arrived.
+    # Held for long by the wall clock (an old start time from before the
+    # change, or a slow mic open), but only 0.2 s of audio arrived: only the
+    # samples count, backend no longer reads _record_start_time.
     b._record_start_time = 0
     done = _stop_with(b, 0.2)
     assert done == [{"text": "", "empty": True, "reason": "too_short"}]
@@ -83,8 +85,18 @@ def test_handle_save_config_survives_save_error(b, monkeypatch):
     monkeypatch.setattr(b, "init_transcriber", mock.Mock())
     b.handle_save_config({"hotkey": "f9"})
     assert b.config["hotkey"] == "f9"
-    assert ("error", {"message": "Saving settings failed"}) in b.sent
+    # Electron already wrote settings.json: logged only, no error in the UI.
+    assert not [d for t, d in b.sent if t == "error"]
     assert [t for t, _ in b.sent][-1] == "config_saved"
+
+
+def test_selftest_survives_save_error(b):
+    backend.save_config.side_effect = OSError("locked")
+    b.transcriber = mock.Mock()
+    b.transcriber.transcribe.return_value = {"compute_fallback": True,
+                                             "compute_type": "float16"}
+    b._inference_selftest()  # must not raise
+    assert b.config["compute_type"] == "float16"
 
 
 def test_init_transcriber_runs_one_load_and_skips_superseded(b, monkeypatch):

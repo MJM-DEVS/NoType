@@ -13,6 +13,7 @@ import os
 import shutil
 import tempfile
 import threading
+import time
 
 APP_NAME = "NoType"
 
@@ -97,9 +98,38 @@ _config = None
 _save_lock = threading.Lock()
 
 
+# A temp file of save_config() older than this was left by a crash or power
+# loss; a younger one may still be written by another backend instance.
+_STALE_TMP_S = 600
+
+
+def _remove_stale_tmp_files() -> None:
+    """Delete settings.json.<random>.tmp files a crashed save left behind.
+    Only our own unique names: Electron's settings.json.tmp is never touched."""
+    folder = os.path.dirname(CONFIG_FILE)
+    prefix = os.path.basename(CONFIG_FILE) + "."
+    electron_tmp = prefix + "tmp"
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return
+    with _save_lock:
+        for name in names:
+            if (not (name.startswith(prefix) and name.endswith(".tmp"))
+                    or name == electron_tmp):
+                continue
+            path = os.path.join(folder, name)
+            try:
+                if time.time() - os.path.getmtime(path) > _STALE_TMP_S:
+                    os.remove(path)
+            except OSError:
+                pass
+
+
 def load_config() -> dict:
     """Load config from file, falling back to rolling backups on corruption."""
     global _config
+    _remove_stale_tmp_files()
 
     def _try_read(path: str):
         try:

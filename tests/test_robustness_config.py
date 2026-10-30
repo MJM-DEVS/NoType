@@ -8,6 +8,7 @@ os.environ["XDG_CONFIG_HOME"] = _TMP
 
 import json  # noqa: E402
 import threading  # noqa: E402
+import time  # noqa: E402
 
 import pytest  # noqa: E402
 
@@ -91,3 +92,19 @@ def test_failed_save_removes_tmp_and_raises(cfg_file, monkeypatch):
     with pytest.raises(PermissionError):
         config.save_config({"hotkey": "f9"})
     assert not [p for p in cfg_file.parent.iterdir() if p.name.endswith(".tmp")]
+
+
+def test_load_removes_only_stale_own_tmp_files(cfg_file):
+    folder = cfg_file.parent
+    stale = folder / "settings.json.abc123.tmp"   # left by a crashed save
+    fresh = folder / "settings.json.def456.tmp"   # may still be written
+    electron_tmp = folder / "settings.json.tmp"   # Electron's, never ours
+    other = folder / "history.json.xyz.tmp"
+    for p in (stale, fresh, electron_tmp, other):
+        p.write_text("x", encoding="utf-8")
+    old = time.time() - config._STALE_TMP_S - 60
+    for p in (stale, electron_tmp, other):
+        os.utime(p, (old, old))
+    config.load_config()
+    assert not stale.exists()
+    assert fresh.exists() and electron_tmp.exists() and other.exists()

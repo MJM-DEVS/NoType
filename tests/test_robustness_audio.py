@@ -11,8 +11,7 @@ import pytest  # noqa: E402
 
 import _robustness_stubs  # noqa: E402
 
-_robustness_stubs.stub_sounddevice()
-import audio_recorder  # noqa: E402
+audio_recorder = _robustness_stubs.import_audio_recorder()
 
 
 def test_start_failure_leaves_recorder_idle(monkeypatch):

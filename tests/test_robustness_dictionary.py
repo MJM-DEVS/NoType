@@ -45,3 +45,29 @@ def test_idempotent_with_punctuation():
 
 def test_punctuation_only_entry_is_ignored():
     assert _apply("a # b", ("#", "hash")) == "a # b"
+
+
+@pytest.mark.parametrize("heard, expected", [
+    ("kuber netis.", "kuber netis"),     # end of a sentence, several words
+    ('"kuber netis",', "kuber netis"),   # quotes and comma around it
+    ("(kuber netis)", "kuber netis"),
+    ("Dr.", "Dr."),                      # one word: maybe an abbreviation
+    ("z.B.", "z.B."),
+    ("Yahoo!", "Yahoo!"),
+    ("C#", "C#"),                        # symbols are never trimmed
+    ("c++", "c++"),
+    (".NET", ".NET"),
+    ("Dr. Müller.", "Dr. Müller"),       # inner punctuation stays
+    ("node.js,", "node.js"),
+    ("Hans'", "Hans'"),                  # apostrophes stay
+])
+def test_heard_phrase_edge_punctuation(heard, expected):
+    assert dictionary._trim_heard(heard) == expected
+
+
+def test_heard_phrase_with_sentence_period_matches_mid_sentence():
+    assert _apply("kuber netis ist toll", ("kuber netis.", "Kubernetes")) == "Kubernetes ist toll"
+
+
+def test_abbreviation_keeps_its_period():
+    assert _apply("Dr. Müller und Dr Who", ("Dr.", "Doktor")) == "Doktor Müller und Dr Who"

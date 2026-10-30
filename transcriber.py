@@ -117,8 +117,10 @@ class Transcriber:
     # Class-level cache so reopening the settings panel or saving an unchanged
     # model_size doesn't reload the model from disk. Keyed by the trio that
     # uniquely identifies a loaded WhisperModel instance. Holds ONE model:
-    # switching models drops the old one first, so RAM/VRAM never carries
-    # two. The lock prevents two concurrent load_model() calls from racing
+    # switching models drops the cache's reference to the old one before the
+    # new one loads. The old model is only freed once nothing else holds it
+    # (a dictation or preview still running on it keeps it alive until it
+    # ends). The lock prevents two concurrent load_model() calls from racing
     # the dict.
     _model_cache: dict = {}
     _cache_lock = threading.Lock()
@@ -396,15 +398,15 @@ class Transcriber:
         if self._model is None:
             raise RuntimeError("Model not loaded. Call load_model() first.")
 
-        if len(audio) == 0:
-            return {"text": "", "beam": 0, "compute_type": self.compute_type,
-                    "duration": 0, "vad_ms": vad_sensitivity}
-
         # From the config: a string or garbage must not fail the dictation.
         try:
             vad_sensitivity = max(int(vad_sensitivity), 0)
         except (TypeError, ValueError):
             vad_sensitivity = 300
+
+        if len(audio) == 0:
+            return {"text": "", "beam": 0, "compute_type": self.compute_type,
+                    "duration": 0, "vad_ms": vad_sensitivity}
 
         audio_duration = len(audio) / SAMPLE_RATE
         actual_beam = self._get_beam_size(audio_duration, beam_size)
