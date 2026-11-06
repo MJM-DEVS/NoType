@@ -309,6 +309,7 @@ Everything else stays in `%APPDATA%\NoType\` on your PC:
 | Diagnostic log | `notype.log`, rotating; timings and errors only, never your dictated text |
 | AI engine & model | the `ollama\` subfolder |
 | Screenshots and copied text for AI apps | the `attachments\` subfolder, each file deleted after 24 hours |
+| Safety copy of the running dictation | the `rescue\` subfolder as a WAV file, deleted as soon as the text is in. A recording that could not be transcribed stays until you transcribe or delete it, for 7 days at most. Switch it off under **Settings → System** |
 
 **Uninstalling removes this whole folder**, NoType's autostart entry and its update cache in `%LOCALAPPDATA%\notype-updater\` (updates keep all three). The speech models are the exception: they live in the shared Hugging Face cache at `%USERPROFILE%\.cache\huggingface\hub\`, which other apps may use too, so the uninstaller leaves it alone. To free the space, delete the folders of the models you downloaded in NoType there; their names contain `whisper`, for example `models--mobiuslabsgmbh--faster-whisper-large-v3-turbo`. The portable version has no uninstaller: delete its folder and `%APPDATA%\NoType\` by hand.
 
@@ -465,16 +466,24 @@ flowchart LR
 
     subgraph Python["Python backend (backend.py)"]
         AR["AudioRecorder (sounddevice, 16 kHz)"]
-        WT["Transcriber (faster-whisper / CUDA)"]
+        AS["Audio spool (recording on disk)"]
+        SE["Speech engine (watches and replaces the Whisper process)"]
         PP["Post-processing (rules + dictionary + local LLM)"]
         TX["Text output (SendInput)"]
         CW["Correction watch (UI Automation)"]
     end
 
+    subgraph Worker["Whisper process (backend.exe --transcribe-worker)"]
+        WT["Transcriber (faster-whisper / CUDA)"]
+    end
+
     HK -- "start / stop" --> Electron
     Electron <== "JSON IPC (stdin/stdout)" ==> Python
     AR -- "spectrum + preview" --> OV
-    WT --> PP --> TX --> CW
+    AR --> AS
+    AR --> SE
+    SE <== "audio + results" ==> WT
+    SE --> PP --> TX --> CW
 ```
 
 ### Build from source
@@ -501,6 +510,9 @@ npm run build:dir                            # → dist/win-unpacked/ (portable)
 ```
 NoType/
 ├── backend.py            # IPC loop, recording, transcription orchestration
+├── speech_engine.py      # starts, watches and replaces the Whisper process, retries a failed dictation
+├── transcribe_worker.py  # the Whisper process itself (backend.exe --transcribe-worker)
+├── audio_spool.py        # writes each recording to disk while it is spoken, saved recordings
 ├── audio_recorder.py     # sounddevice capture, spectrum bands, rolling preview window
 ├── transcriber.py        # faster-whisper wrapper, language mix, batched long dictations, cuBLAS fallback
 ├── hallucinations.py     # known Whisper hallucinations ("Thanks for watching!", subtitle credits)

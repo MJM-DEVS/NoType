@@ -296,6 +296,16 @@ def copy_selection(timeout: float = 0.35) -> str:
         return ""
 
 
+def copy_text(text: str) -> bool:
+    """Put text on the clipboard without pasting it anywhere."""
+    try:
+        pyperclip.copy(text.replace("\r\n", "\n").replace("\n", "\r\n"))
+        return True
+    except Exception as e:
+        logger.error(f"Failed to copy text: {e}")
+        return False
+
+
 def insert_text(text: str, method: str = "auto") -> bool:
     """
     Insert text into the currently active input field.

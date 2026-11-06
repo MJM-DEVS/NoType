@@ -1253,6 +1253,16 @@
             <span class="slider"></span>
           </label>
         </div>
+        <div class="field">
+          <div>
+            <div class="field-label" data-i18n="system.rescue">Aufnahme zwischenspeichern</div>
+            <div class="field-desc" data-i18n="system.rescue.desc">Dein Diktat liegt beim Sprechen auch auf der Festplatte und ist weg, sobald der Text da ist. Schlägt etwas fehl, wandelst du es über das Tray-Menü neu um. Reste löscht NoType nach 7 Tagen.</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="rescueToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
       </div>
 
       <div class="card">
@@ -1462,6 +1472,8 @@
       'a11y.close': 'Schließen', 'a11y.add': 'Hinzufügen', 'a11y.remove': '„{item}“ entfernen',
       'system.mute': 'Andere Wiedergabe stummschalten',
       'system.mute.desc': 'Musik und Videos sind still, solange du sprichst. Danach ist der Ton sofort wieder da.',
+      'system.rescue': 'Aufnahme zwischenspeichern',
+      'system.rescue.desc': 'Dein Diktat liegt beim Sprechen auch auf der Festplatte und ist weg, sobald der Text da ist. Schlägt etwas fehl, wandelst du es über das Tray-Menü neu um. Reste löscht NoType nach 7 Tagen.',
       'system.insert': 'Texteingabe', 'system.method': 'Einfügemethode',
       'system.method.desc': '„Tippen“ für Terminals und Apps, die Strg+V ignorieren',
       'system.method.auto': 'Automatisch (Strg+V, Fallback Tippen)', 'system.method.type': 'Immer tippen',
@@ -1621,6 +1633,8 @@
       'a11y.close': 'Close', 'a11y.add': 'Add', 'a11y.remove': 'Remove “{item}”',
       'system.mute': 'Mute other audio while dictating',
       'system.mute.desc': 'Music and videos go quiet while you speak and come back right after.',
+      'system.rescue': 'Keep a safety copy of the recording',
+      'system.rescue.desc': 'Your dictation also goes to disk while you speak and is gone once the text is in. If something fails, transcribe it again from the tray menu. NoType deletes leftovers after 7 days.',
       'system.insert': 'Text insertion', 'system.method': 'Insert method',
       'system.method.desc': '“Type” for terminals and apps that ignore Ctrl+V',
       'system.method.auto': 'Automatic (Ctrl+V, typing fallback)', 'system.method.type': 'Always type',
@@ -2898,6 +2912,7 @@
     $('updateCheckToggle').checked = cfg.update_check !== false;
     $('insertMethodSelect').value = cfg.insert_method || 'auto';
     $('muteToggle').checked = cfg.mute_while_dictating === true;
+    $('rescueToggle').checked = cfg.rescue_audio !== false;
 
     // Performance
     $('beamSelect').value = cfg.beam_size || 'auto';
@@ -2963,6 +2978,7 @@
       mic_device_name: micVal === '' ? null : micVal,
       mic_device_index: null,
       mute_while_dictating: $('muteToggle').checked,
+      rescue_audio: $('rescueToggle').checked,
       beam_size: $('beamSelect').value,
       compute_type: $('computeSelect').value,
       vad_sensitivity: parseInt($('vadSlider').value),

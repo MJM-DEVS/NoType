@@ -1,21 +1,26 @@
 """
 NoType – Whisper Transcription Engine
 Uses faster-whisper with CUDA for local speech-to-text.
+
+Transcriber only ever runs in the speech engine process (transcribe_worker.py),
+one job at a time. faster-whisper is imported where it is used, so the backend
+can read the catalog and the language rules without loading the inference stack.
 """
 
 import logging
 import os
-import threading
 import numpy as np
-from faster_whisper import WhisperModel, BatchedInferencePipeline
-from faster_whisper.utils import download_model
-from faster_whisper.vad import VadOptions
 
 import hallucinations
 
 logger = logging.getLogger("NoType.Transcriber")
 
 SAMPLE_RATE = 16000
+
+
+class JobCancelled(Exception):
+    """The user pressed Esc while this audio was being transcribed."""
+
 
 # ── Language policy ──────────────────────────────────────────────────
 # The user lists the languages they speak, optionally with shares ("80 %
@@ -105,6 +110,19 @@ MODEL_CATALOG = {
 
 MODEL_SIZES = list(MODEL_CATALOG)
 
+# The Hugging Face repos behind faster-whisper's built-in names (a copy of its
+# utils._MODELS): where a model lands in the download cache.
+BUILTIN_REPOS = {
+    "tiny": "Systran/faster-whisper-tiny",
+    "base": "Systran/faster-whisper-base",
+    "small": "Systran/faster-whisper-small",
+    "medium": "Systran/faster-whisper-medium",
+    "large-v2": "Systran/faster-whisper-large-v2",
+    "large-v3": "Systran/faster-whisper-large-v3",
+    "large-v3-turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+    "distil-large-v3": "Systran/faster-distil-whisper-large-v3",
+}
+
 # Compute type options (user-facing labels → faster-whisper values)
 COMPUTE_TYPES = {
     "cuda": ["int8_float16", "float16", "int8"],
@@ -113,19 +131,6 @@ COMPUTE_TYPES = {
 
 
 class Transcriber:
-    # Class-level cache so reopening the settings panel or saving an unchanged
-    # model_size doesn't reload the model from disk. Keyed by the trio that
-    # uniquely identifies a loaded WhisperModel instance. The lock prevents two
-    # concurrent load_model() calls from racing the dict.
-    _model_cache: dict = {}
-    _cache_lock = threading.Lock()
-    # SERIALISES every call to `self._model.transcribe(...)`. faster-whisper's
-    # underlying ctranslate2 model is NOT thread-safe – running the live-preview
-    # pass and the final pass concurrently on the same CUDA model produces
-    # 10-20× slowdowns (GPU stall) and occasional crashes. All inference paths
-    # must acquire this lock before calling .transcribe().
-    inference_lock = threading.Lock()
-
     def __init__(self, model_size: str = "small", device: str = "auto",
                  compute_type: str = "auto"):
         """
@@ -174,29 +179,20 @@ class Transcriber:
         local snapshot folder instead keeps a downloaded model fully offline.
         A snapshot without model.bin is an interrupted download, which the
         normal repo_id path then finishes."""
+        from faster_whisper.utils import download_model
         try:
             path = download_model(self._repo, local_files_only=True)
         except Exception:
             return None
         return path if os.path.isfile(os.path.join(path, "model.bin")) else None
 
+    def needs_download(self) -> bool:
+        return self._local_model_path() is None
+
     def load_model(self, on_progress=None):
         """Load the Whisper model. Downloads on first use, afterwards it
-        loads from the local files without contacting the Hub.
-
-        Cached at the class level: a subsequent call with the same
-        (model_size, device, compute_type) reuses the existing WhisperModel
-        instead of re-reading it from disk.
-        """
-        cache_key = (self._repo, self.device, self.compute_type)
-        with Transcriber._cache_lock:
-            cached = Transcriber._model_cache.get(cache_key)
-        if cached is not None:
-            self._model = cached
-            logger.info(f"Model cache hit: {self.model_size} / {self.device} / {self.compute_type}")
-            if on_progress:
-                on_progress("Modell aus Cache geladen ✓")
-            return
+        loads from the local files without contacting the Hub."""
+        from faster_whisper import WhisperModel
 
         if on_progress:
             on_progress(f"Lade Modell '{self.model_size}' ({self.device})...")
@@ -224,12 +220,8 @@ class Transcriber:
                     device=self.device,
                     compute_type="float16",
                 )
-                cache_key = (self._repo, self.device, self.compute_type)
             else:
                 raise
-
-        with Transcriber._cache_lock:
-            Transcriber._model_cache[cache_key] = self._model
 
         if on_progress:
             on_progress("Modell geladen ✓")
@@ -257,8 +249,9 @@ class Transcriber:
 
     def _choose_language(self, audio, languages, allow_other: bool,
                          vad_filter: bool, vad_sensitivity: int):
-        """Language code to decode with (None = Whisper decides on its own).
-        Must run under inference_lock – it uses the model."""
+        """Language code to decode with (None = Whisper decides on its own)."""
+        from faster_whisper.vad import VadOptions
+
         if self.forced_language:
             return self.forced_language
         if not languages:
@@ -284,7 +277,7 @@ class Transcriber:
         return chosen
 
     def _decode(self, audio, language, beam: int, vad_filter: bool,
-                vad_sensitivity: int, prompt):
+                vad_sensitivity: int, prompt, on_segment=None):
         """The normal, sequential decode with Whisper's guards on."""
         segments, info = self._model.transcribe(
             audio,
@@ -309,15 +302,22 @@ class Transcriber:
             log_prob_threshold=LOG_PROB_THRESHOLD,
             no_speech_threshold=NO_SPEECH_THRESHOLD,
         )
-        # Force segments to materialise inside the lock – the generator
-        # does the actual model work lazily as we iterate it.
-        return list(segments), info
+        # The generator does the actual model work lazily as we iterate it.
+        decoded = []
+        for seg in segments:
+            decoded.append(seg)
+            if on_segment:
+                on_segment(seg.end)
+        return decoded, info
 
-    def _decode_batched(self, audio, language, beam: int, vad_sensitivity: int, prompt):
+    def _decode_batched(self, audio, language, beam: int, vad_sensitivity: int, prompt,
+                        on_segment=None):
         """Long audio: decode the speech chunks (up to 30 s each) in parallel,
         then re-apply the guards the batched decoder skips. A chunk Whisper
         flags as silence is dropped; a repetitive or unsure one is decoded
         again on the normal path, whose temperature fallback handles it."""
+        from faster_whisper import BatchedInferencePipeline
+
         if self._batched is None or self._batched.model is not self._model:
             self._batched = BatchedInferencePipeline(self._model)
         segments, info = self._batched.transcribe(
@@ -333,8 +333,16 @@ class Transcriber:
             without_timestamps=False,
         )
         chunks = {}
+        reached = 0.0
         for seg in segments:
             chunks.setdefault(seg.seek, []).append(seg)
+            reached = seg.end
+            if on_segment:
+                on_segment(reached)
+
+        def still_alive(_end):
+            if on_segment:
+                on_segment(reached)
 
         kept = []
         for chunk in chunks.values():
@@ -351,7 +359,8 @@ class Transcriber:
                 logger.info(f"Batched: re-decoding a {end - start:.1f}s chunk "
                             f"(logprob {logprob:.2f})")
                 redo, _ = self._decode(audio[int(start * SAMPLE_RATE):int(end * SAMPLE_RATE)],
-                                       language, beam, True, vad_sensitivity, prompt)
+                                       language, beam, True, vad_sensitivity, prompt,
+                                       on_segment=still_alive)
                 for seg in redo:
                     seg.start += start
                     seg.end += start
@@ -362,7 +371,8 @@ class Transcriber:
 
     def transcribe(self, audio: np.ndarray, languages=None, allow_other: bool = True,
                    beam_size: str = "auto", vad_sensitivity: int = 300,
-                   initial_prompt: str = None, vad_filter: bool = True) -> dict:
+                   initial_prompt: str = None, vad_filter: bool = True,
+                   on_segment=None) -> dict:
         """
         Transcribe audio to text.
 
@@ -370,6 +380,8 @@ class Transcriber:
             languages: [(code, share)] from normalize_languages(): the
                        languages the user speaks. None = Whisper decides alone.
             allow_other: also accept languages outside that list.
+            on_segment: called with the audio position (s) after every decoded
+                        segment. May raise JobCancelled to stop.
 
         Returns:
             Dict with 'text', 'beam', 'compute_type', 'duration', 'vad_ms',
@@ -396,23 +408,21 @@ class Transcriber:
         # without fine-tuning.
         prompt = initial_prompt.strip() if initial_prompt else None
 
-        # Inference is serialised via the class-level lock – see comment above.
         def _run_inference():
-            with Transcriber.inference_lock:
-                language = self._choose_language(audio, languages, allow_other,
-                                                 vad_filter, vad_sensitivity)
-                if batched:
-                    try:
-                        return self._decode_batched(audio, language, actual_beam,
-                                                    vad_sensitivity, prompt)
-                    except RuntimeError as e:
-                        # cuBLAS: handled below. Anything else (e.g. out of
-                        # VRAM next to the LLM): the sequential path still works.
-                        if "CUBLAS" in str(e).upper():
-                            raise
-                        logger.warning(f"Batched decode failed, decoding sequentially: {e}")
-                return self._decode(audio, language, actual_beam, vad_filter,
-                                    vad_sensitivity, prompt)
+            language = self._choose_language(audio, languages, allow_other,
+                                             vad_filter, vad_sensitivity)
+            if batched:
+                try:
+                    return self._decode_batched(audio, language, actual_beam,
+                                                vad_sensitivity, prompt, on_segment)
+                except RuntimeError as e:
+                    # cuBLAS: handled below. Anything else (e.g. out of
+                    # VRAM next to the LLM): the sequential path still works.
+                    if "CUBLAS" in str(e).upper():
+                        raise
+                    logger.warning(f"Batched decode failed, decoding sequentially: {e}")
+            return self._decode(audio, language, actual_beam, vad_filter,
+                                vad_sensitivity, prompt, on_segment)
 
         compute_fallback = False
         try:
@@ -426,9 +436,6 @@ class Transcriber:
                 raise
             logger.warning(f"cuBLAS rejected compute_type={self.compute_type}, "
                            f"falling back to float16: {e}")
-            with Transcriber._cache_lock:
-                Transcriber._model_cache.pop(
-                    (self._repo, self.device, self.compute_type), None)
             self._model = None
             self.compute_type = "float16"
             self.load_model()

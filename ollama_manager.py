@@ -94,9 +94,10 @@ _JobObjectExtendedLimitInformation = 9
 _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
 
 
-def _bind_to_job(proc) -> None:
-    """Assign `proc` to a kill-on-close job object owned by this process.
-    Best-effort: on failure ollama simply isn't lifetime-bound (old behavior)."""
+def bind_to_job(proc, label: str = "ollama serve") -> None:
+    """Assign `proc` to a kill-on-close job object owned by this process, so it
+    dies with us however we end. Best-effort: on failure the child simply isn't
+    lifetime-bound."""
     global _job_handle
     try:
         kernel32 = ctypes.windll.kernel32
@@ -118,7 +119,7 @@ def _bind_to_job(proc) -> None:
             logger.warning("AssignProcessToJobObject failed "
                            f"(error {ctypes.GetLastError()})")
         else:
-            logger.info("ollama serve bound to kill-on-close job object")
+            logger.info(f"{label} bound to kill-on-close job object")
     except Exception as e:
         logger.warning(f"Job object binding failed (non-fatal): {e}")
 
@@ -269,7 +270,7 @@ def start() -> bool:
                     stderr=subprocess.DEVNULL,
                     creationflags=subprocess.CREATE_NO_WINDOW,
                 )
-                _bind_to_job(_serve_proc)
+                bind_to_job(_serve_proc)
                 logger.info(f"Spawned ollama serve (pid={_serve_proc.pid})")
             except Exception as e:
                 logger.error(f"Failed to spawn ollama serve: {e}")

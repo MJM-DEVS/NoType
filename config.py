@@ -85,6 +85,7 @@ DEFAULT_CONFIG = {
     "mute_while_dictating": False,   # mute the speakers while recording
     "ai_context": True,              # copies around a dictation into an AI app/terminal go along
     "live_preview_enabled": True,    # rolling transcript in the overlay while recording
+    "rescue_audio": True,            # keep a copy on disk until a dictation came out as text
     "success_toast": False,          # popup after successful dictation (errors always show)
     "gpu_safe_mode": False,          # disable HW acceleration (flaky-driver escape hatch)
     "first_run_complete": False,

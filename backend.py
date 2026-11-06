@@ -8,6 +8,14 @@ import sys
 import os
 import io
 
+# The speech engine process is this same program with one flag. It sets up its
+# own stdio and loads nothing of what follows (see transcribe_worker.py).
+if "--transcribe-worker" in sys.argv:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import transcribe_worker
+    transcribe_worker.main()
+    os._exit(0)
+
 # ── Recover stdio in PyInstaller `console=False` mode ───────────────
 # Built with the Windows GUI subsystem, so PyInstaller's bootloader leaves
 # sys.stdin/stdout/stderr as None. When Electron spawns us with
@@ -41,15 +49,16 @@ import logging.handlers
 import threading
 import time
 import ctypes
-import numpy as np
 
 # Ensure our directory is in the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from audio_recorder import (AudioRecorder, refresh_devices, input_devices,
                             find_input_device, input_device_name)
-from transcriber import Transcriber, normalize_languages
-from text_output import insert_text, copy_selection
+from transcriber import BUILTIN_REPOS, JobCancelled, MODEL_CATALOG, normalize_languages
+from speech_engine import SpeechEngine
+import audio_spool
+from text_output import insert_text, copy_selection, copy_text
 from config import load_config, save_config, CONFIG_DIR
 from postprocess import (clean_transcript, warm_up, warm_up_async,
                          reset_availability_cache, rule_clean, run_command,
@@ -95,6 +104,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger("NoType.Backend")
 
+# A dictation can take a while. If the user was in another window by the time
+# the text is ready, a paste would land there: it goes to the clipboard instead.
+FOCUS_GUARD_SECONDS = 4.0
+
+
+def _foreground_hwnd() -> int:
+    return ctypes.windll.user32.GetForegroundWindow() if sys.platform.startswith("win") else 0
+
 
 def _safe_str(s: str) -> str:
     """Round-trip a string through UTF-8 to drop any stray surrogate/cp1252 bytes
@@ -108,7 +125,18 @@ class Backend:
     def __init__(self):
         self.config = load_config()
         self.recorder = None
-        self.transcriber = None
+        self.engine = SpeechEngine(
+            on_ready=self._on_engine_ready,
+            on_status=lambda text: self.send("status", {"message": text}),
+            on_fallback=lambda: self.send("engine_fallback"),
+            on_failed=lambda text: self.send("error", {"message": f"Model load failed: {text}"}),
+            is_recording=lambda: bool(self.recorder and self.recorder.is_recording),
+        )
+        # Rescue copy of the running dictation, and the ids of all recordings
+        # still being worked on (the rest of the folder are leftovers).
+        self._spool = None
+        self._spools_in_work = set()
+        self._rescue_lock = threading.Lock()
         self._amplitude_thread = None
         self._running = True
         # Dictionary stage 2: fixes the user types right after a dictation
@@ -167,59 +195,23 @@ class Backend:
         except Exception:
             pass
 
-    def init_transcriber(self):
-        """Load Whisper model."""
+    def load_model(self):
+        """Load the configured Whisper model (blocks until that is settled)."""
         model_size = self.config.get("model_size", "small")
         self.send("status", {"message": f"Loading model '{model_size}'..."})
         logger.info(f"Loading model: {model_size}")
+        self.engine.load(model_size, self.config.get("compute_type", "auto"))
 
-        self.transcriber = Transcriber(
-            model_size=model_size,
-            compute_type=self.config.get("compute_type", "auto"),
-        )
-        try:
-            self.transcriber.load_model(
-                on_progress=lambda msg: self.send("status", {"message": msg})
-            )
-            self._inference_selftest()
-            device_info = self.transcriber.get_device_info()
-            self.send("model_ready", {"device": device_info, "model": model_size})
-            logger.info(f"Model loaded on {device_info}")
-        except Exception as e:
-            logger.error(f"Model load failed: {e}")
-            self.send("error", {"message": f"Model load failed: {e}"})
-            # Retry on CPU
-            try:
-                self.transcriber = Transcriber(model_size=model_size, device="cpu")
-                self.transcriber.load_model()
-                self.send("model_ready", {"device": "CPU (int8)", "model": model_size})
-            except Exception as e2:
-                self.send("error", {"message": f"CPU fallback failed: {e2}"})
-
-    def _inference_selftest(self):
-        """Push half a second of audio through the freshly loaded model with
-        VAD off, so the GPU GEMM path actually runs. Some GPUs accept a
-        compute type at LOAD time but reject it at INFERENCE time (cuBLAS
-        NOT_SUPPORTED) – trigger that here, where transcribe()'s float16
-        fallback fixes it invisibly, instead of on the user's first dictation.
-        Runs inside the model-loading background thread."""
-        try:
-            silence = np.zeros(8000, dtype=np.float32)  # 0.5s @ 16kHz
-            result = self.transcriber.transcribe(
-                silence, languages=[("de", 1.0)], allow_other=False,
-                beam_size="1", vad_filter=False,
-            )
-            if result.get("compute_fallback"):
-                self.config["compute_type"] = result["compute_type"]
-                save_config(self.config)
-                logger.info(f"Selftest downgraded compute_type to "
-                            f"{result['compute_type']} (persisted)")
-            else:
-                logger.info("Inference selftest OK")
-        except Exception as e:
-            # Selftest must never block startup – a real inference problem
-            # will surface (and be handled) on the first dictation anyway.
-            logger.warning(f"Inference selftest failed (non-fatal): {e}")
+    def _on_engine_ready(self, info: dict):
+        """A model is loaded and passed its selftest (at the start, after a
+        switch, or after the engine replaced a failed process)."""
+        # A GPU accepted the compute type at load time and rejected it at
+        # inference time: keep the one that works for the next app start.
+        if info["compute_fallback"]:
+            self.config["compute_type"] = info["compute_type"]
+            save_config(self.config)
+            logger.info(f"Persisted compute_type fallback: {info['compute_type']}")
+        self.send("model_ready", {"device": info["device"], "model": info["model"]})
 
     def _amplitude_sender(self):
         """Send amplitude data to Electron while recording."""
@@ -238,8 +230,19 @@ class Backend:
         self.corrections.cancel()
         if self.recorder and self.recorder.is_recording:
             self.recorder.stop()  # stray take – the rescan needs every stream closed
+        self._drop_spool()
         self._cancel_requested = False
-        self.recorder = self._open_recorder()
+        # On disk from the first word on. A spoken command isn't worth keeping:
+        # without its selection it means nothing later.
+        if not command and self.config.get("rescue_audio", True):
+            self._spool = audio_spool.start()
+        if self._spool:
+            self._spools_in_work.add(self._spool.id)
+        try:
+            self.recorder = self._open_recorder(self._spool)
+        except Exception:
+            self._drop_spool()
+            raise
         self._record_start_time = time.time()
         self.send("recording_started")
         # After recording_started, so an Esc can never reach Electron first.
@@ -265,12 +268,22 @@ class Backend:
         if command or self.config.get("cleanup_mode", "fast") == "ai":
             warm_up_async(self._llm_model())
 
-        if (self.config.get("live_preview_enabled", True)
-                and self.transcriber and self.transcriber.is_loaded):
+        # Has a driver reset killed the GPU since the last dictation? Better to
+        # find out now, while the user is talking, than after they finished.
+        self.engine.probe()
+
+        if self.config.get("live_preview_enabled", True):
             threading.Thread(target=self._preview_loop,
                              args=(self.recorder,), daemon=True).start()
 
-    def _open_recorder(self):
+    def _drop_spool(self):
+        """The running recording isn't needed anymore (or never started)."""
+        spool, self._spool = self._spool, None
+        if spool:
+            spool.discard()
+            self._spools_in_work.discard(spool.id)
+
+    def _open_recorder(self, spool=None):
         """A started recorder on the chosen mic, else on the system default.
 
         Rescans first (~35 ms): PortAudio only enumerates devices when it
@@ -281,7 +294,8 @@ class Backend:
         if name:
             index = find_input_device(name)
             if index is not None:
-                rec = AudioRecorder(on_amplitude=self._on_amplitude, device_index=index)
+                rec = AudioRecorder(on_amplitude=self._on_amplitude, device_index=index,
+                                    spool=spool)
                 try:
                     rec.start()
                     self._mic_missing = None
@@ -292,7 +306,7 @@ class Backend:
             if self._mic_missing != name:  # tell once, not on every dictation
                 self._mic_missing = name
                 self.send("mic_fallback", {"name": name})
-        rec = AudioRecorder(on_amplitude=self._on_amplitude)
+        rec = AudioRecorder(on_amplitude=self._on_amplitude, spool=spool)
         rec.start()
         return rec
 
@@ -312,6 +326,7 @@ class Backend:
         if self.recorder and self.recorder.is_recording:
             self.recorder.stop()
             logger.info("Recording CANCELLED")
+        self._drop_spool()
 
     def _end_context(self):
         """Stop collecting copies; returns the session (None if there was none)."""
@@ -333,30 +348,26 @@ class Backend:
         most recent audio (beam 1, cheap) and stream the tail to the overlay.
 
         Throwaway text – the final full-quality pass after stop is what gets
-        inserted. Uses the shared inference lock, so a preview pass in flight
-        can delay the final pass by at most one window (~0.3 s)."""
+        inserted. The engine runs one job at a time, so a preview pass in
+        flight can delay the final pass by at most one window (~0.3 s). While
+        the engine is being replaced there is simply no caption for a moment."""
         # Same language policy as the final pass – otherwise the caption and
         # the inserted text visibly disagree for mixed speech.
         languages, allow_other = self._languages()
+        opts = dict(languages=languages, allow_other=allow_other, beam_size="1")
         while self._running and recorder.is_recording:
             time.sleep(1.0)
             # Recorder may have been stopped/replaced while we slept.
             if not recorder.is_recording or recorder is not self.recorder:
                 break
             # 5 s window: cheaper per pass than 8 s (the caption only shows the
-            # tail anyway) and a shorter worst-case wait for the final pass,
-            # which shares the inference lock with an in-flight preview.
+            # tail anyway) and a shorter worst-case wait for the final pass.
             audio = recorder.get_recent_audio(5.0)
             if len(audio) < 16000:  # need at least 1s to say anything useful
                 continue
-            try:
-                result = self.transcriber.transcribe(
-                    audio, languages=languages, allow_other=allow_other,
-                    beam_size="1",
-                )
-            except Exception as e:
-                logger.warning(f"Preview pass failed, stopping preview: {e}")
-                break
+            result = self.engine.preview(audio, opts)
+            if result is None:
+                continue
             if not recorder.is_recording or recorder is not self.recorder:
                 break
             text = self._spoken_punctuation(result)
@@ -460,22 +471,55 @@ class Backend:
         """Stop recording and transcribe. `command`: the recording is a spoken
         instruction for the selected text (command mode) instead of dictation.
         `agent`: the text goes to the agent URL instead of being typed
-        (`version` is the app version for the User-Agent)."""
-        try:
-            self._stop_and_transcribe(command, agent, version)
-        finally:
-            self.esc_hook.disarm()
+        (`version` is the app version for the User-Agent).
 
-    def _stop_and_transcribe(self, command: bool, agent: bool = False, version: str = ""):
+        The transcription runs on its own thread: it can take minutes on a
+        processor, and this loop has to stay free for Esc and the watchdog."""
         if not self.recorder:
+            self.esc_hook.disarm()
             self.send("error", {"message": "Not recording"})
             return
 
         logger.info("Recording STOP" + (" (command)" if command else " (agent)" if agent else ""))
         audio = self.recorder.stop()
+        spool, self._spool = self._spool, None
         self.muter.restore()
         context = self._end_context()
-        done = {"command": True} if command else {"agent": True} if agent else {}
+        take = {
+            "audio": audio, "context": context, "command": command, "agent": agent,
+            "version": version,
+            "seconds": time.time() - getattr(self, "_record_start_time", 0),
+            "window": _foreground_hwnd(), "stopped_at": time.monotonic(),
+        }
+        threading.Thread(target=self._process_take, args=(take, spool), daemon=True).start()
+
+    def _process_take(self, take: dict, spool):
+        """Whatever happens in here, the audio is safe: its rescue copy only
+        goes away once the dictation came out as text or was cancelled."""
+        done = {"command": True} if take["command"] else {"agent": True} if take["agent"] else {}
+        keep = False
+        try:
+            if spool:
+                spool.close()
+            self._stop_and_transcribe(take, done)
+        except JobCancelled:
+            self._cancelled(done)
+        except Exception as e:
+            logger.error(f"Transcription error: {e}", exc_info=True)
+            keep = bool(spool) and spool.seconds >= audio_spool.MIN_SECONDS
+            self.send("transcription_failed", {"saved": spool.id if keep else None, **done})
+        finally:
+            self.esc_hook.disarm()
+            if spool:
+                if not keep:
+                    spool.discard()
+                self._spools_in_work.discard(spool.id)
+            if keep:
+                self._send_rescue_list()
+
+    def _stop_and_transcribe(self, take: dict, done: dict):
+        audio, context = take["audio"], take["context"]
+        command, agent = take["command"], take["agent"]
 
         if self._cancelled(done):
             return
@@ -487,119 +531,170 @@ class Backend:
 
         self.send("transcribing")
 
-        try:
-            # Check min recording length first (before expensive transcription)
-            duration = time.time() - getattr(self, '_record_start_time', 0)
-            if duration < 0.5:
-                logger.info(f"Recording too short ({duration:.1f}s), discarding")
-                self.send("transcription_done", {"text": "", "empty": True, "reason": "too_short", **done})
-                return
+        # Check min recording length first (before expensive transcription)
+        if take["seconds"] < 0.5:
+            logger.info(f"Recording too short ({take['seconds']:.1f}s), discarding")
+            self.send("transcription_done", {"text": "", "empty": True, "reason": "too_short", **done})
+            return
 
-            # Command mode: grab the selection right away, while the target
-            # app still has focus and nothing has moved.
-            selection = ""
-            if command:
-                with self.context.own_writes():
-                    selection = copy_selection()
+        # Command mode: grab the selection right away, while the target
+        # app still has focus and nothing has moved.
+        selection = ""
+        if command:
+            with self.context.own_writes():
+                selection = copy_selection()
 
-            languages, allow_other = self._languages()
-            beam_size = self.config.get("beam_size", "auto")
-            vad_sensitivity = self.config.get("vad_sensitivity", 300)
-            entries = self.config.get("dictionary") or []
-            # Learned spellings join the vocabulary as a hint for Whisper.
-            initial_prompt = dictionary.whisper_prompt(
-                self.config.get("initial_prompt", ""), entries)
+        entries = self.config.get("dictionary") or []
+        opts = self._transcribe_opts(entries)
+        result = self.engine.transcribe(
+            audio, opts,
+            on_status=lambda stage, percent: self.send(
+                "transcribe_status", {"stage": stage, "percent": percent}),
+            should_abort=lambda: self._cancel_requested,
+        )
 
-            if not self.transcriber or not self.transcriber.is_loaded:
-                self.send("error", {"message": "Model not loaded yet"})
-                return
+        text = result["text"]
+        stats = {
+            "beam": result["beam"],
+            "compute_type": result["compute_type"],
+            "duration": result["duration"],
+        }
 
-            result = self.transcriber.transcribe(
-                audio, languages=languages, allow_other=allow_other,
-                beam_size=beam_size, vad_sensitivity=vad_sensitivity,
-                initial_prompt=initial_prompt,
-            )
+        # The transcriber downgraded an unsupported compute type mid-call
+        # (cuBLAS refusal) – persist the working one so the next app start
+        # doesn't repeat the failed load+retry cycle.
+        if result.get("compute_fallback"):
+            self.config["compute_type"] = result["compute_type"]
+            save_config(self.config)
+            logger.info(f"Persisted compute_type fallback: {result['compute_type']}")
 
-            text = result["text"]
-            stats = {
-                "beam": result["beam"],
-                "compute_type": result["compute_type"],
-                "duration": result["duration"],
-            }
+        if self._cancelled({**done, **stats}):
+            return
 
-            # The transcriber downgraded an unsupported compute type mid-call
-            # (cuBLAS refusal) – persist the working one so the next app start
-            # doesn't repeat the failed load+retry cycle.
-            if result.get("compute_fallback"):
-                self.config["compute_type"] = result["compute_type"]
-                save_config(self.config)
-                logger.info(f"Persisted compute_type fallback: {result['compute_type']}")
+        self.send("transcribe_status", {"stage": "cleanup"})
 
-            if self._cancelled({**done, **stats}):
-                return
+        if command:
+            self._run_command(text, selection, entries, stats)
+            return
 
-            if command:
-                self._run_command(text, selection, entries, stats)
-                return
+        if text:
+            text = self._polish(result, entries, stats)
 
+        if self._cancelled({**done, **stats}):
+            return
+        self.esc_hook.disarm()  # from here on Esc belongs to the app again
+
+        if agent:
             if text:
-                # "Fragezeichen", "neue Zeile" … → characters, first: the
-                # dictionary and the LLM then see the finished punctuation.
-                text = self._spoken_punctuation(result)
-                # Dictionary before the cleanup (so the LLM already sees the
-                # right words) and after it (the LLM may re-split or
-                # re-capitalize a term). Idempotent, ~1 ms per pass.
-                text = dictionary.apply(text, entries)
-                cleaned = clean_transcript(
-                    text,
-                    mode=self.config.get("cleanup_mode", "fast"),
-                    llm_model=self.config.get("llm_model", DEFAULT_LLM_MODEL),
-                    llm_min_words=self.config.get("llm_min_words", 8),
-                    terms=dictionary.hint_terms(
-                        self.config.get("initial_prompt", ""), entries),
-                )
-                text = dictionary.apply(cleaned["text"] or text, entries)
-                stats["cleanup"] = cleaned["engine"]
-                stats["cleanup_ms"] = cleaned["ms"]
-
-            if self._cancelled({**done, **stats}):
-                return
-            self.esc_hook.disarm()  # from here on Esc belongs to the app again
-
-            if agent:
-                if text:
-                    self._send_to_agent(text, result.get("language") or languages[0][0],
-                                        version)
-                else:
-                    logger.info("No speech detected")
-                    self.send("transcription_done", {"text": "", "empty": True, **done, **stats})
-                return
-
-            if text:
-                logger.info(f"Transcribed: {len(text)} chars")
-                method = self.config.get("insert_method", "auto")
-                items = self.context.finish(context) if context else []
-                with self.context.own_writes():
-                    if items:
-                        inserted = insert_with_context(text, items, context.target, method)
-                    else:
-                        inserted = insert_text(text, method=method)
-                if items:
-                    logger.info(f"Inserted with {len(items)} attachment(s) into {context.target.kind}")
-                    if inserted:
-                        self.context.consume(items)
-                    stats["attachments"] = len(items)
-                if inserted and self.config.get("learn_corrections", True):
-                    self.corrections.watch(
-                        text, known={(e.get("from"), e.get("to")) for e in entries})
-                self.send("transcription_done", {"text": text, **stats})
+                self._send_to_agent(text, result.get("language") or opts["languages"][0][0],
+                                    take["version"])
             else:
                 logger.info("No speech detected")
-                self.send("transcription_done", {"text": "", "empty": True, **stats})
+                self.send("transcription_done", {"text": "", "empty": True, **done, **stats})
+            return
 
+        if text:
+            logger.info(f"Transcribed: {len(text)} chars")
+            if (time.monotonic() - take["stopped_at"] > FOCUS_GUARD_SECONDS
+                    and _foreground_hwnd() != take["window"]):
+                with self.context.own_writes():
+                    copied = copy_text(text)
+                logger.info(f"Window changed while transcribing, not pasting (clipboard: {copied})")
+                self.send("transcription_done", {"text": text, "clipboard": True, **stats})
+                return
+            method = self.config.get("insert_method", "auto")
+            items = self.context.finish(context) if context else []
+            with self.context.own_writes():
+                if items:
+                    inserted = insert_with_context(text, items, context.target, method)
+                else:
+                    inserted = insert_text(text, method=method)
+            if items:
+                logger.info(f"Inserted with {len(items)} attachment(s) into {context.target.kind}")
+                if inserted:
+                    self.context.consume(items)
+                stats["attachments"] = len(items)
+            if inserted and self.config.get("learn_corrections", True):
+                self.corrections.watch(
+                    text, known={(e.get("from"), e.get("to")) for e in entries})
+            self.send("transcription_done", {"text": text, **stats})
+        else:
+            logger.info("No speech detected")
+            self.send("transcription_done", {"text": "", "empty": True, **stats})
+
+    def _transcribe_opts(self, entries) -> dict:
+        """Everything the final pass needs from the settings."""
+        languages, allow_other = self._languages()
+        return dict(
+            languages=languages, allow_other=allow_other,
+            beam_size=self.config.get("beam_size", "auto"),
+            vad_sensitivity=self.config.get("vad_sensitivity", 300),
+            # Learned spellings join the vocabulary as a hint for Whisper.
+            initial_prompt=dictionary.whisper_prompt(self.config.get("initial_prompt", ""), entries),
+        )
+
+    def _polish(self, result: dict, entries, stats: dict) -> str:
+        """Transcript → the text the user gets."""
+        # "Fragezeichen", "neue Zeile" … → characters, first: the
+        # dictionary and the LLM then see the finished punctuation.
+        text = self._spoken_punctuation(result)
+        # Dictionary before the cleanup (so the LLM already sees the
+        # right words) and after it (the LLM may re-split or
+        # re-capitalize a term). Idempotent, ~1 ms per pass.
+        text = dictionary.apply(text, entries)
+        cleaned = clean_transcript(
+            text,
+            mode=self.config.get("cleanup_mode", "fast"),
+            llm_model=self.config.get("llm_model", DEFAULT_LLM_MODEL),
+            llm_min_words=self.config.get("llm_min_words", 8),
+            terms=dictionary.hint_terms(self.config.get("initial_prompt", ""), entries),
+        )
+        stats["cleanup"] = cleaned["engine"]
+        stats["cleanup_ms"] = cleaned["ms"]
+        return dictionary.apply(cleaned["text"] or text, entries)
+
+    # ── Saved recordings ─────────────────────────────────────────────
+    def _send_rescue_list(self, startup: bool = False):
+        self.send("rescue_available", {
+            "items": audio_spool.list_items(self._spools_in_work),
+            "dir": audio_spool.RESCUE_DIR,
+            "startup": startup,
+        })
+
+    def handle_rescue_run(self, item_id: str):
+        """Transcribe a saved recording again. It ends on the clipboard and in
+        the history, never in whatever window happens to be in front."""
+        if not self._rescue_lock.acquire(blocking=False):
+            return  # one at a time
+        threading.Thread(target=self._rescue, args=(item_id,), daemon=True).start()
+
+    def _rescue(self, item_id: str):
+        try:
+            audio = audio_spool.load(item_id)
+            logger.info(f"Transcribing a saved recording ({len(audio) / 16000:.0f}s)")
+            entries = self.config.get("dictionary") or []
+            result = self.engine.transcribe(audio, self._transcribe_opts(entries))
+            text = self._polish(result, entries, {}) if result["text"] else ""
+            if text:
+                with self.context.own_writes():
+                    copy_text(text)
+            audio_spool.delete(item_id)
+            logger.info(f"Saved recording transcribed: {len(text)} chars")
+            self.send("rescue_done", {"id": item_id, "text": _safe_str(text)})
         except Exception as e:
-            logger.error(f"Transcription error: {e}", exc_info=True)
-            self.send("error", {"message": f"Transcription failed: {e}"})
+            logger.error(f"Saved recording failed: {e}", exc_info=True)
+            self.send("rescue_failed", {"id": item_id})
+        finally:
+            self._rescue_lock.release()
+            self._send_rescue_list()
+
+    def handle_rescue_delete(self, item_id=None):
+        """One saved recording, or all of them."""
+        if item_id:
+            audio_spool.delete(item_id)
+        else:
+            audio_spool.clear(self._spools_in_work)
+        self._send_rescue_list()
 
     def _languages(self):
         """The languages the user speaks as [(code, share)] plus whether
@@ -744,6 +839,7 @@ class Backend:
         old_model = self.config.get("model_size")
         old_cleanup = self.config.get("cleanup_mode", "fast")
         old_llm = self._llm_model()
+        old_rescue = self.config.get("rescue_audio", True)
         self.config.update(new_config)
         save_config(self.config)
 
@@ -757,7 +853,11 @@ class Backend:
 
         # Reload model if size changed
         if new_config.get("model_size") and new_config["model_size"] != old_model:
-            threading.Thread(target=self.init_transcriber, daemon=True).start()
+            threading.Thread(target=self.load_model, daemon=True).start()
+
+        # No more copies on disk means none of the old ones either.
+        if old_rescue and not self.config.get("rescue_audio", True):
+            self.handle_rescue_delete()
 
         # AI mode switched on → bring Ollama up and preload the LLM.
         # Switched off → stop our portable server to free RAM/VRAM ("pause").
@@ -811,11 +911,6 @@ class Backend:
         """Catalog + per-model 'already downloaded' state (from the Hugging
         Face cache) + hardware, so the UI can badge cards as 'offline ready'
         and recommend a model that fits the GPU."""
-        from transcriber import MODEL_CATALOG
-        try:
-            from faster_whisper.utils import _MODELS as fw_repos
-        except Exception:
-            fw_repos = {}
         hub = os.environ.get("HF_HUB_CACHE") or os.path.join(
             os.environ.get("HF_HOME") or os.path.join(os.path.expanduser("~"), ".cache", "huggingface"),
             "hub",
@@ -824,7 +919,7 @@ class Backend:
         for mid, entry in MODEL_CATALOG.items():
             repo = entry["repo"]
             if "/" not in repo:
-                repo = fw_repos.get(repo, repo)
+                repo = BUILTIN_REPOS.get(repo, repo)
             folder = os.path.join(hub, "models--" + repo.replace("/", "--"))
             downloaded, size_mb = False, None
             try:
@@ -846,16 +941,8 @@ class Backend:
                 pass
             models.append({"id": mid, "downloaded": downloaded, "size_mb": size_mb})
 
-        device = "cpu"
-        if self.transcriber is not None:
-            device = self.transcriber.device
-        else:
-            try:
-                import ctranslate2
-                if ctranslate2.get_cuda_device_count() > 0:
-                    device = "cuda"
-            except Exception:
-                pass
+        # Before the first load the engine can't know yet.
+        device = self.engine.device or ("cuda" if self._gpu_info() else "cpu")
         self.send("models", {"device": device, "gpu": self._gpu_info(), "models": models})
 
     def run(self):
@@ -868,8 +955,12 @@ class Backend:
             return
         self.send("backend_ready")
 
+        # A recording the last run didn't get to finish, and old ones out.
+        audio_spool.purge()
+        self._send_rescue_list(startup=True)
+
         # Load model in background
-        threading.Thread(target=self.init_transcriber, daemon=True).start()
+        threading.Thread(target=self.load_model, daemon=True).start()
 
         # AI cleanup enabled → start Ollama (if installed) and preload the
         # LLM in the background so the first dictation pays no cold-start.
@@ -898,6 +989,10 @@ class Backend:
                         agent=True, version=str((msg.get("data") or {}).get("version") or ""))
                 elif cmd == "agent_test":
                     self.handle_agent_test(msg.get("data") or {})
+                elif cmd == "rescue_run":
+                    self.handle_rescue_run((msg.get("data") or {}).get("id"))
+                elif cmd == "rescue_delete":
+                    self.handle_rescue_delete((msg.get("data") or {}).get("id"))
                 elif cmd == "cancel_recording":
                     self.handle_cancel_recording()
                 elif cmd == "pause_recording":
@@ -939,6 +1034,7 @@ class Backend:
                     self.esc_hook.disarm()
                     self.muter.shutdown()
                     ollama_manager.stop()  # don't orphan our serve child
+                    self.engine.stop()
                     break
                 else:
                     logger.warning(f"Unknown command: {cmd}")
@@ -954,6 +1050,7 @@ class Backend:
         self.esc_hook.disarm()
         self.muter.shutdown()
         ollama_manager.stop()
+        self.engine.stop()
         logger.info("Backend stopped.")
 
 
