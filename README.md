@@ -122,7 +122,7 @@ The local AI rewrites your selection in place. With nothing selected, it writes 
 Dictating a prompt into ChatGPT or Claude Code? Copy what you mean while you speak. Press <kbd>Win</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd> for a screenshot, or select an error message and press <kbd>Ctrl</kbd> + <kbd>C</kbd>. Each copy appears as a small chip above the overlay and goes along with your sentence:
 
 - **ChatGPT, Claude, Gemini and other AI apps and sites** get images pasted in and copied text quoted below your sentence.
-- **Terminals** such as Claude Code or Codex get the file path in front of your sentence, so the agent can open the screenshot itself. Code editors like VS Code or Cursor get file paths as well.
+- **Terminals** such as Claude Code or Codex get the file path in front of your sentence, so the agent can open the screenshot itself. Short one-line text goes in quoted after your sentence; longer text, or text with a line break, a double quote or a trailing backslash, is saved as a `.txt` file and passed by path the same way. Code editors like VS Code or Cursor get file paths as well.
 - **Any other browser tab** gets images pasted in and text quoted, like an AI site.
 
 Anything you copied up to a minute before you started counts too, so with hold-to-talk you can take the screenshot first and then speak. In AI apps and terminals this goes for text and images, everywhere else for images only. Up to five copies go along per dictation, three of them images.
@@ -186,7 +186,7 @@ User-Agent: NoType/<version>
 Authorization: Bearer <token>
 ```
 
-The `Authorization` header is only sent when you entered a token.
+The `Authorization` header is only sent when you entered a token. With a token, use an `https://` URL, or plain `http://` only to this PC or your local network (`localhost`, `192.168.x.x`, `10.x.x.x`, `nas.local`, a name without dots). NoType refuses to send a token over plain `http://` to any other host.
 
 ```json
 {
@@ -308,7 +308,7 @@ Everything else stays in `%APPDATA%\NoType\` on your PC:
 | Dictation history & stats | `history.json`, the last 10 entries; switch saving off or clear it under **Settings → Dictionary** (the stats stay) |
 | Diagnostic log | `notype.log`, rotating; timings and errors only, never your dictated text |
 | AI engine & model | the `ollama\` subfolder |
-| Screenshots and copied text for AI apps | the `attachments\` subfolder, each file deleted after 24 hours |
+| Screenshots and copied text for AI apps | the `attachments\` subfolder, each file deleted after roughly 24 hours |
 | Safety copy of the running dictation | the `rescue\` subfolder as a WAV file, deleted as soon as the text is in. A recording that could not be transcribed stays until you transcribe or delete it, for 7 days at most. Switch it off under **Settings → System** |
 
 **Uninstalling removes this whole folder**, NoType's autostart entry and its update cache in `%LOCALAPPDATA%\notype-updater\` (updates keep all three). The speech models are the exception: they live in the shared Hugging Face cache at `%USERPROFILE%\.cache\huggingface\hub\`, which other apps may use too, so the uninstaller leaves it alone. To free the space, delete the folders of the models you downloaded in NoType there; their names contain `whisper`, for example `models--mobiuslabsgmbh--faster-whisper-large-v3-turbo`. The portable version has no uninstaller: delete its folder and `%APPDATA%\NoType\` by hand.
