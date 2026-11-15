@@ -77,15 +77,17 @@ class SpectrumAnalyzer:
 
 
 class AudioRecorder:
-    def __init__(self, on_amplitude=None, device_index=None):
+    def __init__(self, on_amplitude=None, device_index=None, spool=None):
         """
         Args:
             on_amplitude: Optional callback(float, list[float]) called for each
                           audio block with the RMS amplitude 0.0-1.0 and
                           N_BANDS spectrum levels 0.0-1.0 (overlay visualizer).
             device_index: Optional int for specific input device. None = system default.
+            spool: Optional audio_spool.SpoolWriter, gets every recorded block.
         """
         self._on_amplitude = on_amplitude
+        self._spool = spool
         self._analyzer = SpectrumAnalyzer()
         self._device_index = device_index
         self._frames = []
@@ -107,6 +109,8 @@ class AudioRecorder:
         with self._lock:
             if self._recording and not self._paused:
                 self._frames.append(indata.copy())
+                if self._spool:
+                    self._spool.write(indata)
 
         # Level + spectrum for the overlay visualizer
         if self._on_amplitude and self._recording and not self._paused:

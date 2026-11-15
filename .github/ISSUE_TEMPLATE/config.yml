@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security problem
+    url: https://github.com/MJM-DEVS/NoType/blob/main/SECURITY.md
+    about: Please do not open a public issue; read how to report it privately.
+  - name: Download and setup help
+    url: https://github.com/MJM-DEVS/NoType#troubleshooting
+    about: Answers to common problems (shortcut does nothing, wrong language, slow transcription).
