@@ -7,7 +7,7 @@
     "start": "electron .",
     "build": "electron-builder --win --x64",
     "build:dir": "electron-builder --win --x64 --dir",
-    "check": "node --check main.js && node --check preload.js && node --check model-catalog.js && node --check keycaps.js && node --check sprites.js && node --check lib/settings-file.js && node --check lib/backend-line.js && node --check lib/guards.js && node --check lib/phrase-key.js && node --check lib/model-labels.js && node --check lib/history-file.js",
+    "check": "node --check main.js && node --check preload.js && node --check model-catalog.js && node --check keycaps.js && node --check sprites.js && node --check lib/settings-file.js && node --check lib/backend-line.js && node --check lib/guards.js && node --check lib/phrase-key.js && node --check lib/model-labels.js && node --check lib/history-file.js && node --check lib/first-update-check.js",
     "test": "node --test"
   },
   "author": "Mijo Jurisic (MJM-DEVS)",

@@ -91,7 +91,7 @@ Paste the `CHANGELOG.md` section as release notes.
 
 ## How installed copies find the update
 
-The installer ships `resources\app-update.yml`, which electron-builder writes from the `publish` block. 20 seconds after start and every 6 hours (unless switched off), `electron-updater` asks GitHub for the newest **non-pre-release** release of `MJM-DEVS/NoType` and reads its `latest.yml`. If the version there is higher, NoType offers it; after a click it downloads the file named in `latest.yml`, checks its SHA-512, runs it silently and starts NoType again.
+The installer ships `resources\app-update.yml`, which electron-builder writes from the `publish` block. 20 seconds after start (on the first run, after the setup guide) and every 6 hours (unless switched off), `electron-updater` asks GitHub for the newest **non-pre-release** release of `MJM-DEVS/NoType` and reads its `latest.yml`. If the version there is higher, NoType offers it; after a click it downloads the file named in `latest.yml`, checks its SHA-512, runs it silently and starts NoType again.
 
 So:
 

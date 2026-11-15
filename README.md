@@ -5,7 +5,7 @@
 **Hold a key. Say what you're thinking. Let go. Your words appear wherever your cursor is.**
 
 Free voice dictation for Windows 11 that runs entirely on your own PC.<br/>
-No cloud, no subscription, no account. What you say stays on your computer, unless you send it somewhere yourself.
+No cloud, no subscription, no account, no telemetry. What you say stays on your computer, unless you send it somewhere yourself.
 
 <br/>
 
@@ -16,6 +16,7 @@ No cloud, no subscription, no account. What you say stays on your computer, unle
 [![Latest release](https://img.shields.io/github/v/release/MJM-DEVS/NoType?label=latest&color=00d4aa)](https://github.com/MJM-DEVS/NoType/releases/latest)
 ![Windows 11](https://img.shields.io/badge/Windows%2011-x64-0078D6?logo=windows11&logoColor=white)
 ![Dictation runs locally](https://img.shields.io/badge/dictation-runs%20locally-00d4aa)
+![No telemetry](https://img.shields.io/badge/telemetry-none-00d4aa)
 ![99 languages](https://img.shields.io/badge/languages-99-7f7bff)
 [![License](https://img.shields.io/badge/license-MIT%20%2B%20Commons%20Clause-blue)](#license)
 [![GitHub stars](https://img.shields.io/github/stars/MJM-DEVS/NoType?style=social)](https://github.com/MJM-DEVS/NoType/stargazers)
@@ -292,13 +293,20 @@ Canary 1B (v2 and Flash) was slower and less accurate in our tests and has the s
 
 ## Your privacy
 
-Dictation, AI cleanup and command mode are **fully offline**. There is no telemetry of any kind.
+Dictation, AI cleanup and command mode are **fully offline**. Your audio is never sent anywhere, and there is no telemetry of any kind. Your dictated text stays on your PC too, unless you set up the agent hotkey to send it to a URL of your choice.
 
 NoType goes online for these things only:
 
-- **The update check.** When it starts and every 6 hours, NoType asks GitHub whether a newer version is out. The request carries no personal data; like any website, GitHub sees your IP address. Switch it off under **Settings → General**; the tray menu still lets you check by hand.
-- **Downloads you start yourself:** the speech model you choose, the optional AI engine and its updates, and a new NoType version once you click **Update now**.
-- **The agent hotkey, if you set it up.** It is off by default. Once it is on, each agent dictation goes to the URL you entered and nowhere else: the text, its language, the time and, unless you switch it off, the name and title of the window in front ([format](#agent-hotkey-send-your-dictation-to-a-url)). What happens there is up to whoever runs that URL.
+| Connection | When | To | How to avoid it |
+|---|---|---|---|
+| **Update check** | 20 seconds after start (on the first run, 20 seconds after the setup guide) and every 6 hours | GitHub | Switch off **Check for updates** in the setup guide or under **Settings → General**. The tray menu still lets you check by hand. |
+| **NoType update** | Only after you click **Update now** | GitHub | Don't click it. The portable version opens the download page in your browser instead. |
+| **Speech model** | The first time a model that is not on your PC yet is loaded: on first launch the preselected one, later any model you switch to | Hugging Face | Can't be skipped: NoType needs a model. Once downloaded, a model loads without contacting Hugging Face. |
+| **AI engine** | Only when you click **Install** or **Update** under **Settings → Text Cleanup** | GitHub (Ollama releases) | Leave AI cleanup off and don't install it. |
+| **AI model** | Only when you click **Install** there, for the model you picked | Ollama's model library | As above. |
+| **Agent hotkey** | Each agent dictation and each **Send test** | The URL you entered | Off by default. Once on, it sends the text, its language, the time and, unless you switch it off, the name and title of the window in front ([format](#agent-hotkey-send-your-dictation-to-a-url)). What happens there is up to whoever runs that URL. |
+
+None of these requests carry personal data except the agent hotkey; like any website, each server sees your IP address. The AI engine runs on your PC and NoType talks to it only at `127.0.0.1`, which never leaves your computer.
 
 Everything else stays in `%APPDATA%\NoType\` on your PC:
 
