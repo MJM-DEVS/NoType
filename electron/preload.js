@@ -22,6 +22,7 @@ contextBridge.exposeInMainWorld('notype', {
   onOllamaStatus: (callback) => ipcRenderer.on('ollama-status', (_, data) => callback(data)),
   onOllamaProgress: (callback) => ipcRenderer.on('ollama-progress', (_, data) => callback(data)),
   onPreviewText: (callback) => ipcRenderer.on('preview-text', (_, text) => callback(text)),
+  onTranscribeStatus: (callback) => ipcRenderer.on('transcribe-status', (_, data) => callback(data)),
   onPreviewEnabled: (callback) => ipcRenderer.on('preview-enabled', (_, enabled) => callback(enabled)),
   onAppLang: (callback) => ipcRenderer.on('app-lang', (_, lang) => callback(lang)),
   onModels: (callback) => ipcRenderer.on('models', (_, data) => callback(data)),

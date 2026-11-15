@@ -485,6 +485,11 @@ const SAGE_PAL = {
   pop: '#6f8a43', blob: '#8fb069', eye: '#c3dc96', echo: '#93ab78',
   fire: ['#fff6dc', '#f3d98f', '#e0a443', '#c06a35', '#8c4a32'],
 };
+// What a long transcription is doing right now. Short ones never show this.
+const I18N_STAGE = {
+  de: { working: 'Transkribiere…', restarting: 'Spracherkennung startet…' },
+  en: { working: 'Transcribing…',  restarting: 'Speech engine starting…' },
+};
 // Surface and ink per world (mirrors the CSS tokens).
 const WORLDS = { dark: { surf: '#000000', ink: '#ffffff' }, sage: { surf: '#f5f2e9', ink: '#2b3123' } };
 const I18N = {
@@ -834,9 +839,10 @@ const IS = { w: 40, h: 40, vw: 0, vh: 0, COMPACT_W: 176, H1: 40, MAX_W: 600, TEX
 const isMeasure = document.createElement('canvas').getContext('2d');
 function islandTarget() {
   if (S.state === 'idle' || S.leaving) return [40, 40];
-  if (!S.hasText) return [IS.COMPACT_W, IS.H1];
+  if (!S.hasText && !S.stageText) return [IS.COMPACT_W, IS.H1];
   isMeasure.font = "14.5px 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif";
-  const tw = isMeasure.measureText(S.text).width;
+  // The canvas measures a little narrower than the page renders.
+  const tw = isMeasure.measureText(S.text).width * 1.08;
   if (tw <= IS.TEXT_MAX) return [Math.max(IS.COMPACT_W + 60, 56 + tw + 72), 52];
   return [IS.MAX_W, 72];
 }
@@ -856,9 +862,10 @@ function renderIsland(dt, t) {
   const free = S.pos === 'center' ? (116 - IS.h) / 2 : 116 - 18 - IS.h;
   const pull = Math.max(0, free - 8).toFixed(1) + 'px';
   if (pull !== IS.pull) { IS.pull = pull; document.body.style.setProperty('--chip-pull', pull); }
-  const open = clamp01((IS.w - IS.COMPACT_W - 30) / 90);
+  // Fully visible once it reaches its width, also when a short text never gets far.
+  const open = clamp01((IS.w - IS.COMPACT_W - 30) / Math.min(90, Math.max(30, tw - IS.COMPACT_W - 30)));
   const isText = $('isText');
-  isText.style.opacity = (S.hasText ? open : 0).toFixed(3);
+  isText.style.opacity = (S.hasText || S.stageText ? open : 0).toFixed(3);
   if (isText.classList.contains('one') !== (th < 60)) isText.classList.toggle('one', th < 60);
   const inner = clamp01((IS.w - 60) / 70);                  // glyph/timer fade in as it opens
   const glyph = $('isGlyph'), time = shape.querySelector('.is-time');
@@ -1442,14 +1449,16 @@ const RENDER = {
 // ── Text + timer ──────────────────────────────────────────────────
 // kind: 'live' (transcript), 'final' (inserted text), 'status' (placeholder)
 function setText(text, kind) {
+  const status = kind === 'status' || kind === 'stage';
   S.text = text;
-  S.hasText = kind !== 'status' && !!text;
+  S.hasText = !status && !!text;
+  S.stageText = kind === 'stage';         // a status worth reading: the island opens for it
   for (const box of document.querySelectorAll('.txt, .is-text')) {
     const span = box.firstElementChild;
     span.textContent = text;
     const island = box.classList.contains('is-text');
     // status: shimmer while working, dim on the matrix (its header already animates)
-    span.className = kind !== 'status' || S.state === 'done' ? ''
+    span.className = !status || S.state === 'done' ? ''
       : island || box.closest('.s-matrix') ? 'dim' : 'shimmer';
   }
   requestAnimationFrame(updateClip);
@@ -1497,6 +1506,7 @@ function recordingStarted(opts) {
   document.body.classList.remove('leaving', 'busy', 'cancelled');
   S.leaving = false;
   S.recAt = now(); S.recEnd = 0;
+  S.stageText = false;
   bandsIn.fill(0); bandsSm.fill(0); levelIn = levelSm = 0;
   IS.w = IS.h = 40; IS.vw = IS.vh = 0;
   $('chips').replaceChildren();
@@ -1510,6 +1520,16 @@ function recordingStopped() {
   setState('processing');
   if (!S.hasText) setText(L().proc, 'status');
   if (S.sounds && !DEMO) chime('stop');
+}
+function transcribeStatus(data) {
+  if (!data || S.state !== 'processing') return;
+  if (data.stage === 'cleanup') {         // back to what this mode says while working
+    if (S.stageText) setText(L().proc, 'status');
+    return;
+  }
+  const stage = (I18N_STAGE[S.lang] || I18N_STAGE.de)[data.stage];
+  if (!stage) return;
+  setText(data.stage === 'working' && data.percent > 0 ? `${stage} ${data.percent} %` : stage, 'stage');
 }
 function transcriptionDone(data) {
   if (!data || !data.ok) return;          // error: main.js hides us right away
@@ -1743,6 +1763,7 @@ if (!DEMO) {
   nt.onAmplitude(onAudio);
   nt.onRecordingStarted(recordingStarted);
   nt.onRecordingStopped(recordingStopped);
+  if (nt.onTranscribeStatus) nt.onTranscribeStatus(transcribeStatus);
   if (nt.onTranscriptionDone) nt.onTranscriptionDone(transcriptionDone);
   if (nt.onOverlayLeaving) nt.onOverlayLeaving(leaving);
   if (nt.onRecordingCancelled) nt.onRecordingCancelled(recordingCancelled);

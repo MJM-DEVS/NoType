@@ -1,0 +1,5 @@
+# Tests and lint only (CI runs on Linux; the Windows-only packages from
+# requirements.txt are not needed for the tests).
+pytest>=8.3,<10
+ruff~=0.17.3
+numpy>=1.26

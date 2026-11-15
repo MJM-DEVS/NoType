@@ -309,6 +309,7 @@ Everything else stays in `%APPDATA%\NoType\` on your PC:
 | Diagnostic log | `notype.log`, rotating; timings and errors only, never your dictated text |
 | AI engine & model | the `ollama\` subfolder |
 | Screenshots and copied text for AI apps | the `attachments\` subfolder, each file deleted after 24 hours |
+| Safety copy of the running dictation | the `rescue\` subfolder as a WAV file, deleted as soon as the text is in. A recording that could not be transcribed stays until you transcribe or delete it, for 7 days at most. Switch it off under **Settings → System** |
 
 **Uninstalling removes this whole folder**, NoType's autostart entry and its update cache in `%LOCALAPPDATA%\notype-updater\` (updates keep all three). The speech models are the exception: they live in the shared Hugging Face cache at `%USERPROFILE%\.cache\huggingface\hub\`, which other apps may use too, so the uninstaller leaves it alone. To free the space, delete the folders of the models you downloaded in NoType there; their names contain `whisper`, for example `models--mobiuslabsgmbh--faster-whisper-large-v3-turbo`. The portable version has no uninstaller: delete its folder and `%APPDATA%\NoType\` by hand.
 

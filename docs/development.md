@@ -23,16 +23,24 @@ flowchart LR
 
     subgraph Python["Python backend (backend.py)"]
         AR["AudioRecorder (sounddevice, 16 kHz)"]
-        WT["Transcriber (faster-whisper / CUDA)"]
+        AS["Audio spool (recording on disk)"]
+        SE["Speech engine (watches and replaces the Whisper process)"]
         PP["Post-processing (rules + dictionary + local LLM)"]
         TX["Text output (SendInput)"]
         CW["Correction watch (UI Automation)"]
     end
 
+    subgraph Worker["Whisper process (backend.exe --transcribe-worker)"]
+        WT["Transcriber (faster-whisper / CUDA)"]
+    end
+
     HK -- "start / stop" --> Electron
     Electron <== "JSON IPC (stdin/stdout)" ==> Python
     AR -- "spectrum + preview" --> OV
-    WT --> PP --> TX --> CW
+    AR --> AS
+    AR --> SE
+    SE <== "audio + results" ==> WT
+    SE --> PP --> TX --> CW
 ```
 
 ## Build from source (Windows)
@@ -66,7 +74,7 @@ npm run build:dir
 ```
 
 - `requirements-build.txt` adds PyInstaller and `nvidia-cublas-cu12`. `backend.spec` copies `cublas64_12.dll` and `cublasLt64_12.dll` from that package next to the CTranslate2 DLLs and stops with an error when they are missing, because without them the GPU path silently falls back to the CPU on most PCs.
-- On a PC without a CUDA 12 toolkit on `PATH` the bundled DLLs are the only cuBLAS; if loading the model on the GPU fails anyway, the backend retries on the CPU (`init_transcriber` in `backend.py`) and reports `CPU (int8)` as the device.
+- On a PC without a CUDA 12 toolkit on `PATH` the bundled DLLs are the only cuBLAS; if loading the model on the GPU fails anyway, the speech engine retries on the CPU (`_boot` in `speech_engine.py`) and reports `CPU (int8)` as the device.
 - `backend.spec` also generates the comtypes wrappers for UI Automation at build time, so the build has to run on Windows.
 - Release steps (version bump, portable ZIP, GitHub release) are in [RELEASING.md](../RELEASING.md).
 
@@ -102,6 +110,9 @@ Every key in `settings.json` is listed in [configuration.md](configuration.md). 
 ```
 NoType/
 ├── backend.py             # IPC loop, recording, transcription orchestration
+├── speech_engine.py       # starts, watches and replaces the Whisper process, retries a failed dictation
+├── transcribe_worker.py   # the Whisper process itself (backend.exe --transcribe-worker)
+├── audio_spool.py         # writes each recording to disk while it is spoken, saved recordings
 ├── audio_recorder.py      # sounddevice capture, spectrum bands, rolling preview window
 ├── transcriber.py         # faster-whisper wrapper, language mix, batched long dictations, cuBLAS fallback
 ├── hallucinations.py      # known Whisper hallucinations ("Thanks for watching!", subtitle credits)

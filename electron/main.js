@@ -167,6 +167,14 @@ let config = {};
 let clipboardHistory = [];  // Last 10 transcriptions
 const MAX_HISTORY = 10;
 
+// Saved recordings (the backend's rescue folder): what is waiting to be
+// transcribed, which one is running, which ones the user already heard about.
+let rescueItems = [];
+let rescueDir = '';
+let rescueRunning = null;
+let rescueOfferPending = false;
+const rescueOffered = new Set();
+
 // Stats tracking — persisted via history.json (see loadHistory/saveHistory below).
 let todayStats = { date: new Date().toDateString(), count: 0, words: 0 };
 let statsByDate = {};  // { "Mon May 14 2026": { count, words }, ... }
@@ -359,6 +367,7 @@ function startPython() {
     console.log(`Python exited (code ${code})`);
     pythonProcess = null;
     modelLoaded = false;
+    rescueRunning = null;
     if (backendUptimeTimer) { clearTimeout(backendUptimeTimer); backendUptimeTimer = null; }
 
     // If we asked it to quit, don't relaunch.
@@ -424,9 +433,6 @@ let missedPings = 0;
 function startBackendWatchdog() {
   setInterval(() => {
     if (!pythonProcess || quitRequested) return;
-    // Don't ping during a recording – the backend may legitimately be busy
-    // running Whisper and not service IPC for a few seconds.
-    if (isRecording || isTranscribing) return;
 
     const sinceLastPong = Date.now() - lastPongTs;
     if (sinceLastPong > 65_000) {
@@ -522,7 +528,59 @@ function handlePythonMessage(line) {
 
       case 'transcribing':
         isTranscribing = true;
+        armPipelineGuard();
         updateTray('processing');
+        break;
+
+      case 'transcribe_status':
+        // Something slow is going on (long audio, a slow processor, the engine
+        // restarting): the overlay says what, and the guard knows it's alive.
+        if (!isTranscribing) break;
+        armPipelineGuard();
+        if (overlayWin && !overlayWin.isDestroyed()) overlayWin.webContents.send('transcribe-status', data);
+        break;
+
+      case 'transcription_failed':
+        // All tries failed. The audio is safe, if there was a copy of it.
+        finishTranscription();
+        sendToOnboarding('transcription-done', { text: '', empty: true, failed: true });
+        if (data && data.saved) {
+          rescueOffered.add(data.saved);
+          showToast(trayT().transcribeFailedSaved, 'error', null, `rescue:${data.saved}`);
+        } else {
+          showToast(trayT().transcribeFailed, 'error');
+        }
+        break;
+
+      case 'engine_fallback':
+        showToast(trayT().gpuFallback, 'warning');
+        break;
+
+      case 'rescue_available':
+        rescueItems = (data && data.items) || [];
+        rescueDir = (data && data.dir) || '';
+        if (data && data.startup) rescueOfferPending = true;
+        updateTray(trayStatus);
+        break;
+
+      case 'rescue_done': {
+        rescueRunning = null;
+        const status = trayStatus;
+        if (data && data.text) {
+          addToHistory(data.text);
+          trackStats(data.text);
+          showToast(trayT().rescueDone, 'warning');
+        } else {
+          showToast(trayT().rescueEmpty, 'warning');
+        }
+        updateTray(status);
+        break;
+      }
+
+      case 'rescue_failed':
+        rescueRunning = null;
+        showToast(trayT().rescueFailed, 'error', null, data && data.id ? `rescue:${data.id}` : null);
+        updateTray(trayStatus);
         break;
 
       case 'preview':
@@ -537,7 +595,9 @@ function handlePythonMessage(line) {
         break;
 
       case 'transcription_done':
-        finishTranscription(!!(data && data.text && !data.empty), data && data.text);
+        // `clipboard`: the user moved on to another window meanwhile, so the
+        // text wasn't pasted. No "inserted" on the overlay then.
+        finishTranscription(!!(data && data.text && !data.empty && !data.clipboard), data && data.text);
         sendToOnboarding('transcription-done', data || {});
         if (data && data.command) {
           // Command mode: the result is LLM output, not a dictation – it
@@ -550,7 +610,9 @@ function handlePythonMessage(line) {
           trackStats(data.text);
           // Success popup is opt-in – the inserted text IS the feedback.
           // Warnings and errors always show.
-          if (config.success_toast === true) {
+          if (data.clipboard) {
+            showToast(trayT().clipboardMoved, 'warning');
+          } else if (config.success_toast === true) {
             // Human stats: how long from key-release to inserted text, and
             // whether the AI cleanup ran. (beam/compute live in the log.)
             showToast(data.text, 'success', {
@@ -580,7 +642,7 @@ function handlePythonMessage(line) {
         } else if (isTranscribing && agentActive) {
           finishAgent(data || {});
         } else {
-          console.log('Agent answer arrived after the timeout, dropped');
+          console.log('Agent answer without a running dictation, dropped');
         }
         break;
 
@@ -604,11 +666,13 @@ function handlePythonMessage(line) {
         modelLoaded = true;
         modelInfo = data;
         console.log(`✓ Model: ${data.model} on ${data.device}`);
-        updateTray('ready');
+        // The engine may have been replaced in the middle of a dictation.
+        updateTray(isRecording || isTranscribing ? trayStatus : 'ready');
+        const rescueOffer = offerRescue();
         if (pendingModelSwitch) {
           showToast(trayT().modelReady.replace('{model}', modelLabel(data.model)), 'success');
           pendingModelSwitch = null;
-        } else if (!bootReadyToastShown) {
+        } else if (!bootReadyToastShown && !rescueOffer) {
           // Once per launch – answers "is it ready yet?" on slower machines.
           const dev = String(data.device || '').split(' (')[0];
           showToast(JUST_UPDATED
@@ -677,8 +741,10 @@ function handlePythonMessage(line) {
         console.error('Backend error:', data.message);
         // CRITICAL: if an error arrives while we were mid-transcription,
         // restore the state machine so the hotkey works again. Without this
-        // a single transcription error locks the app dead.
-        if (isRecording || isTranscribing) {
+        // a single transcription error locks the app dead. A model that won't
+        // load says nothing about the running dictation: the engine tries
+        // again for it and reports how that ended.
+        if ((isRecording || isTranscribing) && !/^Model load failed/.test(String(data.message))) {
           finishTranscription();
         }
         showBackendError(String((data && data.message) || ''));
@@ -844,6 +910,9 @@ function pushOverlayState(agentHint = null) {
     overlayWin.webContents.send('set-theme', currentTheme(), currentGas());
     if (agentHint) { overlayWin.webContents.send('agent-result', agentHint); return; }
     overlayWin.webContents.send('recording-started', { command: commandActive, agent: agentActive });
+    // Released before the window had loaded: that message went nowhere, and
+    // the overlay would say "listening" for the whole transcription.
+    if (isTranscribing) overlayWin.webContents.send('recording-stopped');
     // Copies that came in before the window had loaded (look-back at start).
     for (const a of attachments) overlayWin.webContents.send('attachment', a);
   };
@@ -1087,18 +1156,33 @@ function stopRecording() {
   if (agentActive) sendToPython('stop_agent', { version: app.getVersion() });
   else sendToPython(commandActive ? 'stop_command' : 'stop_recording');
   updateTray('processing');
+  armPipelineGuard();
+}
 
-  // Safety net: if the backend NEVER replies (process crashed, IPC stuck),
-  // make sure we unlock after 30 s instead of leaving the user dead. A
-  // command also waits on the LLM (up to 25 s), the agent hotkey on the
-  // URL (15 s per connect/read) – give them more room.
-  setTimeout(() => {
-    if (isTranscribing) {
-      console.error('Transcription timeout – forcing state reset');
-      finishTranscription();
-      showToast(trayT().transcribeStuck, 'error');
+// How long a transcription takes is no failure: on a processor, minutes of
+// audio take minutes, and the backend reports about once a second meanwhile.
+// Only silence counts. The longest quiet stretch in a healthy pipeline is an
+// answer from the local AI or the agent URL (under a minute). Killing the
+// backend is safe, the next one finds the audio on disk and offers it.
+const PIPELINE_SILENCE_MS = 180_000;
+let pipelineGuard = null;
+function armPipelineGuard() {
+  if (pipelineGuard) clearTimeout(pipelineGuard);
+  pipelineGuard = setTimeout(() => {
+    pipelineGuard = null;
+    if (!isTranscribing) return;
+    console.error('Backend silent during a dictation – restarting it');
+    if (pythonProcess) {
+      try { pythonProcess.kill('SIGKILL'); } catch (_) {}
+      return;  // the close handler resets everything
     }
-  }, commandActive ? 45_000 : agentActive ? 50_000 : 30_000);
+    finishTranscription();
+    showToast(trayT().transcribeFailed, 'error');
+  }, PIPELINE_SILENCE_MS);
+}
+function clearPipelineGuard() {
+  if (pipelineGuard) clearTimeout(pipelineGuard);
+  pipelineGuard = null;
 }
 
 // Esc while recording: the take is dropped, nothing is transcribed or inserted.
@@ -1117,8 +1201,9 @@ function cancelRecording() {
 }
 
 // Single place to reset post-recording state. Called from `transcription_done`,
-// from `error`, and from the timeout watchdog above.
+// `transcription_failed`, `error`, and when the backend ended or fell silent.
 function finishTranscription(ok = false, text = '') {
+  clearPipelineGuard();
   isRecording = false;
   isTranscribing = false;
   isPaused = false;
@@ -1159,6 +1244,7 @@ function agentOverlayData(result, hold) {
 // The URL answered (or didn't): show it, then back to ready. Never types
 // anything, also not as a fallback.
 function finishAgent(result) {
+  clearPipelineGuard();
   isRecording = false;
   isTranscribing = false;
   isPaused = false;
@@ -1304,8 +1390,17 @@ function trayT() {
     modelLoading: 'Lade Modell {model} …', modelReady: '{model} ist bereit',
     modelNotReady: ['Modell lädt noch', 'In ein paar Sekunden noch einmal versuchen.'],
     modelFailed: ['Modell lässt sich nicht laden', 'Unter „Sprache & Modell“ ein anderes Modell wählen.'],
-    transcribeStuck: ['Diktat hat zu lange gedauert', 'Abgebrochen. Du kannst sofort neu diktieren.'],
     transcribeFailed: ['Diktat ließ sich nicht umwandeln', 'Bitte noch einmal diktieren.'],
+    transcribeFailedSaved: ['Diktat ließ sich gerade nicht umwandeln', 'Die Aufnahme ist gespeichert, nichts ist verloren.'],
+    clipboardMoved: ['Fenster gewechselt, nichts eingefügt', 'Der Text liegt in der Zwischenablage. Mit Strg+V einfügen.'],
+    gpuFallback: ['Grafikkarte antwortet nicht', 'NoType arbeitet auf dem Prozessor weiter und wechselt von selbst zurück.'],
+    rescueFound: ['Aufnahme von {when} ist noch nicht umgewandelt', '{dur} gesprochen. Der Text kommt in die Zwischenablage.'],
+    rescueStarted: 'Aufnahme wird umgewandelt …',
+    rescueDone: ['Aufnahme umgewandelt', 'Der Text liegt in der Zwischenablage. Mit Strg+V einfügen.'],
+    rescueEmpty: ['Keine Sprache in der Aufnahme', 'Sie wurde gelöscht.'],
+    rescueFailed: ['Aufnahme ließ sich wieder nicht umwandeln', 'Sie bleibt gespeichert und wartet im Tray-Menü.'],
+    rescueMenu: 'Gespeicherte Aufnahmen ({n})', rescueBusy: 'wird umgewandelt …',
+    rescueOpen: 'Ordner öffnen', rescueDeleteAll: 'Alle löschen', actRescue: 'Umwandeln',
     devicesFailed: ['Mikrofone nicht lesbar', 'Mikrofon-Verbindung prüfen und die Einstellungen neu öffnen.'],
     unknownError: 'Etwas ist schiefgelaufen',
     bootReady: 'NoType bereit · {model} · {device}',
@@ -1332,8 +1427,17 @@ function trayT() {
     modelLoading: 'Loading model {model} …', modelReady: '{model} is ready',
     modelNotReady: ['Model still loading', 'Try again in a few seconds.'],
     modelFailed: ['Model could not be loaded', 'Pick another model under “Language & Model”.'],
-    transcribeStuck: ['Dictation took too long', 'Cancelled. You can dictate again right away.'],
     transcribeFailed: ['Dictation could not be transcribed', 'Please dictate again.'],
+    transcribeFailedSaved: ['Dictation could not be transcribed right now', 'The recording is saved, nothing is lost.'],
+    clipboardMoved: ['Window changed, nothing inserted', 'The text is on the clipboard. Paste it with Ctrl+V.'],
+    gpuFallback: ['Graphics card is not responding', 'NoType keeps working on the processor and switches back by itself.'],
+    rescueFound: ['Recording from {when} is not transcribed yet', '{dur} of speech. The text goes to the clipboard.'],
+    rescueStarted: 'Transcribing the recording …',
+    rescueDone: ['Recording transcribed', 'The text is on the clipboard. Paste it with Ctrl+V.'],
+    rescueEmpty: ['No speech in the recording', 'It was deleted.'],
+    rescueFailed: ['Recording still could not be transcribed', 'It stays saved and waits in the tray menu.'],
+    rescueMenu: 'Saved recordings ({n})', rescueBusy: 'transcribing …',
+    rescueOpen: 'Open folder', rescueDeleteAll: 'Delete all', actRescue: 'Transcribe',
     devicesFailed: ['Could not list microphones', 'Check the microphone connection and reopen settings.'],
     unknownError: 'Something went wrong',
     bootReady: 'NoType ready · {model} · {device}',
@@ -1358,6 +1462,44 @@ const MODEL_LABELS = {
   'distil-large-v3.5': 'Distil Large v3.5', 'german-turbo': 'Large v3 Turbo German',
 };
 function modelLabel(id) { return MODEL_LABELS[id] || id; }
+
+// When a saved recording started: the time, plus the date if it isn't from today.
+function rescueWhen(item) {
+  const T = trayT();
+  const started = new Date(item.started * 1000);
+  const time = started.toLocaleTimeString(T.locale, { hour: '2-digit', minute: '2-digit' });
+  if (started.toDateString() === new Date().toDateString()) return time;
+  return `${started.toLocaleDateString(T.locale, { day: '2-digit', month: '2-digit' })} ${time}`;
+}
+
+function rescueDuration(item) {
+  const s = Math.round(item.seconds);
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} min`;
+}
+
+function runRescue(id) {
+  if (rescueRunning || !pythonProcess) return;  // the backend does one at a time
+  rescueRunning = id;
+  sendToPython('rescue_run', { id });
+  showToast(trayT().rescueStarted, 'success');
+  updateTray(trayStatus);
+}
+
+// What an earlier run left behind: offered once, when the model is up (the
+// transcription would wait for it anyway). Older ones just wait in the tray.
+function offerRescue() {
+  if (!rescueOfferPending) return false;
+  rescueOfferPending = false;
+  const dayAgo = Date.now() - 24 * 3600 * 1000;
+  const fresh = rescueItems.filter((i) => i.started * 1000 > dayAgo && !rescueOffered.has(i.id));
+  fresh.forEach((i) => rescueOffered.add(i.id));
+  const latest = fresh[fresh.length - 1];
+  if (!latest) return false;
+  const [title, sub] = trayT().rescueFound;
+  showToast([title.replace('{when}', rescueWhen(latest)), sub.replace('{dur}', rescueDuration(latest))],
+    'warning', null, `rescue:${latest.id}`);
+  return true;
+}
 
 function buildTrayMenu(status = 'ready') {
   const T = trayT();
@@ -1404,6 +1546,23 @@ function buildTrayMenu(status = 'ready') {
     },
     { type: 'separator' },
   ];
+
+  // Recordings that still need transcribing
+  if (rescueItems.length > 0) {
+    items.push({
+      label: T.rescueMenu.replace('{n}', rescueItems.length),
+      submenu: [
+        ...rescueItems.map((item) => ({
+          label: `${rescueWhen(item)} · ${rescueDuration(item)}${item.id === rescueRunning ? ` · ${T.rescueBusy}` : ''}`,
+          enabled: !rescueRunning,
+          click: () => runRescue(item.id),
+        })),
+        { type: 'separator' },
+        { label: T.rescueOpen, click: () => { if (rescueDir) shell.openPath(rescueDir); } },
+        { label: T.rescueDeleteAll, click: () => sendToPython('rescue_delete') },
+      ],
+    }, { type: 'separator' });
+  }
 
   // Clipboard history
   if (clipboardHistory.length > 0) {
@@ -1764,9 +1923,7 @@ function armToastTimer(ms) {
 function showBackendError(message) {
   const T = trayT();
   if (message === 'Not recording') return;   // stray stop, nothing for the user to do
-  if (message === 'Model not loaded yet') showToast(T.modelNotReady, 'warning');
-  else if (/^(Model load|CPU fallback) failed/.test(message)) showToast(T.modelFailed, 'error', null, 'settings:speech');
-  else if (message.startsWith('Transcription failed')) showToast(T.transcribeFailed, 'error');
+  if (message.startsWith('Model load failed')) showToast(T.modelFailed, 'error', null, 'settings:speech');
   else if (message.startsWith('Device listing failed')) showToast(T.devicesFailed, 'error');
   else showToast([T.unknownError, message], 'error');
 }
@@ -1778,7 +1935,8 @@ function showToast(msg, type = 'success', stats = null, action = null) {
   const T = trayT();
   const actionLabel = !action ? '' : action === 'restart' ? T.actRestart
     : action === 'settings:cleanup' ? T.actSetup
-    : action === 'settings:system' ? T.actChange : T.actOpen;
+    : action === 'settings:system' ? T.actChange
+    : action.startsWith('rescue:') ? T.actRescue : T.actOpen;
   const calm = type === 'success';
   const dwell = TOAST_DWELL[type] || TOAST_DWELL.success;
 
@@ -1852,6 +2010,7 @@ ipcMain.on('toast-action', (_, action) => {
   if (toastWin && !toastWin.isDestroyed()) toastWin.close();
   if (action === 'restart') { app.relaunch(); quitApp(); }
   else if (typeof action === 'string' && action.startsWith('settings:')) openSettings(action.slice(9));
+  else if (typeof action === 'string' && action.startsWith('rescue:')) runRescue(action.slice(7));
 });
 
 // ── Updates ──

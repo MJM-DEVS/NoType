@@ -47,6 +47,7 @@ python tools/gen_config_docs.py --check   # exit 1 if it is out of date
 | `mute_while_dictating` | `false` | mute the speakers while recording |
 | `ai_context` | `true` | copies around a dictation into an AI app/terminal go along |
 | `live_preview_enabled` | `true` | rolling transcript in the overlay while recording |
+| `rescue_audio` | `true` | keep a copy on disk until a dictation came out as text |
 | `success_toast` | `false` | popup after successful dictation (errors always show) |
 | `gpu_safe_mode` | `false` | disable HW acceleration (flaky-driver escape hatch) |
 | `first_run_complete` | `false` | False opens the setup guide on start |
