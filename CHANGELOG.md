@@ -17,6 +17,14 @@ This file was written after the fact from the commit history. Dates are those of
 - `requirements.txt` asks for `faster-whisper>=1.1` and no longer lists PyInstaller.
 - README: the tagline, privacy badge and privacy bullet no longer say that nothing ever leaves the PC, and point to the list of what goes online. Developer notes, with a complete project structure, moved to `docs/development.md`.
 
+## [3.3.1] - 2026-11-06
+
+### Changed
+- Whisper runs in its own process, watched and replaced by the backend, so a graphics driver reset no longer leaves NoType broken until a restart. A failed dictation is retried, on the processor if the card keeps failing, and the engine returns to the card by itself.
+
+### Added
+- While speaking, the recording also goes to disk and is deleted once the text is in. A recording that could not be transcribed stays for 7 days at most and can be transcribed again from the tray menu. Settings can switch this off (`rescue_audio`).
+
 ## [3.3.0] - 2026-10-28
 
 ### Added
@@ -109,7 +117,8 @@ There is no `v3.0.0` tag in the repository; the version was bumped and followed 
 ### Fixed
 - Settings were not saved while the backend was down or restarting.
 
-[Unreleased]: https://github.com/MJM-DEVS/NoType/compare/v3.3.0...HEAD
+[Unreleased]: https://github.com/MJM-DEVS/NoType/compare/v3.3.1...HEAD
+[3.3.1]: https://github.com/MJM-DEVS/NoType/compare/v3.3.0...v3.3.1
 [3.3.0]: https://github.com/MJM-DEVS/NoType/compare/v3.2.0...v3.3.0
 [3.2.0]: https://github.com/MJM-DEVS/NoType/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/MJM-DEVS/NoType/compare/v2.9.0...v3.1.0
