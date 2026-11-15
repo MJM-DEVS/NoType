@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('notype', {
   onOllamaStatus: (callback) => sub('ollama-status', (_, data) => callback(data)),
   onOllamaProgress: (callback) => sub('ollama-progress', (_, data) => callback(data)),
   onPreviewText: (callback) => sub('preview-text', (_, text) => callback(text)),
+  onTranscribeStatus: (callback) => sub('transcribe-status', (_, data) => callback(data)),
   onPreviewEnabled: (callback) => sub('preview-enabled', (_, enabled) => callback(enabled)),
   onAppLang: (callback) => sub('app-lang', (_, lang) => callback(lang)),
   onModels: (callback) => sub('models', (_, data) => callback(data)),

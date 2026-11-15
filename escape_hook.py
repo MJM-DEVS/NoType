@@ -45,7 +45,9 @@ class KBDLLHOOKSTRUCT(ctypes.Structure):
     ]
 
 
-HOOKPROC = ctypes.WINFUNCTYPE(LRESULT, ctypes.c_int, wt.WPARAM, wt.LPARAM)
+# WINFUNCTYPE exists only on Windows; elsewhere the hook is never installed.
+_FUNCTYPE = getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE)
+HOOKPROC = _FUNCTYPE(LRESULT, ctypes.c_int, wt.WPARAM, wt.LPARAM)
 
 if sys.platform.startswith("win"):
     _u32 = ctypes.WinDLL("user32", use_last_error=True)
