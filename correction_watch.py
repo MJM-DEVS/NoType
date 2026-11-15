@@ -15,6 +15,7 @@ import ctypes
 import difflib
 import logging
 import re
+import sys
 import threading
 import time
 
@@ -105,28 +106,46 @@ def find_corrections(inserted: str, before: str, after: str):
     first, last = dictated[0], dictated[-1] + 1
     inside = [op for op in ops if op[1] < last and op[2] > first
               or (op[1] == op[2] and first < op[1] < last)]
-    removed = sum(i2 - i1 for tag, i1, i2, _, _ in inside if tag in ("delete", "replace"))
+
+    def fix_of(tag, i1, i2, j1, j2):
+        if tag != "replace" or i1 < first or i2 > last or i2 - i1 > MAX_PHRASE_WORDS:
+            return None
+        heard = old_region[old_tok[i1].start():old_tok[i2 - 1].end()]
+        # Fixed words that end the dictation merge with whatever the user
+        # typed on after them: take the new phrase closest to what was heard
+        # ("Kubernetes" of "Kubernetes und so", but all of "WhatsApp Web").
+        ends = range(j1 + 1, j2 + 1) if i2 == len(old_tok) else (j2,)
+        best, best_key = None, None
+        for j in ends:
+            if j - j1 > MAX_PHRASE_WORDS:
+                break
+            meant = new_region[new_tok[j1].start():new_tok[j - 1].end()]
+            if _is_fix(heard, meant):
+                # On a tie the longer phrase wins.
+                key = (difflib.SequenceMatcher(None, _norm(heard), _norm(meant)).ratio(), j)
+                if best_key is None or key > best_key:
+                    best, best_key = (heard, meant), key
+        return best
+
+    # A fixed word is still there, just spelled right.
+    removed = sum(op[2] - op[1] for op in inside
+                  if op[0] == "delete" or op[0] == "replace" and not fix_of(*op))
     if removed > len(dictated) / 2:
         return None
     if len(inside) > MAX_EDITS:
         return []
 
     out = []
-    for tag, i1, i2, j1, j2 in inside:
-        if tag != "replace" or i1 < first or i2 > last:
-            continue
-        if i2 - i1 > MAX_PHRASE_WORDS or j2 - j1 > MAX_PHRASE_WORDS:
-            continue
-        heard = old_region[old_tok[i1].start():old_tok[i2 - 1].end()]
-        meant = new_region[new_tok[j1].start():new_tok[j2 - 1].end()]
-        if _is_fix(heard, meant) and (heard, meant) not in out:
-            out.append((heard, meant))
+    for op in inside:
+        found = fix_of(*op)
+        if found and found not in out:
+            out.append(found)
     return out[:MAX_SUGGESTIONS]
 
 
 # ── UI Automation ────────────────────────────────────────────────────
 
-_user32 = ctypes.windll.user32
+_user32 = ctypes.windll.user32 if sys.platform.startswith("win") else None
 _UIA = None
 
 

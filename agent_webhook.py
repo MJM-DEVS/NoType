@@ -12,6 +12,7 @@ answer. Never the dictated text, the token, the answer or the full URL
 (webhook URLs often carry a secret in their path or query).
 """
 
+import html
 import json
 import logging
 import re
@@ -80,19 +81,19 @@ def extract_message(body: bytes, content_type: str = "", charset: str | None = N
         return ""
     ctype = (content_type or "").lower()
     try:
-        data = json.loads(raw)
+        data, is_json = json.loads(raw), True
     except ValueError:
-        data = None
+        data, is_json = None, False
     if isinstance(data, dict):
         for key in ANSWER_FIELDS:
             value = data.get(key)
             if isinstance(value, str) and value.strip():
                 return _shorten(value)
         return ""
-    if data is not None and "json" in ctype:
+    if is_json and "json" in ctype:
         return _shorten(data) if isinstance(data, str) else ""
     if "html" in ctype:
-        raw = _TAG.sub(" ", raw)
+        raw = html.unescape(_TAG.sub(" ", raw))
     return _shorten(raw)
 
 
