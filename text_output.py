@@ -8,12 +8,15 @@ import time
 import logging
 import ctypes
 import ctypes.wintypes
+import sys
 import pyperclip
 
 logger = logging.getLogger("NoType.TextOutput")
 
+_WIN = sys.platform.startswith("win")
+
 # ── Windows API ──
-user32 = ctypes.windll.user32
+user32 = ctypes.windll.user32 if _WIN else None
 
 INPUT_KEYBOARD = 1
 KEYEVENTF_KEYUP = 0x0002
@@ -153,31 +156,32 @@ def _send_ctrl_v():
 
 # Separate DLL handles: pyperclip sets its own argtypes on the shared
 # ctypes.windll function objects.
-_u32 = ctypes.WinDLL("user32", use_last_error=True)
-_k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-_u32.RegisterClipboardFormatW.argtypes = [ctypes.wintypes.LPCWSTR]
-_u32.RegisterClipboardFormatW.restype = ctypes.wintypes.UINT
-_u32.IsClipboardFormatAvailable.argtypes = [ctypes.wintypes.UINT]
-_u32.OpenClipboard.argtypes = [ctypes.wintypes.HWND]
-_u32.GetClipboardData.argtypes = [ctypes.wintypes.UINT]
-_u32.GetClipboardData.restype = ctypes.wintypes.HANDLE
-_k32.GlobalLock.argtypes = [ctypes.wintypes.HGLOBAL]
-_k32.GlobalLock.restype = ctypes.c_void_p
-_k32.GlobalUnlock.argtypes = [ctypes.wintypes.HGLOBAL]
-_k32.GlobalSize.argtypes = [ctypes.wintypes.HGLOBAL]
-_k32.GlobalSize.restype = ctypes.c_size_t
-_u32.SetClipboardData.argtypes = [ctypes.wintypes.UINT, ctypes.wintypes.HANDLE]
-_u32.SetClipboardData.restype = ctypes.wintypes.HANDLE
-_k32.GlobalAlloc.argtypes = [ctypes.wintypes.UINT, ctypes.c_size_t]
-_k32.GlobalAlloc.restype = ctypes.wintypes.HGLOBAL
-_k32.GlobalFree.argtypes = [ctypes.wintypes.HGLOBAL]
-_k32.GlobalFree.restype = ctypes.wintypes.HGLOBAL
-_u32.CreateWindowExW.argtypes = [ctypes.wintypes.DWORD, ctypes.wintypes.LPCWSTR, ctypes.wintypes.LPCWSTR,
-                                 ctypes.wintypes.DWORD, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
-                                 ctypes.wintypes.HWND, ctypes.wintypes.HMENU, ctypes.wintypes.HINSTANCE,
-                                 ctypes.wintypes.LPVOID]
-_u32.CreateWindowExW.restype = ctypes.wintypes.HWND
-_u32.DestroyWindow.argtypes = [ctypes.wintypes.HWND]
+if _WIN:
+    _u32 = ctypes.WinDLL("user32", use_last_error=True)
+    _k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    _u32.RegisterClipboardFormatW.argtypes = [ctypes.wintypes.LPCWSTR]
+    _u32.RegisterClipboardFormatW.restype = ctypes.wintypes.UINT
+    _u32.IsClipboardFormatAvailable.argtypes = [ctypes.wintypes.UINT]
+    _u32.OpenClipboard.argtypes = [ctypes.wintypes.HWND]
+    _u32.GetClipboardData.argtypes = [ctypes.wintypes.UINT]
+    _u32.GetClipboardData.restype = ctypes.wintypes.HANDLE
+    _k32.GlobalLock.argtypes = [ctypes.wintypes.HGLOBAL]
+    _k32.GlobalLock.restype = ctypes.c_void_p
+    _k32.GlobalUnlock.argtypes = [ctypes.wintypes.HGLOBAL]
+    _k32.GlobalSize.argtypes = [ctypes.wintypes.HGLOBAL]
+    _k32.GlobalSize.restype = ctypes.c_size_t
+    _u32.SetClipboardData.argtypes = [ctypes.wintypes.UINT, ctypes.wintypes.HANDLE]
+    _u32.SetClipboardData.restype = ctypes.wintypes.HANDLE
+    _k32.GlobalAlloc.argtypes = [ctypes.wintypes.UINT, ctypes.c_size_t]
+    _k32.GlobalAlloc.restype = ctypes.wintypes.HGLOBAL
+    _k32.GlobalFree.argtypes = [ctypes.wintypes.HGLOBAL]
+    _k32.GlobalFree.restype = ctypes.wintypes.HGLOBAL
+    _u32.CreateWindowExW.argtypes = [ctypes.wintypes.DWORD, ctypes.wintypes.LPCWSTR, ctypes.wintypes.LPCWSTR,
+                                     ctypes.wintypes.DWORD, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+                                     ctypes.wintypes.HWND, ctypes.wintypes.HMENU, ctypes.wintypes.HINSTANCE,
+                                     ctypes.wintypes.LPVOID]
+    _u32.CreateWindowExW.restype = ctypes.wintypes.HWND
+    _u32.DestroyWindow.argtypes = [ctypes.wintypes.HWND]
 GMEM_MOVEABLE = 0x0002
 
 
