@@ -104,7 +104,7 @@ test('config: what settings.html saves passes unchanged', () => {
     initial_prompt: 'NoType, Kubernetes', dictionary: [{ from: 'kuber netis', to: 'Kubernetes' }],
     cleanup_mode: 'fast', llm_model: 'qwen3:4b-instruct', live_preview_enabled: true,
     success_toast: false, autostart: false, update_check: true, insert_method: 'auto',
-    mic_device_name: null, mic_device_index: null, mute_while_dictating: false,
+    mic_device_name: null, mic_device_index: null, mute_while_dictating: false, rescue_audio: true,
     beam_size: 'auto', compute_type: 'float16', vad_sensitivity: 300, first_run_complete: true,
   };
   const r = filterConfig(save);

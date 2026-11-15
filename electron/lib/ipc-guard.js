@@ -102,6 +102,7 @@ const CONFIG_TYPES = {
   mic_device_name: T.stringOrNull,
   mic_device_index: T.numberOrNull,
   mute_while_dictating: T.bool,
+  rescue_audio: T.bool,
   ai_context: T.bool,
   live_preview_enabled: T.bool,
   success_toast: T.bool,

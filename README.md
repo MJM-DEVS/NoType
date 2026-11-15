@@ -5,7 +5,7 @@
 **Hold a key. Say what you're thinking. Let go. Your words appear wherever your cursor is.**
 
 Free voice dictation for Windows 11 that runs entirely on your own PC.<br/>
-No cloud, no subscription, no account. What you say stays on your computer, unless you send it somewhere yourself.
+No cloud, no subscription, no account, no telemetry. What you say stays on your computer, unless you send it somewhere yourself.
 
 <br/>
 
@@ -16,6 +16,7 @@ No cloud, no subscription, no account. What you say stays on your computer, unle
 [![Latest release](https://img.shields.io/github/v/release/MJM-DEVS/NoType?label=latest&color=00d4aa)](https://github.com/MJM-DEVS/NoType/releases/latest)
 ![Windows 11](https://img.shields.io/badge/Windows%2011-x64-0078D6?logo=windows11&logoColor=white)
 ![Dictation runs locally](https://img.shields.io/badge/dictation-runs%20locally-00d4aa)
+![No telemetry](https://img.shields.io/badge/telemetry-none-00d4aa)
 ![99 languages](https://img.shields.io/badge/languages-99-7f7bff)
 [![License](https://img.shields.io/badge/license-MIT%20%2B%20Commons%20Clause-blue)](#license)
 [![GitHub stars](https://img.shields.io/github/stars/MJM-DEVS/NoType?style=social)](https://github.com/MJM-DEVS/NoType/stargazers)
@@ -292,13 +293,20 @@ Canary 1B (v2 and Flash) was slower and less accurate in our tests and has the s
 
 ## Your privacy
 
-Dictation, AI cleanup and command mode are **fully offline**. There is no telemetry of any kind.
+Dictation, AI cleanup and command mode are **fully offline**. Your audio is never sent anywhere, and there is no telemetry of any kind. Your dictated text stays on your PC too, unless you set up the agent hotkey to send it to a URL of your choice.
 
 NoType goes online for these things only:
 
-- **The update check.** When it starts and every 6 hours, NoType asks GitHub whether a newer version is out. The request carries no personal data; like any website, GitHub sees your IP address. Switch it off under **Settings → General**; the tray menu still lets you check by hand.
-- **Downloads you start yourself:** the speech model you choose, the optional AI engine and its updates, and a new NoType version once you click **Update now**.
-- **The agent hotkey, if you set it up.** It is off by default. Once it is on, each agent dictation goes to the URL you entered and nowhere else: the text, its language, the time and, unless you switch it off, the name and title of the window in front ([format](#agent-hotkey-send-your-dictation-to-a-url)). What happens there is up to whoever runs that URL.
+| Connection | When | To | How to avoid it |
+|---|---|---|---|
+| **Update check** | 20 seconds after start (on the first run, 20 seconds after the setup guide) and every 6 hours | GitHub | Switch off **Check for updates** in the setup guide or under **Settings → General**. The tray menu still lets you check by hand. |
+| **NoType update** | Only after you click **Update now** | GitHub | Don't click it. The portable version opens the download page in your browser instead. |
+| **Speech model** | The first time a model that is not on your PC yet is loaded: on first launch the preselected one, later any model you switch to | Hugging Face | Can't be skipped: NoType needs a model. Once downloaded, a model loads without contacting Hugging Face. |
+| **AI engine** | Only when you click **Install** or **Update** under **Settings → Text Cleanup** | GitHub (Ollama releases) | Leave AI cleanup off and don't install it. |
+| **AI model** | Only when you click **Install** there, for the model you picked | Ollama's model library | As above. |
+| **Agent hotkey** | Each agent dictation and each **Send test** | The URL you entered | Off by default. Once on, it sends the text, its language, the time and, unless you switch it off, the name and title of the window in front ([format](#agent-hotkey-send-your-dictation-to-a-url)). What happens there is up to whoever runs that URL. |
+
+None of these requests carry personal data except the agent hotkey; like any website, each server sees your IP address. The AI engine runs on your PC and NoType talks to it only at `127.0.0.1`, which never leaves your computer.
 
 Everything else stays in `%APPDATA%\NoType\` on your PC:
 
@@ -309,12 +317,13 @@ Everything else stays in `%APPDATA%\NoType\` on your PC:
 | Diagnostic log | `notype.log`, rotating; timings and errors only, never your dictated text |
 | AI engine & model | the `ollama\` subfolder |
 | Screenshots and copied text for AI apps | the `attachments\` subfolder, each file deleted after roughly 24 hours |
+| Safety copy of the running dictation | the `rescue\` subfolder as a WAV file, deleted as soon as the text is in. A recording that could not be transcribed stays until you transcribe or delete it, for 7 days at most. Switch it off under **Settings → System** |
 
 **Uninstalling removes this whole folder**, NoType's autostart entry and its update cache in `%LOCALAPPDATA%\notype-updater\` (updates keep all three). The speech models are the exception: they live in the shared Hugging Face cache at `%USERPROFILE%\.cache\huggingface\hub\`, which other apps may use too, so the uninstaller leaves it alone. To free the space, delete the folders of the models you downloaded in NoType there; their names contain `whisper`, for example `models--mobiuslabsgmbh--faster-whisper-large-v3-turbo`. The portable version has no uninstaller: delete its folder and `%APPDATA%\NoType\` by hand.
 
-NoType pastes through the clipboard, so the dictated text stays there afterwards and you can paste it again. It marks what it pastes so Windows leaves it out of clipboard history (Win+V) and doesn't sync it across devices. Entries you copy again from the tray history are not marked. To leave the clipboard untouched, choose **Always type** under **Settings → System**.
+NoType pastes through the clipboard, so the dictated text stays there afterwards and you can paste it again. If you use Windows clipboard history, it ends up there too, and with sync across devices turned on Windows can upload it to your Microsoft account and your other devices. To keep the clipboard out of it, choose **Always type** under **Settings → System**.
 
-To send screenshots and copied text along to AI apps ([see above](#show-ai-apps-what-you-are-talking-about)), NoType notes when something is copied. It reads the clipboard only while you dictate into an AI app, a terminal, a code editor or a browser, and only copies made from a minute before the start until your text is in. Terminals and editors need a file to open, so those copies are saved to `attachments\` and deleted after roughly 24 hours. The log only notes whether an item was an image or text, never its content. You can switch this off under **Settings → General**.
+To send screenshots and copied text along to AI apps ([see above](#show-ai-apps-what-you-are-talking-about)), NoType notes when something is copied. It reads the clipboard only while you dictate into an AI app, a terminal, a code editor or a browser, and only copies made from a minute before the start until your text is in. Terminals and editors need a file to open, so those copies are saved to `attachments\` and cleaned up once they are older than 24 hours. The log only notes whether an item was an image or text, never its content. You can switch this off under **Settings → General**.
 
 To suggest corrections, NoType reads the text field you dictated into for up to a minute afterwards and compares only the dictated part. It stops as soon as you switch fields or start a new dictation. It never reads password fields and keeps nothing unless you click **Learn**. You can switch this off under **Settings → Dictionary**.
 
