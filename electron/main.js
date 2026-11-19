@@ -7,6 +7,7 @@ const { parseBackendLine } = require('./lib/backend-line');
 const { isSameDocument, isAppFile, allowPermission } = require('./lib/guards');
 const { phraseKey } = require('./lib/phrase-key');
 const { modelLabel } = require('./lib/model-labels');
+const { normalizeFailure, failureText } = require('./lib/model-status');
 const { loadHistoryFile, saveHistoryFile, debouncedSave } = require('./lib/history-file');
 const { firstUpdateCheck } = require('./lib/first-update-check');
 const { senderPage, allowSender, filterConfig } = require('./lib/ipc-guard');
@@ -131,6 +132,7 @@ let isPaused = false;
 let isTranscribing = false;
 let modelLoaded = false;
 let modelInfo = null;
+let modelFailure = null;         // why no model could be loaded (lib/model-status.js), until one loads
 let pendingModelSwitch = null;   // model id the user just switched to → "ready" toast
 let bootReadyToastShown = false; // one "NoType ready" toast per launch
 let recordStopTs = 0;            // when the user released – for the insert-latency stat
@@ -141,6 +143,7 @@ let commandActive = false;       // current recording is a command-mode instruct
 let agentActive = false;         // current recording goes to the agent URL instead of being typed
 let agentHintUntil = 0;          // agent hotkey without a URL: one hint per press, not per key repeat
 let hotkeyQuietUntil = 0;        // hold mode: ignore the still-held hotkey after an Esc cancel
+let modelHintUntil = 0;          // no model yet: one "loading"/"failed" toast per hotkey press
 let attachments = [];            // AI context chips of the current dictation (replayed into a fresh overlay)
 let config = {};
 let clipboardHistory = [];  // Last 10 transcriptions
@@ -360,6 +363,7 @@ function startPython() {
     console.log(`Python exited (code ${code})`);
     pythonProcess = null;
     modelLoaded = false;
+    modelFailure = null;   // a new backend loads again
     rescueRunning = null;
     if (backendUptimeTimer) { clearTimeout(backendUptimeTimer); backendUptimeTimer = null; }
 
@@ -662,14 +666,31 @@ function handlePythonMessage(line) {
         updateTray('recording');
         break;
 
+      case 'model_loading':
+        // A (re)load started: whatever failed before is being tried again,
+        // and a success after a failure gets its "ready" toast.
+        if (modelFailure && !pendingModelSwitch) pendingModelSwitch = (data && data.model) || config.model_size;
+        modelLoaded = false;
+        modelFailure = null;
+        if (!isRecording && !isTranscribing) updateTray('loading');
+        if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('model-loading', data || {});
+        sendToOnboarding('model-loading', data || {});
+        break;
+
+      case 'model_failed':
+        setModelFailed(data);
+        break;
+
       case 'model_ready':
         modelLoaded = true;
         modelInfo = data;
+        const recovered = !!modelFailure;
+        modelFailure = null;
         console.log(`✓ Model: ${data.model} on ${data.device}`);
         // The engine may have been replaced in the middle of a dictation.
         updateTray(isRecording || isTranscribing ? trayStatus : 'ready');
         const rescueOffer = offerRescue();
-        if (pendingModelSwitch) {
+        if (pendingModelSwitch || recovered) {
           showToast(trayT().modelReady.replace('{model}', modelLabel(data.model)), 'success');
           pendingModelSwitch = null;
         } else if (!bootReadyToastShown && !rescueOffer) {
@@ -737,18 +758,24 @@ function handlePythonMessage(line) {
         }
         break;
 
-      case 'error':
-        console.error('Backend error:', data && data.message);
+      case 'error': {
+        const message = String((data && data.message) || '');
+        console.error('Backend error:', message);
+        // A model that won't load says nothing about the running dictation:
+        // the engine tries again for it and reports how that ended. Normally
+        // model_failed came right before and said it all; a backend that
+        // only sends this still gets the failure state.
+        if (/^Model load failed/.test(message)) {
+          if (!modelFailure) setModelFailed({ message: message.replace(/^Model load failed:\s*/, '') });
+          break;
+        }
         // CRITICAL: if an error arrives while we were mid-transcription,
         // restore the state machine so the hotkey works again. Without this
-        // a single transcription error locks the app dead. A model that won't
-        // load says nothing about the running dictation: the engine tries
-        // again for it and reports how that ended.
-        if ((isRecording || isTranscribing) && !/^Model load failed/.test(String((data && data.message) || ''))) {
-          finishTranscription();
-        }
-        showBackendError(String((data && data.message) || ''));
+        // a single transcription error locks the app dead.
+        if (isRecording || isTranscribing) finishTranscription();
+        showBackendError(message);
         break;
+      }
     }
   } catch (e) {
     console.error(`Handling backend message '${type}' failed:`, e && e.message);
@@ -1144,7 +1171,15 @@ function startRecording({ kind = 'dictate' } = {}) {
     return;
   }
   if (!modelLoaded) {
-    showToast(trayT().modelNotReady, 'warning');
+    // One toast per press: hold mode repeats the hotkey ~30×/s, and every
+    // repeat extends the quiet time. Failed is not "still loading": then
+    // the toast says why and where to fix it.
+    const now = Date.now();
+    if (now >= modelHintUntil) {
+      if (modelFailure) showModelFailure();
+      else showToast(trayT().modelNotReady, 'warning');
+    }
+    modelHintUntil = now + 700;
     return;
   }
   isRecording = true;
@@ -1322,26 +1357,27 @@ function getTrayBaseImage() {
   return _trayBaseImage;
 }
 
-function createTrayImage(color = '#00d4aa', recording = false) {
+function createTrayImage(color = '#00d4aa', dot = false) {
   const base = getTrayBaseImage();
-  if (!recording) return base;
+  if (!dot) return base;
 
-  // For the recording state, draw a red dot in the upper-right corner of the
-  // base PNG. `toBitmap()` returns BGRA on Windows; `createFromBuffer` expects
-  // the same layout when given a width+height descriptor – so we write BGRA
-  // and don't swap channels. (Bugfix: previous version produced a blue dot.)
+  // Recording (red) and a model that failed to load (amber): a dot in the
+  // upper-right corner of the base PNG. `toBitmap()` returns BGRA on Windows;
+  // `createFromBuffer` expects the same layout when given a width+height
+  // descriptor – so we write BGRA and don't swap channels. (Bugfix: previous
+  // version produced a blue dot.)
   const s = 32;
   const buf = Buffer.from(base.toBitmap());
+  const [red, green, blue] = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
   const cx = s - 6, cy = 6, r = 4;
   for (let y = Math.max(0, cy - r); y < Math.min(s, cy + r + 1); y++) {
     for (let x = Math.max(0, cx - r); x < Math.min(s, cx + r + 1); x++) {
       const dx = x - cx, dy = y - cy;
       if (dx * dx + dy * dy <= r * r) {
         const i = (y * s + x) * 4;
-        // BGRA: red = (B=68, G=68, R=239) – #ef4444
-        buf[i]     = 68;   // B
-        buf[i + 1] = 68;   // G
-        buf[i + 2] = 239;  // R
+        buf[i]     = blue;
+        buf[i + 1] = green;
+        buf[i + 2] = red;
         buf[i + 3] = 255;  // A
       }
     }
@@ -1374,7 +1410,7 @@ let trayStatus = 'ready';   // last status shown, so the menu can be rebuilt as-
 function updateTray(status) {
   if (!tray) return;
   trayStatus = status;
-  const colors = { ready: '#00d4aa', recording: '#ff4444', processing: '#ffaa00', loading: '#888888', paused: '#ffaa00' };
+  const colors = { ready: '#00d4aa', recording: '#ef4444', processing: '#ffaa00', loading: '#888888', paused: '#ffaa00', failed: '#f59e0b' };
   const T = trayT();
   const labels = {
     ready: T.ready,
@@ -1382,13 +1418,14 @@ function updateTray(status) {
     processing: T.processing,
     loading: T.loading,
     paused: T.paused,
+    failed: T.failed,
   };
 
-  // Override status if model not loaded
-  if (!modelLoaded && status === 'ready') status = 'loading';
+  // Override status if model not loaded: still loading, or it failed
+  if (!modelLoaded && status === 'ready') status = modelFailure ? 'failed' : 'loading';
 
   try {
-    tray.setImage(createTrayImage(colors[status] || '#00d4aa', status === 'recording'));
+    tray.setImage(createTrayImage(colors[status] || '#00d4aa', status === 'recording' || status === 'failed'));
     const hotkeyLabel = config.hotkey || 'Ctrl+Shift+Space';
     const upd = update.state === 'downloading' ? ` · ${T.updLoading.replace('{p}', update.percent)}` : '';
     tray.setToolTip(`NoType · ${labels[status] || T.ready} (${hotkeyLabel})${upd}`);
@@ -1403,6 +1440,7 @@ function trayT() {
   const de = {
     ready: '✓ Bereit', recording: '● Aufnahme …', processing: '⟳ Transkribiere …',
     loading: '⏳ Modell lädt …', paused: '⏸ Pausiert',
+    failed: '⚠ Modell nicht geladen', failedOpen: 'Sprache & Modell öffnen …',
     today: 'Heute', words: 'Wörter', transcriptions: 'Transkriptionen',
     last7: 'Letzte 7 Tage', last30: 'Letzte 30 Tage',
     history: 'Letzte Transkriptionen', settings: '⚙  Einstellungen', setup: '✦  Einrichtung', autostart: 'Mit Windows starten', quit: '✕  Beenden',
@@ -1412,7 +1450,6 @@ function trayT() {
     backendDead: ['Spracherkennung startet nicht', 'Mehrere Versuche sind gescheitert. NoType einmal neu starten.'],
     modelLoading: 'Lade Modell {model} …', modelReady: '{model} ist bereit',
     modelNotReady: ['Modell lädt noch', 'In ein paar Sekunden noch einmal versuchen.'],
-    modelFailed: ['Modell lässt sich nicht laden', 'Unter „Sprache & Modell“ ein anderes Modell wählen.'],
     transcribeFailed: ['Diktat ließ sich nicht umwandeln', 'Bitte noch einmal diktieren.'],
     transcribeFailedSaved: ['Diktat ließ sich gerade nicht umwandeln', 'Die Aufnahme ist gespeichert, nichts ist verloren.'],
     clipboardMoved: ['Fenster gewechselt, nichts eingefügt', 'Der Text liegt in der Zwischenablage. Mit Strg+V einfügen.'],
@@ -1444,6 +1481,7 @@ function trayT() {
   const en = {
     ready: '✓ Ready', recording: '● Recording …', processing: '⟳ Transcribing …',
     loading: '⏳ Loading model …', paused: '⏸ Paused',
+    failed: '⚠ Model not loaded', failedOpen: 'Open Language & Model …',
     today: 'Today', words: 'words', transcriptions: 'transcriptions',
     last7: 'Last 7 days', last30: 'Last 30 days',
     history: 'Recent transcriptions', settings: '⚙  Settings', setup: '✦  Setup', autostart: 'Start with Windows', quit: '✕  Quit',
@@ -1452,7 +1490,6 @@ function trayT() {
     backendDead: ['Speech recognition won’t start', 'Several attempts failed. Restart NoType once.'],
     modelLoading: 'Loading model {model} …', modelReady: '{model} is ready',
     modelNotReady: ['Model still loading', 'Try again in a few seconds.'],
-    modelFailed: ['Model could not be loaded', 'Pick another model under “Language & Model”.'],
     transcribeFailed: ['Dictation could not be transcribed', 'Please dictate again.'],
     transcribeFailedSaved: ['Dictation could not be transcribed right now', 'The recording is saved, nothing is lost.'],
     clipboardMoved: ['Window changed, nothing inserted', 'The text is on the clipboard. Paste it with Ctrl+V.'],
@@ -1530,6 +1567,7 @@ function buildTrayMenu(status = 'ready') {
     processing: T.processing,
     loading: T.loading,
     paused: T.paused,
+    failed: T.failed,
   };
   const hotkeyLabel = config.hotkey || 'Ctrl+Shift+Space';
 
@@ -1556,6 +1594,7 @@ function buildTrayMenu(status = 'ready') {
 
   const items = [
     { label: `NoType · ${labels[status] || T.ready}`, enabled: false },
+    ...(status === 'failed' ? [{ label: T.failedOpen, click: () => openSettings('speech') }] : []),
     { label: `Hotkey: ${hotkeyLabel}`, enabled: false },
     {
       label: `${T.today}: ${todayStats.count} · ~${todayStats.words} ${T.words}`,
@@ -1658,6 +1697,8 @@ function openSettings(pane) {
     // Sync model status
     if (modelLoaded && modelInfo) {
       settingsWin.webContents.send('model-ready', modelInfo);
+    } else if (modelFailure) {
+      settingsWin.webContents.send('model-failed', modelFailure);
     }
     if (pane) settingsWin.webContents.send('show-pane', pane);
   });
@@ -1701,6 +1742,7 @@ function openOnboarding() {
     onboardingWin.show();
     onboardingWin.webContents.send('config', configForSettings(config));
     if (modelLoaded && modelInfo) onboardingWin.webContents.send('model-ready', modelInfo);
+    else if (modelFailure) onboardingWin.webContents.send('model-failed', modelFailure);
   });
   onboardingWin.on('closed', () => {
     onboardingWin = null;
@@ -1782,6 +1824,7 @@ onIpc('save-config', (_, input) => {
   if (modelChanged) {
     pendingModelSwitch = newConfig.model_size;
     modelLoaded = false;
+    modelFailure = null;
     updateTray('loading');
     showToast(trayT().modelLoading.replace('{model}', modelLabel(newConfig.model_size)), 'warning');
   }
@@ -1979,12 +2022,30 @@ function armToastTimer(ms) {
 
 // Backend errors arrive as English developer text; the user gets the cause
 // and the next step instead. Unknown messages keep their text as the detail.
+// (A model that won't load: setModelFailed.)
 function showBackendError(message) {
   const T = trayT();
   if (message === 'Not recording') return;   // stray stop, nothing for the user to do
-  if (message.startsWith('Model load failed')) showToast(T.modelFailed, 'error', null, 'settings:speech');
-  else if (message.startsWith('Device listing failed')) showToast(T.devicesFailed, 'error');
+  if (message.startsWith('Device listing failed')) showToast(T.devicesFailed, 'error');
   else showToast([T.unknownError, message], 'error');
+}
+
+// No model could be loaded. Unlike a 9-second toast this stays: tray,
+// settings and setup guide show it, and the hotkey answers with it, until a
+// model loads (model_loading / model_ready clear it).
+function setModelFailed(data) {
+  modelLoaded = false;
+  modelFailure = normalizeFailure(data);
+  console.error(`Model failed (${modelFailure.code}): ${modelFailure.message}`);
+  if (!isRecording && !isTranscribing) updateTray('ready');   // shown as 'failed'
+  if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('model-failed', modelFailure);
+  sendToOnboarding('model-failed', modelFailure);
+  showModelFailure();
+}
+
+function showModelFailure() {
+  const { title, hint } = failureText(modelFailure, config.app_language === 'en' ? 'en' : 'de');
+  showToast([title, hint], 'error', null, 'settings:speech');
 }
 
 function showToast(msg, type = 'success', stats = null, action = null) {

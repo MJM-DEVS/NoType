@@ -521,6 +521,7 @@
   }
   .status-badge.ok { background: rgba(147, 171, 120, 0.28); color: #46552c; }
   .status-badge.loading { background: #f6e6cc; color: #94460a; }
+  .status-badge.error { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
 
   /* ── Overlay pane ── */
   /* Live preview: the real overlay.html in demo mode on a desktop-like
@@ -722,6 +723,10 @@
   [data-theme="dark"] .status-badge.loading {
     background: transparent; color: var(--warn); box-shadow: none;
     border: 1.5px dashed var(--warn); padding: 2.5px 8.5px;
+  }
+  /* A model that failed to load: a dark tube with a red rim. */
+  [data-theme="dark"] .status-badge.error {
+    background: transparent; color: var(--danger); box-shadow: inset 0 0 0 1.5px var(--danger);
   }
   [data-theme="dark"] .confirm { background: #1d1a17; border-color: rgba(241, 235, 225, 0.12); }
   [data-theme="dark"] .confirm::backdrop { background: rgba(8, 7, 6, 0.6); }
@@ -1010,8 +1015,10 @@
         <div class="field">
           <div>
             <div class="field-label" data-i18n="speech.status">Modell-Status</div>
+            <!-- Why the model could not be loaded and what to do (renderModelStatus) -->
+            <div class="field-desc warn" id="modelStatusHint" hidden></div>
           </div>
-          <span class="status-badge loading" id="modelStatus" data-i18n="speech.status.loading">Lädt …</span>
+          <span class="status-badge loading" id="modelStatus">Lädt …</span>
         </div>
       </div>
 
@@ -1032,11 +1039,12 @@
         <div class="field">
           <div>
             <div class="field-label" data-i18n="speech.quant">Quantisierung</div>
-            <div class="field-desc" data-i18n="speech.quant.desc">float16 = sicher überall; int8_float16 nicht auf jeder GPU (autom. Fallback)</div>
+            <div class="field-desc" data-i18n="speech.quant.desc">Auto nimmt float16 auf NVIDIA-Grafikkarten und int8 auf dem Prozessor. float16 und int8_float16 sind nur für NVIDIA-GPUs.</div>
           </div>
           <select id="computeSelect">
-            <option value="float16">float16 (Standard)</option>
-            <option value="int8_float16">int8_float16</option>
+            <option value="auto" data-i18n="speech.quant.auto">Auto (empfohlen)</option>
+            <option value="float16" data-i18n="speech.quant.f16">float16 (NVIDIA-GPU)</option>
+            <option value="int8_float16" data-i18n="speech.quant.i8f16">int8_float16 (NVIDIA-GPU)</option>
             <option value="int8">int8</option>
           </select>
         </div>
@@ -1335,6 +1343,7 @@
 <script src="sprites.js"></script>
 <script src="keycaps.js"></script>
 <script src="lib/phrase-key.js"></script>
+<script src="lib/model-status.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
   // Drawn icons for the small row controls (remove, "heard → meant").
@@ -1429,7 +1438,9 @@
       'speech.beam.auto': 'Auto (Empfohlen)', 'speech.beam.1': '1 · Schnellste',
       'speech.beam.3': '3 · Balanciert', 'speech.beam.5': '5 · Höchste Qualität',
       'speech.quant': 'Quantisierung',
-      'speech.quant.desc': 'float16 = sicher überall; int8_float16 nicht auf jeder GPU (autom. Fallback)',
+      'speech.quant.desc': 'Auto nimmt float16 auf NVIDIA-Grafikkarten und int8 auf dem Prozessor. float16 und int8_float16 sind nur für NVIDIA-GPUs.',
+      'speech.quant.auto': 'Auto (empfohlen)', 'speech.quant.f16': 'float16 (NVIDIA-GPU)',
+      'speech.quant.i8f16': 'int8_float16 (NVIDIA-GPU)',
       'speech.vad': 'VAD-Empfindlichkeit', 'speech.vad.desc': 'Niedrig = aggressiver Stille-Filter',
       'vocab.title': 'Eigene Begriffe',
       'vocab.desc': 'Firmen-, Produkt- oder Eigennamen, damit sie korrekt geschrieben werden. Ein Begriff pro Eintrag, mit Enter oder „+“ hinzufügen.',
@@ -1599,7 +1610,9 @@
       'speech.beam.auto': 'Auto (recommended)', 'speech.beam.1': '1 · fastest',
       'speech.beam.3': '3 · balanced', 'speech.beam.5': '5 · highest quality',
       'speech.quant': 'Quantization',
-      'speech.quant.desc': 'float16 = safe everywhere; int8_float16 not on every GPU (auto fallback)',
+      'speech.quant.desc': 'Auto picks float16 on NVIDIA GPUs and int8 on the processor. float16 and int8_float16 are for NVIDIA GPUs only.',
+      'speech.quant.auto': 'Auto (recommended)', 'speech.quant.f16': 'float16 (NVIDIA GPU)',
+      'speech.quant.i8f16': 'int8_float16 (NVIDIA GPU)',
       'speech.vad': 'VAD sensitivity', 'speech.vad.desc': 'Low = more aggressive silence filter',
       'vocab.title': 'Custom Vocabulary',
       'vocab.desc': 'Company, product or personal names so they are spelled correctly. One term per entry, add with Enter or “+”.',
@@ -1832,6 +1845,30 @@
       },
     });
     window.NoTypeModels.renderHardwareBadge($('hwBadge'), modelsInfo, uiLang);
+  }
+
+  // ── Model status ──
+  // loading → ready (model · device) or failed (why, and what to do). Kept
+  // as state, so a language switch or a later config push re-words it
+  // instead of resetting it to "Loading …".
+  let modelState = { state: 'loading', data: null };
+  function renderModelStatus() {
+    const badge = $('modelStatus'), hint = $('modelStatusHint');
+    const { state, data } = modelState;
+    const nameOf = (id) => (window.NoTypeModels ? window.NoTypeModels.nameOf(id) : id);
+    hint.hidden = state !== 'failed';
+    if (state === 'ready') {
+      badge.className = 'status-badge ok';
+      badge.textContent = `${nameOf(data.model)} · ${data.device}`;
+    } else if (state === 'failed' && window.NoTypeModelStatus) {
+      const text = window.NoTypeModelStatus.failureText(data, uiLang);
+      badge.className = 'status-badge error';
+      badge.textContent = data.model ? `${nameOf(data.model)} · ${text.badge}` : text.badge;
+      hint.textContent = text.hint;
+    } else {
+      badge.className = 'status-badge loading';
+      badge.textContent = t('speech.status.loading');
+    }
   }
 
   $('setupBtn').onclick = () => window.notype.openOnboarding();
@@ -2892,6 +2929,7 @@
     if (configApplied && dirty) return;
     currentConfig = cfg;
     applyI18n(cfg.app_language || 'de');
+    renderModelStatus();
     $('appLangSelect').value = I18N[cfg.app_language] ? cfg.app_language : 'de';
     showHotkey('hotkey', cfg.hotkey || 'ctrl+shift+space');
     $('modeSelect').value = cfg.mode || 'hold_to_speak';
@@ -2957,7 +2995,18 @@
 
     // Performance
     $('beamSelect').value = cfg.beam_size || 'auto';
-    $('computeSelect').value = cfg.compute_type || 'float16';
+    // Nothing saved means auto, never float16: that only runs on NVIDIA GPUs.
+    // A type set by hand in settings.json (float32 …) stays selectable.
+    {
+      const sel = $('computeSelect');
+      const want = cfg.compute_type || 'auto';
+      if (![...sel.options].some(o => o.value === want)) {
+        const opt = document.createElement('option');
+        opt.value = want; opt.textContent = want;
+        sel.appendChild(opt);
+      }
+      sel.value = want;
+    }
     $('vadSlider').value = cfg.vad_sensitivity || 300;
     $('vadValue').textContent = ($('vadSlider').value) + 'ms';
 
@@ -2974,7 +3023,7 @@
   // Live language switch (before saving)
   $('appLangSelect').onchange = () => {
     applyI18n($('appLangSelect').value);
-    renderModels(); renderOverlayPicker(); pushPreview();
+    renderModels(); renderModelStatus(); renderOverlayPicker(); pushPreview();
     renderDict(); renderHist(); renderLangs(); renderSpoken();
   };
 
@@ -3130,11 +3179,25 @@
       });
     }
     window.notype.onModelReady((data) => {
-      $('modelStatus').textContent = `${window.NoTypeModels ? window.NoTypeModels.nameOf(data.model) : data.model} · ${data.device}`;
-      $('modelStatus').className = 'status-badge ok';
+      modelState = { state: 'ready', data };
+      renderModelStatus();
       activeModel = data.model;
       renderModels();
     });
+    if (window.notype.onModelFailed) {
+      window.notype.onModelFailed((data) => {
+        modelState = { state: 'failed', data };
+        renderModelStatus();
+        activeModel = null;   // no model card is running
+        renderModels();
+      });
+    }
+    if (window.notype.onModelLoading) {
+      window.notype.onModelLoading(() => {
+        modelState = { state: 'loading', data: null };
+        renderModelStatus();
+      });
+    }
     if (window.notype.onModels) {
       window.notype.onModels((info) => { modelsInfo = info; renderModels(); });
     }

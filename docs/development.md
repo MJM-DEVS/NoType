@@ -169,6 +169,7 @@ NoType/
 
 - Serialized inference (the CUDA model is not thread-safe); live preview and final pass share one lock.
 - Startup inference self-test; a cuBLAS compute-type rejection triggers an automatic, persisted float16 fallback.
+- Compute types per device: GPU types become int8 on the processor, and a load the device rejects walks the other types (CUDA: float16, int8; CPU: int8, float32) before it counts as failed. Loading is only cut off after a stretch without any status line (120 s on CUDA, 600 s on the processor, 1 h while downloading); a model that could not be loaded is a lasting state in the UI (`model_failed`), not a spinner.
 - Backend circuit breaker with exponential backoff and a give-up threshold; IPC ping/pong watchdog.
 - Ollama is bound to the backend via a kill-on-close Job Object, so force-killing the app cannot orphan it.
 - Atomic settings writes with three rolling backups; overlay rendering avoids compositor constructs that provoke GPU driver timeouts.

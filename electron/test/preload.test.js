@@ -57,6 +57,17 @@ test('argument mapping is unchanged', () => {
   assert.strictEqual(pane, '');
 });
 
+test('model-failed and model-loading reach their callbacks', () => {
+  const { api, ipcRenderer } = loadPreload();
+  const got = [];
+  api.onModelFailed((d) => got.push(['failed', d]));
+  api.onModelLoading((d) => got.push(['loading', d]));
+  ipcRenderer.emit('model-failed', {}, { code: 'stuck' });
+  ipcRenderer.emit('model-failed', {}, null);
+  ipcRenderer.emit('model-loading', {}, undefined);
+  assert.deepStrictEqual(got, [['failed', { code: 'stuck' }], ['failed', {}], ['loading', {}]]);
+});
+
 test('the unused registerHotkey is gone, senders still send', () => {
   const { api, ipcRenderer } = loadPreload();
   assert.strictEqual(api.registerHotkey, undefined);

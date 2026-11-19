@@ -61,7 +61,7 @@ These are read or written by the app but have no default in `DEFAULT_CONFIG`. Th
 |---|---|---|
 | `languages` | unset | The languages the user speaks with optional shares, `[{"code": "de", "share": 80}, ...]`. Without it, `language` counts at 100 % |
 | `overlay_theme` | unset (= `system`) | Design: `dark`, `light` (Sage) or `system` (follow Windows). Electron only |
-| `compute_type` | `auto` (backend) | faster-whisper compute type (CUDA: int8_float16, float16, int8; CPU: int8, float32). The backend persists a working fallback here after a cuBLAS refusal |
+| `compute_type` | `auto` (backend) | faster-whisper compute type. `auto` is the recommended setting: float16 on an NVIDIA GPU (CUDA), int8 on the processor. float16 and int8_float16 are CUDA-only; on the processor they are loaded as int8 (CPU: int8, float32). A type the device rejects falls back to the next one (CUDA: float16, int8; CPU: int8, float32). The settings window shows Auto when nothing is saved and no longer writes float16 on save. The backend persists a working fallback here after a cuBLAS refusal |
 | `beam_size` | `auto` (backend) | Beam size for the final pass, `auto` or a number |
 | `vad_sensitivity` | `300` (backend) | Minimum silence in ms the VAD needs to split speech |
 | `mic_device_index` | unset | Legacy (up to 2.9): PortAudio index, migrated to `mic_device_name` on start |

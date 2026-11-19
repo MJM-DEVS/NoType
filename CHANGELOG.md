@@ -13,6 +13,10 @@ This file was written after the fact from the commit history. Dates are those of
 - The setup guide asks whether NoType may check for updates. On the first run the first automatic check waits until the guide is done.
 - README: a table of every connection NoType makes, when, to where and how to avoid it.
 
+### Fixed
+- PCs without an NVIDIA card load the speech model again. The settings window saved `float16` as the quantization for everyone, and the processor can't run it; it now offers Auto (the default) and the processor uses int8. A load that fails tries the other compute types of the device before giving up, and a slow load on the processor is no longer cut off while it still makes progress.
+- A model that could not be loaded no longer shows "loading" forever: the tray, the settings, the setup guide and the hotkey say that it failed, why, and what to do. Saving the settings tries again.
+
 ### Changed
 - `requirements.txt` asks for `faster-whisper>=1.1` and no longer lists PyInstaller.
 - README: the tagline, privacy badge and privacy bullet no longer say that nothing ever leaves the PC, and point to the list of what goes online. Developer notes, with a complete project structure, moved to `docs/development.md`.

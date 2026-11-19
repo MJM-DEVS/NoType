@@ -224,6 +224,8 @@
   .status-pill.recording i { background: var(--danger); animation: blink 0.8s infinite; }
   .status-pill.processing i { background: var(--accent); animation: blink 0.6s infinite; }
   .status-pill.done i { background: var(--accent); }
+  .status-pill.failed { color: var(--danger); }
+  .status-pill.failed i { background: var(--danger); }
   @keyframes blink { 50% { opacity: 0.3; } }
   textarea {
     width: 100%; min-height: 128px; resize: none; font: inherit; font-size: 14px; line-height: 1.5;
@@ -357,7 +359,8 @@
   [data-theme="dark"] .status-pill.loading i { background: var(--warn); }
   [data-theme="dark"] .status-pill.ready i,
   [data-theme="dark"] .status-pill.done i { background: var(--ok-text); }
-  [data-theme="dark"] .status-pill.recording i { background: var(--danger); }
+  [data-theme="dark"] .status-pill.recording i,
+  [data-theme="dark"] .status-pill.failed i { background: var(--danger); }
   [data-theme="dark"] .status-pill.processing i { background: var(--core); box-shadow: var(--halo); }
   [data-theme="dark"] textarea:focus { border-color: var(--gas); box-shadow: var(--halo); }
 
@@ -533,6 +536,7 @@
 
 <script src="model-catalog.js"></script>
 <script src="keycaps.js"></script>
+<script src="lib/model-status.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
 
@@ -589,7 +593,7 @@
       't.placeholder': 'Klick hier rein und sprich …',
       't.success': 'Perfekt! Genau so funktioniert NoType überall, wo du tippen kannst.',
       's.loading': 'Modell wird geladen', 's.ready': 'Bereit', 's.recording': 'Aufnahme läuft',
-      's.processing': 'Wird verarbeitet', 's.done': 'Text eingefügt',
+      's.processing': 'Wird verarbeitet', 's.done': 'Text eingefügt', 's.failed': 'Modell nicht geladen',
       's.loading.detail': 'Beim ersten Mal kann das ein paar Minuten dauern (Download).',
       's.ready.detail': 'Halte {hotkey} und sprich.', 's.ready.detail.press': 'Drücke {hotkey} und sprich.',
       's.short': 'Zu kurz. Halte die Taste, während du sprichst.',
@@ -643,7 +647,7 @@
       't.placeholder': 'Click here and speak …',
       't.success': 'Perfect! This is how NoType works anywhere you can type.',
       's.loading': 'Loading model', 's.ready': 'Ready', 's.recording': 'Recording',
-      's.processing': 'Processing', 's.done': 'Text inserted',
+      's.processing': 'Processing', 's.done': 'Text inserted', 's.failed': 'Model not loaded',
       's.loading.detail': 'The first time can take a few minutes (download).',
       's.ready.detail': 'Hold {hotkey} and speak.', 's.ready.detail.press': 'Press {hotkey} and speak.',
       's.short': 'Too short. Keep holding the key while you speak.',
@@ -686,8 +690,9 @@
   let modelReady = false;
   let userPickedModel = false;
   let lastStatusMsg = '';
-  let testState = 'loading';   // loading | ready | recording | processing | done
+  let testState = 'loading';   // loading | ready | recording | processing | done | failed
   let testDetail = '';
+  let modelFailure = null;     // model-failed data while no model could be loaded
 
   const prettyHotkey = (hk) => window.NoTypeKeys.text(hk, uiLang);
   const renderHotkeyBox = () => window.NoTypeKeys.render($('hotkeyValue'), state.hotkey, uiLang);
@@ -753,7 +758,7 @@
       case 1: save({ mic_device_name: state.mic_device_name, mic_device_index: null }); break;
       case 2: save({ hotkey: state.hotkey, mode: state.mode }); break;
       case 3:
-        if (state.model_size !== cfg.model_size) { modelReady = false; testState = 'loading'; }
+        if (state.model_size !== cfg.model_size) { modelReady = false; modelFailure = null; testState = 'loading'; }
         save({ model_size: state.model_size });
         break;
       case STEPS - 1:
@@ -1102,7 +1107,9 @@
     $('statusText').textContent = t('s.' + testState);
     let detail = testDetail;
     if (testState === 'loading') detail = lastStatusMsg || t('s.loading.detail');
-    else if (testState === 'ready' && !detail) {
+    else if (testState === 'failed' && window.NoTypeModelStatus) {
+      detail = window.NoTypeModelStatus.failureText(modelFailure, uiLang).hint;
+    } else if (testState === 'ready' && !detail) {
       detail = t(state.mode === 'press_to_speak' ? 's.ready.detail.press' : 's.ready.detail')
         .replace('{hotkey}', prettyHotkey(state.hotkey));
     }
@@ -1162,10 +1169,29 @@
     }
     window.notype.onModelReady((data) => {
       modelReady = true;
+      modelFailure = null;
       activeModel = data && data.model;
       renderModels();
-      if (testState === 'loading') setTest('ready');
+      if (testState === 'loading' || testState === 'failed') setTest('ready');
     });
+    // Nothing could be loaded: the test step says so instead of loading on.
+    if (window.notype.onModelFailed) {
+      window.notype.onModelFailed((data) => {
+        modelReady = false;
+        modelFailure = data;
+        activeModel = null;
+        renderModels();
+        if (testState === 'loading' || testState === 'ready' || testState === 'failed') setTest('failed');
+      });
+    }
+    if (window.notype.onModelLoading) {
+      window.notype.onModelLoading(() => {
+        modelReady = false;
+        modelFailure = null;
+        lastStatusMsg = '';
+        if (testState === 'failed') setTest('loading');
+      });
+    }
     window.notype.onStatus((msg) => {
       lastStatusMsg = typeof msg === 'string' ? msg : '';
       if (testState === 'loading') refreshStatus();

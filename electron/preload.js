@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld('notype', {
   onSetStyle: (callback) => sub('set-style', (_, style, opts) => callback(style, opts || {})),
   onStatus: (callback) => sub('status', (_, msg) => callback(msg)),
   onModelReady: (callback) => sub('model-ready', (_, data) => callback(data)),
+  // No model could be loaded ({ code, message, model, device, gpu, noGpu }),
+  // and a (re)load that started.
+  onModelFailed: (callback) => sub('model-failed', (_, data) => callback(data || {})),
+  onModelLoading: (callback) => sub('model-loading', (_, data) => callback(data || {})),
   onConfig: (callback) => sub('config', (_, data) => callback(data)),
   onDevices: (callback) => sub('devices', (_, data) => callback(data)),
   onToastData: (callback) => sub('toast-data', (_, data) => callback(data)),
