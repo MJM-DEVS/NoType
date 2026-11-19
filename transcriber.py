@@ -131,6 +131,34 @@ COMPUTE_TYPES = {
     "cuda": ["int8_float16", "float16", "int8"],
     "cpu": ["int8", "float32"],
 }
+# What a load tries after the configured compute type failed, in this order.
+LOAD_FALLBACKS = {
+    "cuda": ["float16", "int8"],
+    "cpu": ["int8", "float32"],
+}
+# Start of the error when the model could not be downloaded (the speech
+# engine and the UI tell it apart from a model that doesn't load).
+DOWNLOAD_FAILED = "Model download failed"
+
+
+def resolve_compute_type(device: str, compute_type: str) -> str:
+    """The compute type to load with on `device`. "auto" (or nothing) is
+    float16 on the GPU and int8 on the processor. CTranslate2 can't run the
+    GPU types (float16, int8_float16) on the processor, and the settings
+    window used to save float16 for everyone: those become int8 there."""
+    compute_type = str(compute_type or "auto").strip().lower()
+    if compute_type == "auto":
+        return "float16" if device == "cuda" else "int8"
+    if device != "cuda" and compute_type not in COMPUTE_TYPES["cpu"]:
+        return "int8"
+    return compute_type
+
+
+def compute_type_attempts(device: str, compute_type: str) -> list:
+    """The compute types load_model() tries on `device`, in this order."""
+    first = resolve_compute_type(device, compute_type)
+    fallbacks = LOAD_FALLBACKS["cuda" if device == "cuda" else "cpu"]
+    return [first] + [c for c in fallbacks if c != first]
 
 
 class Transcriber:
@@ -156,21 +184,14 @@ class Transcriber:
         if device == "auto":
             try:
                 import ctranslate2
-                if ctranslate2.get_cuda_device_count() > 0:
-                    self.device = "cuda"
-                    self.compute_type = "float16" if compute_type == "auto" else compute_type
-                else:
-                    self.device = "cpu"
-                    self.compute_type = "int8" if compute_type == "auto" else compute_type
+                device = "cuda" if ctranslate2.get_cuda_device_count() > 0 else "cpu"
             except Exception:
-                self.device = "cpu"
-                self.compute_type = "int8" if compute_type == "auto" else compute_type
-        else:
-            self.device = device
-            if compute_type == "auto":
-                self.compute_type = "float16" if device == "cuda" else "int8"
-            else:
-                self.compute_type = compute_type
+                device = "cpu"
+        self.device = device
+        self.compute_type = resolve_compute_type(device, compute_type)
+        if str(compute_type or "auto").strip().lower() not in ("auto", self.compute_type):
+            logger.info(f"compute_type={compute_type} does not run on the processor, "
+                        f"using {self.compute_type}")
 
         logger.info(f"Transcriber: device={self.device}, compute_type={self.compute_type}")
 
@@ -194,8 +215,13 @@ class Transcriber:
 
     def load_model(self, on_progress=None):
         """Load the Whisper model. Downloads on first use, afterwards it
-        loads from the local files without contacting the Hub."""
+        loads from the local files without contacting the Hub.
+
+        A compute type the device rejects (int8_float16 on older GPUs, a GPU
+        type on the processor) is no reason to give up: the others for that
+        device follow (compute_type_attempts). Raises once all of them failed."""
         from faster_whisper import WhisperModel
+        from faster_whisper.utils import download_model
 
         if on_progress:
             on_progress(f"Lade Modell '{self.model_size}' ({self.device})...")
@@ -203,28 +229,29 @@ class Transcriber:
         source = self._local_model_path()
         logger.info(f"Loading model: {self.model_size} on {self.device} "
                     f"({'local files' if source else 'download from Hugging Face'})")
-        source = source or self._repo
+        if source is None:
+            # Once, before the attempts below, so a compute type that has to
+            # be retried doesn't go back to the internet.
+            try:
+                source = download_model(self._repo)
+            except Exception as e:
+                raise RuntimeError(f"{DOWNLOAD_FAILED} ({self._repo}): {e}") from e
 
-        try:
-            self._model = WhisperModel(
-                source,
-                device=self.device,
-                compute_type=self.compute_type,
-            )
-        except Exception as e:
-            # int8_float16 not supported on older GPUs → fallback to float16
-            if self.compute_type == "int8_float16" and self.device == "cuda":
-                logger.warning(f"int8_float16 not supported, falling back to float16: {e}")
-                self.compute_type = "float16"
+        attempts = compute_type_attempts(self.device, self.compute_type)
+        for i, compute_type in enumerate(attempts):
+            try:
+                self._model = WhisperModel(source, device=self.device, compute_type=compute_type)
+            except Exception as e:
+                if i + 1 == len(attempts):
+                    raise RuntimeError(f"{e} (model {self.model_size} on {self.device}, "
+                                       f"tried {', '.join(attempts)})") from e
+                logger.warning(f"compute_type={compute_type} failed on {self.device}, "
+                               f"falling back to {attempts[i + 1]}: {e}")
                 if on_progress:
-                    on_progress("int8_float16 nicht unterstützt, nutze float16...")
-                self._model = WhisperModel(
-                    source,
-                    device=self.device,
-                    compute_type="float16",
-                )
-            else:
-                raise
+                    on_progress(f"{compute_type} nicht unterstützt, nutze {attempts[i + 1]}...")
+                continue
+            self.compute_type = compute_type
+            break
 
         if on_progress:
             on_progress("Modell geladen ✓")

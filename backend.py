@@ -56,7 +56,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from audio_recorder import (AudioRecorder, refresh_devices, input_devices,
                             find_input_device, input_device_name)
 from transcriber import BUILTIN_REPOS, JobCancelled, MODEL_CATALOG, normalize_languages
-from speech_engine import SpeechEngine
+from speech_engine import SpeechEngine, describe_load_failure
 import audio_spool
 from text_output import insert_text, copy_selection, copy_text
 from config import load_config, save_config, CONFIG_DIR
@@ -129,9 +129,10 @@ class Backend:
             on_ready=self._on_engine_ready,
             on_status=lambda text: self.send("status", {"message": text}),
             on_fallback=lambda: self.send("engine_fallback"),
-            on_failed=lambda text: self.send("error", {"message": f"Model load failed: {text}"}),
+            on_failed=self._on_engine_failed,
             is_recording=lambda: bool(self.recorder and self.recorder.is_recording),
         )
+        self._model_failed = False  # the last load ended without a model
         # Rescue copy of the running dictation, and the ids of all recordings
         # still being worked on (the rest of the folder are leftovers).
         self._spool = None
@@ -198,13 +199,17 @@ class Backend:
     def load_model(self):
         """Load the configured Whisper model (blocks until that is settled)."""
         model_size = self.config.get("model_size", "small")
+        compute_type = self.config.get("compute_type") or "auto"
+        self._model_failed = False
+        self.send("model_loading", {"model": model_size})
         self.send("status", {"message": f"Loading model '{model_size}'..."})
-        logger.info(f"Loading model: {model_size}")
-        self.engine.load(model_size, self.config.get("compute_type", "auto"))
+        logger.info(f"Loading model: {model_size} (compute_type {compute_type})")
+        self.engine.load(model_size, compute_type)
 
     def _on_engine_ready(self, info: dict):
         """A model is loaded and passed its selftest (at the start, after a
         switch, or after the engine replaced a failed process)."""
+        self._model_failed = False
         # A GPU accepted the compute type at load time and rejected it at
         # inference time: keep the one that works for the next app start.
         if info["compute_fallback"]:
@@ -212,6 +217,21 @@ class Backend:
             save_config(self.config)
             logger.info(f"Persisted compute_type fallback: {info['compute_type']}")
         self.send("model_ready", {"device": info["device"], "model": info["model"]})
+
+    def _on_engine_failed(self, info: dict):
+        """No model could be loaded. model_failed says why and what to do
+        (the UI stays on that until a model loads); the `error` after it is
+        the old way of saying it."""
+        self._model_failed = True
+        gpu = self._gpu_info()
+        failure = describe_load_failure(info["message"], info.get("device"), bool(gpu))
+        logger.error(f"No model loaded ({failure['code']}): {info['message']}")
+        self.send("model_failed", {
+            "message": info["message"], "model": info.get("model"),
+            "device": info.get("device"), "compute_type": info.get("compute_type"),
+            "gpu": gpu["name"] if gpu else None, **failure,
+        })
+        self.send("error", {"message": f"Model load failed: {info['message']}"})
 
     def _amplitude_sender(self):
         """Send amplitude data to Electron while recording."""
@@ -837,6 +857,7 @@ class Backend:
     def handle_save_config(self, new_config):
         """Save config and reload if needed."""
         old_model = self.config.get("model_size")
+        old_compute = self.config.get("compute_type") or "auto"
         old_cleanup = self.config.get("cleanup_mode", "fast")
         old_llm = self._llm_model()
         old_rescue = self.config.get("rescue_audio", True)
@@ -851,8 +872,13 @@ class Backend:
             if self.config.get("cleanup_mode", "fast") == "ai":
                 threading.Thread(target=self._ensure_ai_ready, daemon=True).start()
 
-        # Reload model if size changed
-        if new_config.get("model_size") and new_config["model_size"] != old_model:
+        # Reload the model if size or compute type changed. After a failed
+        # load, saving the model settings (even unchanged) is the retry.
+        model_changed = bool(new_config.get("model_size")) and new_config["model_size"] != old_model
+        compute_changed = ("compute_type" in new_config
+                           and (new_config["compute_type"] or "auto") != old_compute)
+        retry = self._model_failed and ("model_size" in new_config or "compute_type" in new_config)
+        if model_changed or compute_changed or retry:
             threading.Thread(target=self.load_model, daemon=True).start()
 
         # No more copies on disk means none of the old ones either.

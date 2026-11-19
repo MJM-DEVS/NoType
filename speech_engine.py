@@ -28,7 +28,7 @@ import threading
 import time
 
 from transcribe_worker import read_frame, write_frame
-from transcriber import JobCancelled
+from transcriber import DOWNLOAD_FAILED, JobCancelled, resolve_compute_type
 
 logger = logging.getLogger("NoType.Engine")
 
@@ -36,7 +36,10 @@ logger = logging.getLogger("NoType.Engine")
 # single window can take minutes on a slow processor, on a GPU it can't.
 FINAL_LIMIT = {"cuda": 120, "cpu": 900}
 PREVIEW_LIMIT = {"cuda": 30, "cpu": 180}
-LOAD_LIMIT = 120
+# Loading: every status line of the process counts as progress. Until the
+# process knows its device it is held to the GPU limit, so a CUDA start that
+# hangs moves on to the processor after two minutes.
+LOAD_LIMIT = {"cuda": 120, "cpu": 600}
 DOWNLOAD_LIMIT = 3600        # first use: the model comes from the internet
 ATTEMPTS = 3
 STATUS_AFTER = 3.0           # short dictations stay quiet in the overlay
@@ -45,6 +48,50 @@ GPU_RECHECK_DELAYS = (60, 120, 240, 480, 960)  # then not before the next start
 
 class EngineError(Exception):
     """This audio could not be transcribed."""
+
+
+# Why no model could be loaded, as far as the error tells. The code picks
+# the next step the user is shown; the Electron side words it in both
+# languages (electron/lib/model-status.js, which also mirrors this for an
+# `error` message without details).
+LOAD_HINTS = {
+    "compute_type": "The quantization does not run on this device: set it to Auto.",
+    "download": "The model could not be downloaded: check the internet connection, "
+                "then save the settings again or restart NoType.",
+    "stuck": "Loading made no progress: restart NoType, and if it happens again "
+             "pick a smaller model.",
+    "crashed": "The speech engine stopped while loading: pick Auto quantization "
+               "or a smaller model and check notype.log.",
+    "memory": "Not enough memory for this model: pick a smaller one.",
+    "other": "Pick Auto quantization or a smaller model; details are in notype.log.",
+}
+
+
+def load_failure_code(message: str) -> str:
+    """One of LOAD_HINTS for the error of a failed load."""
+    text = str(message or "").lower()
+    if text.startswith(DOWNLOAD_FAILED.lower()):
+        return "download"
+    if "got stuck" in text:
+        return "stuck"
+    if ("ended while loading" in text or "could not start the speech engine" in text
+            or "speech engine is gone" in text):
+        return "crashed"
+    if "compute type" in text:
+        return "compute_type"
+    if "memory" in text or "bad_alloc" in text:
+        return "memory"
+    return "other"
+
+
+def describe_load_failure(message: str, device=None, gpu_found: bool = False) -> dict:
+    """{"code", "hint"} for the user: what failed and what to do now.
+    `device` None: the process ended before it knew its device."""
+    code = load_failure_code(message)
+    hint = LOAD_HINTS[code]
+    if device != "cuda" and not gpu_found:
+        hint = "No NVIDIA GPU found, NoType runs on the processor. " + hint
+    return {"code": code, "hint": hint}
 
 
 def _worker_command() -> list:
@@ -68,6 +115,7 @@ class _Worker:
         self._job_lock = threading.Lock()
         self._job_ids = itertools.count(1)
         self._dead = False
+        self._last_status = 0.0  # monotonic time of the last status line
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         self.proc = subprocess.Popen(_worker_command(), stdin=subprocess.PIPE,
                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -119,6 +167,7 @@ class _Worker:
             if kind == "log":
                 logging.getLogger(msg["name"]).log(msg["level"], msg["msg"])
             elif kind == "status":
+                self._last_status = time.monotonic()
                 if self._on_status:
                     self._on_status(msg["msg"])
             else:
@@ -139,14 +188,18 @@ class _Worker:
             return "still running"
 
     def wait_ready(self):
-        limit, last_sign = LOAD_LIMIT, time.monotonic()
+        limit, last_sign = LOAD_LIMIT.get(self.device, LOAD_LIMIT["cuda"]), time.monotonic()
         while True:
             try:
                 msg = self._inbox.get(timeout=0.5)
             except queue.Empty:
+                last_sign = max(last_sign, self._last_status)
                 if time.monotonic() - last_sign > limit:
+                    logger.error(f"Loading the model got stuck: no progress for {limit} s "
+                                 f"(device={self.device or 'auto'}, "
+                                 f"compute_type={self.compute_type})")
                     self.kill()
-                    raise EngineError("Loading the model got stuck")
+                    raise EngineError(f"Loading the model got stuck (no progress for {limit} s)")
                 continue
             if msg is None:
                 raise EngineError(f"Speech engine ended while loading ({self._exit_note()})")
@@ -154,8 +207,11 @@ class _Worker:
             if kind == "loading":
                 self.device = msg["device"]
                 self.compute_type = msg["compute_type"]
-                limit = DOWNLOAD_LIMIT if msg["download"] else LOAD_LIMIT
+                limit = (DOWNLOAD_LIMIT if msg["download"]
+                         else LOAD_LIMIT.get(self.device, LOAD_LIMIT["cpu"]))
                 last_sign = time.monotonic()
+                logger.info(f"Speech engine loading on {self.device} ({self.compute_type}), "
+                            f"{'download, ' if msg['download'] else ''}limit {limit} s")
             elif kind == "load_failed":
                 raise EngineError(msg["error"])
             elif kind == "ready":
@@ -229,8 +285,10 @@ class _Worker:
 class SpeechEngine:
     """The backend's handle on Whisper. Callbacks (all optional):
     on_ready(info): a model is loaded and tested. on_status(text): load progress.
-    on_fallback(): the GPU failed, running on the processor. on_failed(text):
-    no model could be loaded at all. is_recording(): nothing heavy while it's on.
+    on_fallback(): the GPU failed, running on the processor. on_failed(info):
+    no model could be loaded at all; info has message, model, device and
+    compute_type of the attempt that counts. is_recording(): nothing heavy
+    while it's on.
     """
 
     def __init__(self, on_ready=None, on_status=None, on_fallback=None, on_failed=None,
@@ -238,7 +296,7 @@ class SpeechEngine:
         self._on_ready = on_ready or (lambda info: None)
         self._on_status = on_status or (lambda text: None)
         self._on_fallback = on_fallback or (lambda: None)
-        self._on_failed = on_failed or (lambda text: None)
+        self._on_failed = on_failed or (lambda info: None)
         self._is_recording = is_recording or (lambda: False)
         self._worker = None
         self._boot_lock = threading.Lock()   # one (re)start at a time
@@ -285,6 +343,7 @@ class SpeechEngine:
             if worker:
                 worker.kill()
                 e.device = worker.device
+                e.compute_type = worker.compute_type
             raise
         except OSError as e:
             raise EngineError(f"Could not start the speech engine: {e}")
@@ -325,19 +384,34 @@ class SpeechEngine:
                 return
             except EngineError as e:
                 error = e
-                logger.error(f"Model load failed: {e}")
-                if getattr(e, "device", None) == "cpu":  # no GPU in this machine
+                logger.error(f"Model load failed ({getattr(e, 'device', None) or 'auto'}, "
+                             f"{getattr(e, 'compute_type', None) or self._compute_type}): {e}")
+                if not self._cpu_may_help(e):
                     self._give_up(e)
                     return
         try:
+            logger.info("Trying the processor with compute_type auto")
             self._adopt(self._spawn("cpu", "auto"))
         except EngineError as e:
-            logger.error(f"CPU fallback failed: {e}")
+            logger.error(f"CPU fallback failed ({getattr(e, 'compute_type', None) or 'auto'}): {e}")
             self._give_up(e if error is None else error)
+
+    @staticmethod
+    def _cpu_may_help(error) -> bool:
+        """After a failed first try: is a process on the processor with its
+        own compute type still worth starting? Not when exactly that just
+        failed (no GPU in this machine), and not after a failed download,
+        which doesn't depend on where the model runs."""
+        if str(error).startswith(DOWNLOAD_FAILED):
+            return False
+        return not (getattr(error, "device", None) == "cpu"
+                    and getattr(error, "compute_type", None) == resolve_compute_type("cpu", "auto"))
 
     def _give_up(self, error):
         self._settled.set()
-        self._on_failed(str(error))
+        self._on_failed({"message": str(error), "model": self._model_size,
+                         "device": getattr(error, "device", None),
+                         "compute_type": getattr(error, "compute_type", None)})
 
     def _replace(self, failed, force_cpu: bool = False):
         """Replace `failed`, unless that has happened in the meantime."""
