@@ -8,6 +8,7 @@ const { isSameDocument, isAppFile, allowPermission } = require('./lib/guards');
 const { phraseKey } = require('./lib/phrase-key');
 const { modelLabel } = require('./lib/model-labels');
 const { normalizeFailure, failureText, failureAction } = require('./lib/model-status');
+const { afterExit } = require('./lib/backend-breaker');
 const { loadHistoryFile, saveHistoryFile, debouncedSave } = require('./lib/history-file');
 const { firstUpdateCheck } = require('./lib/first-update-check');
 const { senderPage, allowSender, filterConfig } = require('./lib/ipc-guard');
@@ -121,8 +122,7 @@ let suggestItems = [];
 let suggestTimer = null;
 let pythonProcess = null;
 let pythonStartCount = 0;          // how many times we've spawned the backend
-let lastBackendDeath = 0;          // ms timestamp of the last unexpected exit
-let consecutiveFastCrashes = 0;    // crashes <10s apart in a row (circuit breaker)
+let consecutiveFastCrashes = 0;    // backends that died <10s after start, in a row (circuit breaker)
 let crashToastShown = false;       // rate-limit the crash toast during a storm
 let backendUptimeTimer = null;     // resets the breaker after sustained uptime
 let backendGaveUp = false;         // true once we stop auto-restarting
@@ -327,6 +327,7 @@ function startPython() {
   }
   console.log(`Starting backend: ${cmd} ${args.join(' ')}`);
 
+  const startedAt = Date.now();   // its uptime decides what an exit counts as
   pythonProcess = spawn(cmd, args, {
     cwd: ROOT_DIR,
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -378,16 +379,14 @@ function startPython() {
     // A deterministic native crash (e.g. a CUDA/ctranslate2 segfault from a
     // GPU driver reset) would otherwise respawn forever, and EACH respawn
     // re-initialises a fresh CUDA context that prevents a wedged driver from
-    // settling. Count crashes that happen <10s apart; after 5 in a row, STOP
-    // and require a manual restart. A single watchdog-kill (uptime >65s) lands
-    // in the `else` branch and resets the counter, so it's never mistaken for
-    // a crash loop.
-    const now = Date.now();
-    if (now - lastBackendDeath < 10_000) consecutiveFastCrashes++;
-    else consecutiveFastCrashes = 0;
-    lastBackendDeath = now;
+    // settling. Count backends that die within 10 s of their start; after 5
+    // in a row, STOP and require a manual restart. A single watchdog-kill
+    // (uptime >65s) resets the counter, so it's never mistaken for a crash
+    // loop (lib/backend-breaker.js).
+    const breaker = afterExit(consecutiveFastCrashes, Date.now() - startedAt);
+    consecutiveFastCrashes = breaker.fastCrashes;
 
-    if (consecutiveFastCrashes >= 5) {
+    if (breaker.giveUp) {
       backendGaveUp = true;
       console.error('Backend crash-looping – giving up auto-restart');
       if (!crashToastShown) {
@@ -400,8 +399,8 @@ function startPython() {
       return;  // require manual restart – stop hammering the GPU
     }
 
-    // Exponential backoff: 2s, 4s, 8s, 16s, 32s (capped at 60s).
-    const delay = Math.min(60_000, 2_000 * 2 ** consecutiveFastCrashes);
+    // Exponential backoff for fast crashes: 2s, 4s, 8s, 16s; else 2s.
+    const delay = breaker.delay;
     if (!crashToastShown) {
       showToast(trayT().backendCrashed, 'error');
       crashToastShown = true;
