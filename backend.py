@@ -13,7 +13,14 @@ import io
 if "--transcribe-worker" in sys.argv:
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import transcribe_worker
-    transcribe_worker.main()
+    try:
+        transcribe_worker.main()
+    except Exception:
+        # Into the stderr pipe, which the backend writes to its log, instead
+        # of the windowed build's modal dialog for unhandled exceptions.
+        import traceback
+        traceback.print_exc()
+        os._exit(1)
     os._exit(0)
 
 # ── Recover stdio in PyInstaller `console=False` mode ───────────────
@@ -88,11 +95,20 @@ logger = logging.getLogger("NoType.Backend")
 
 
 def _log_crash(what: str):
-    """`what` and the running exception's traceback, home folder as ~ (the
-    install folder is below it, and with it the user name)."""
+    """`what` and the running exception's traceback into the log, home folder
+    as ~ (the install folder is below it, and with it the user name), and as
+    is to stderr. The program then ends with sys.exit(1), not by re-raising:
+    the windowed build (console=False) shows an unhandled exception in a
+    modal dialog, and the backend would only end once someone clicked it
+    away, with a new dialog after every restart. Electron says it instead."""
     import traceback
     from transcribe_worker import scrub_home
-    logger.critical(f"{what}:\n{scrub_home(traceback.format_exc()).rstrip()}")
+    text = traceback.format_exc()
+    logger.critical(f"{what}:\n{scrub_home(text).rstrip()}")
+    try:
+        sys.stderr.write(text)
+    except Exception:
+        pass
 
 
 # The log is set up first: a backend that can't start (a DLL that is missing
@@ -119,6 +135,8 @@ try:
     from output_mute import OutputMuter
 except Exception:
     _log_crash("Backend failed to start")
+    if __name__ == "__main__":
+        sys.exit(1)
     raise
 
 # A dictation can take a while. If the user was in another window by the time
@@ -1132,4 +1150,4 @@ if __name__ == "__main__":
         Backend().run()
     except Exception:
         _log_crash("Backend stopped by an error")
-        raise
+        sys.exit(1)

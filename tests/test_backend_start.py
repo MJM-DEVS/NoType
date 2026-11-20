@@ -18,6 +18,10 @@ except (ImportError, OSError):  # not installed, or no PortAudio
 import backend
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Python hands an exception nobody caught to sys.excepthook; the windowed
+# PyInstaller build (console=False) shows it in a modal dialog instead, and
+# the process only ends once someone clicks it away.
+UNHANDLED_MARKER = "sys.excepthook = lambda *exc: sys.stderr.write('UNHANDLED\\n')\n"
 
 
 def test_a_failed_import_lands_in_the_log(tmp_path):
@@ -26,15 +30,40 @@ def test_a_failed_import_lands_in_the_log(tmp_path):
     home = os.path.dirname(REPO)   # the traceback's paths are below it
     code = ("import runpy, sys\n"
             "sys.modules['sounddevice'] = None   # like a PortAudio DLL that is missing\n"
+            f"{UNHANDLED_MARKER}"
             f"runpy.run_path({os.path.join(REPO, 'backend.py')!r}, run_name='__main__')\n")
     env = {**os.environ, "APPDATA": str(tmp_path), "HOME": home, "USERPROFILE": home}
     done = subprocess.run([sys.executable, "-c", code], env=env, cwd=str(tmp_path),
                           stdin=subprocess.DEVNULL, capture_output=True, timeout=60)
-    assert done.returncode != 0
+    # A plain exit, no unhandled exception (see UNHANDLED_MARKER).
+    assert done.returncode == 1
+    assert b"UNHANDLED" not in done.stderr
+    assert b"ModuleNotFoundError: import of sounddevice halted" in done.stderr
+    assert b"Traceback" in done.stderr and done.stderr.count(b"Traceback") == 1
     log = (tmp_path / "NoType" / "notype.log").read_text(encoding="utf-8")
     assert "CRITICAL: Backend failed to start:" in log
     assert "ModuleNotFoundError: import of sounddevice halted" in log
     assert home not in log and "~" in log   # no user name from the install path
+
+
+def test_a_failing_speech_engine_process_exits_without_a_dialog(tmp_path):
+    """backend.exe --transcribe-worker: an exception that leaves main() goes
+    to stderr (the backend logs it) and ends the process with 1."""
+    code = ("import runpy, sys\n"
+            f"sys.path.insert(0, {REPO!r})\n"
+            "import transcribe_worker\n"
+            "def main():\n"
+            "    raise ZeroDivisionError('in the speech engine')\n"
+            "transcribe_worker.main = main\n"
+            f"{UNHANDLED_MARKER}"
+            "sys.argv = ['backend.py', '--transcribe-worker']\n"
+            f"runpy.run_path({os.path.join(REPO, 'backend.py')!r}, run_name='__main__')\n")
+    done = subprocess.run([sys.executable, "-c", code], env={**os.environ, "APPDATA": str(tmp_path)},
+                          cwd=str(tmp_path), stdin=subprocess.DEVNULL, capture_output=True,
+                          timeout=60)
+    assert done.returncode == 1
+    assert b"ZeroDivisionError: in the speech engine" in done.stderr
+    assert b"UNHANDLED" not in done.stderr
 
 
 class Sent(list):
