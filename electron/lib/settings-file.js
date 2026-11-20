@@ -34,7 +34,11 @@ function decodeSettings(buf) {
   if (utf16 && buf[0] === 0xff) return buf.subarray(2).toString('utf16le');
   if (utf16) return Buffer.from(buf.subarray(2)).swap16().toString('utf16le');
   if (isUtf8(buf)) return stripBom(buf.toString('utf-8'));
-  return new TextDecoder('windows-1252').decode(buf);
+  try {
+    return new TextDecoder('windows-1252').decode(buf);
+  } catch (_) {   // a build without ICU: the same for every letter but „“€ and the like
+    return buf.toString('latin1');
+  }
 }
 
 function isUtf8(buf) {

@@ -57,7 +57,7 @@ def scrub_home(text: str) -> str:
     if not home or home == "~" or len(home) < 4:
         return text
     backslashed = home.replace("/", "\\")
-    # The last one as an OSError prints its file name: repr, \ doubled.
+    # The last one is how an OSError prints a file name: repr, \ doubled.
     variants = {home, home.replace("\\", "/"), backslashed, backslashed.replace("\\", "\\\\")}
     for variant in sorted(variants, key=len, reverse=True):
         text = re.sub(re.escape(variant), "~", text, flags=re.IGNORECASE)
