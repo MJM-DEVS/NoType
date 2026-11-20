@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const {
-  TEXT, CODES, RETRY_FIRST, failureCode, normalizeFailure, failureText, failureAction,
+  TEXT, CODES, RETRY_FIRST, failureCode, backendFailure, normalizeFailure, failureText, failureAction,
 } = require('../lib/model-status');
 
 const FLOAT16_ON_CPU = 'Requested float16 compute type, but the target device or backend do not '
@@ -68,6 +68,27 @@ test('the toast gets the next step without the CPU note', () => {
   assert.strictEqual(failureText({ code: 'stuck' }, 'en').retry, 'Try again');
   // A backend that keeps crashing is not about the GPU.
   assert.strictEqual(failureText({ code: 'backend', gpu: null }, 'de').hint, TEXT.de.backend);
+});
+
+test('a backend that gave up is worded by how it ended', () => {
+  // backend.exe quarantined by a virus scanner: the start fails (ENOENT on
+  // Windows, close code -4058), restarting it never helps.
+  assert.deepStrictEqual(backendFailure(-4058, 'ENOENT'),
+    { code: 'runtime', message: 'Backend could not be started (ENOENT)' });
+  assert.strictEqual(backendFailure(-4092, 'EACCES').code, 'runtime');   // blocked from running
+  assert.strictEqual(backendFailure(-4048, 'EPERM').code, 'runtime');
+  // Exit codes as Node reports them on Windows (unsigned NTSTATUS).
+  assert.deepStrictEqual(backendFailure(3221225781, null),                // 0xC0000135, DLL not found
+    { code: 'runtime', message: 'Backend exited (exit code 3221225781)' });
+  assert.strictEqual(backendFailure(3221225501, null).code, 'cpu_unsupported');   // 0xC000001D, no AVX
+  assert.strictEqual(backendFailure(1, null).code, 'backend');            // a Python exception
+  assert.strictEqual(backendFailure(3221225477, null).code, 'backend');   // 0xC0000005, access violation
+  assert.strictEqual(backendFailure(null, 'EMFILE').code, 'backend');
+  for (const exit of [[-4058, 'ENOENT'], [3221225501, null], [1, null]]) {
+    const failure = normalizeFailure(backendFailure(...exit));
+    assert.ok(CODES.includes(failure.code));
+    assert.ok(!failureText(failure, 'de').hint.startsWith(TEXT.de.cpu));   // not about the GPU
+  }
 });
 
 test('every code has copy in German and English', () => {
@@ -158,7 +179,7 @@ test('main.js wires "Try again" to the backend, the toast and the tray', () => {
   assert.strictEqual(main.split('actRetry:').length - 1, 2);
   assert.strictEqual(main.split('failedRetry:').length - 1, 2);
   // A backend that gave up after crashing is a failure, not "loading".
-  assert.match(main, /setModelFailed\(\{ code: 'backend'/);
+  assert.match(main, /const failure = backendFailure\(code, spawnError\);/);
   // Too little graphics memory is worded as such, in both languages.
   assert.match(main, /data\.code === 'memory' \? trayT\(\)\.gpuFallbackMemory : trayT\(\)\.gpuFallback/);
   assert.strictEqual(main.split('gpuFallbackMemory:').length - 1, 2);

@@ -53,25 +53,7 @@ import ctypes
 # Ensure our directory is in the path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from audio_recorder import (AudioRecorder, refresh_devices, input_devices,
-                            find_input_device, input_device_name)
-from transcriber import BUILTIN_REPOS, JobCancelled, MODEL_CATALOG, normalize_languages
-from speech_engine import SpeechEngine, describe_load_failure
-import audio_spool
-from text_output import insert_text, copy_selection, copy_text
 from config import load_config, save_config, CONFIG_DIR
-from postprocess import (clean_transcript, warm_up, warm_up_async,
-                         reset_availability_cache, rule_clean, run_command,
-                         DEFAULT_LLM_MODEL)
-import dictionary
-import spoken_punctuation
-import ollama_manager
-from correction_watch import CorrectionWatcher
-from escape_hook import EscapeHook
-from context_capture import (ContextCapture, classify_foreground, foreground_window,
-                             insert_with_context)
-import agent_webhook
-from output_mute import OutputMuter
 
 # Log to file only (stdout is for IPC). Rotate so the log file never grows unbounded.
 # CONFIG_DIR is %APPDATA%/NoType — same directory the frontend uses, survives rebuilds.
@@ -103,6 +85,41 @@ logging.basicConfig(
     handlers=[_log_handler],
 )
 logger = logging.getLogger("NoType.Backend")
+
+
+def _log_crash(what: str):
+    """`what` and the running exception's traceback, home folder as ~ (the
+    install folder is below it, and with it the user name)."""
+    import traceback
+    from transcribe_worker import scrub_home
+    logger.critical(f"{what}:\n{scrub_home(traceback.format_exc()).rstrip()}")
+
+
+# The log is set up first: a backend that can't start (a DLL that is missing
+# or blocked, a broken install) used to leave nothing in notype.log, only
+# Electron's console saw the traceback.
+try:
+    from audio_recorder import (AudioRecorder, refresh_devices, input_devices,
+                                find_input_device, input_device_name)
+    from transcriber import BUILTIN_REPOS, JobCancelled, MODEL_CATALOG, normalize_languages
+    from speech_engine import SpeechEngine, describe_load_failure
+    import audio_spool
+    from text_output import insert_text, copy_selection, copy_text
+    from postprocess import (clean_transcript, warm_up, warm_up_async,
+                             reset_availability_cache, rule_clean, run_command,
+                             DEFAULT_LLM_MODEL)
+    import dictionary
+    import spoken_punctuation
+    import ollama_manager
+    from correction_watch import CorrectionWatcher
+    from escape_hook import EscapeHook
+    from context_capture import (ContextCapture, classify_foreground, foreground_window,
+                                 insert_with_context)
+    import agent_webhook
+    from output_mute import OutputMuter
+except Exception:
+    _log_crash("Backend failed to start")
+    raise
 
 # A dictation can take a while. If the user was in another window by the time
 # the text is ready, a paste would land there: it goes to the clipboard instead.
@@ -224,21 +241,26 @@ class Backend:
         """A model is loaded and passed its selftest (at the start, after a
         switch, or after the engine replaced a failed process)."""
         self._model_failed = False
-        # A GPU accepted the compute type at load time and rejected it at
-        # inference time: keep the one that works for the next app start.
         if info["compute_fallback"]:
-            self.config["compute_type"] = info["compute_type"]
-            try:
-                save_config(self.config)
-                logger.info(f"Persisted compute_type fallback: {info['compute_type']}")
-            except Exception as e:  # the model is loaded all the same
-                logger.warning(f"Saving the compute_type fallback failed: {e}")
+            self._keep_compute_type(info["compute_type"])
         self.send("model_ready", {"device": info["device"], "model": info["model"]})
         gpu = self._gpu_info()
         if gpu and str(info["device"]).upper().startswith("CPU"):
             # Driver too old, CUDA libraries missing …: the lines above say why.
             logger.warning(f"An NVIDIA GPU is present ({gpu['name']}, {gpu['vram_mb']} MB), "
                            f"but the model runs on the processor")
+
+    def _keep_compute_type(self, compute_type: str):
+        """A GPU accepted the compute type at load time and rejected it at
+        inference time: keep the one that works for the next app start. Never
+        raises: a settings.json that stays locked (virus scanner, OneDrive)
+        must not cost the loaded model or the finished dictation."""
+        self.config["compute_type"] = compute_type
+        try:
+            save_config(self.config)
+            logger.info(f"Persisted compute_type fallback: {compute_type}")
+        except Exception as e:
+            logger.warning(f"Saving the compute_type fallback failed: {e}")
 
     def _on_engine_failed(self, info: dict):
         """No model could be loaded. model_failed says why and what to do
@@ -609,9 +631,7 @@ class Backend:
         # (cuBLAS refusal) – persist the working one so the next app start
         # doesn't repeat the failed load+retry cycle.
         if result.get("compute_fallback"):
-            self.config["compute_type"] = result["compute_type"]
-            save_config(self.config)
-            logger.info(f"Persisted compute_type fallback: {result['compute_type']}")
+            self._keep_compute_type(result["compute_type"])
 
         if self._cancelled({**done, **stats}):
             return
@@ -1108,5 +1128,8 @@ class Backend:
 
 
 if __name__ == "__main__":
-    backend = Backend()
-    backend.run()
+    try:
+        Backend().run()
+    except Exception:
+        _log_crash("Backend stopped by an error")
+        raise

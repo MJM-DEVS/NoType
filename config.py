@@ -8,11 +8,17 @@ The user-data directory matches what Electron writes via `app.getPath('userData'
 so backend and frontend share one settings file.
 """
 
+import codecs
 import json
 import os
 import shutil
+import time
 
 APP_NAME = "NoType"
+# os.replace() onto a file a virus scanner, the search indexer or a sync
+# client has open fails on Windows for a moment (PermissionError); waits
+# between the tries, in seconds.
+REPLACE_RETRY_DELAYS = (0.05, 0.1, 0.2, 0.4, 0.8)
 
 
 def _user_data_dir() -> str:
@@ -95,19 +101,54 @@ DEFAULT_CONFIG = {
 _config = None
 
 
+def decode_settings(raw: bytes) -> str:
+    """The text of settings.json. NoType writes UTF-8, but a file edited by
+    hand can come back with a BOM (Notepad), as UTF-16 (PowerShell's `>` and
+    Out-File) or in the ANSI code page (Set-Content in Windows PowerShell).
+    electron/lib/settings-file.js decodes it the same way."""
+    if raw.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+        return raw.decode("utf-16")
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw.decode("cp1252", errors="replace")
+
+
+def _replace(src: str, dst: str) -> None:
+    """os.replace(), tried again while Windows says the target is in use."""
+    for delay in REPLACE_RETRY_DELAYS:
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            time.sleep(delay)
+    os.replace(src, dst)
+
+
 def load_config() -> dict:
     """Load config from file, falling back to rolling backups on corruption."""
     global _config
 
     def _try_read(path: str):
+        """The settings in `path`; None when the file is broken, False when it
+        can't be read (still locked after a few tries: a virus scanner or a
+        sync client has it open)."""
+        for delay in (*REPLACE_RETRY_DELAYS, None):
+            try:
+                with open(path, "rb") as f:
+                    raw = f.read()
+                break
+            except PermissionError:
+                if delay is None:
+                    return False
+                time.sleep(delay)
+            except OSError:
+                return False
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict) and "hotkey" in data:
-                return data
-        except (json.JSONDecodeError, IOError):
+            data = json.loads(decode_settings(raw))
+        except ValueError:
             return None
-        return None
+        return data if isinstance(data, dict) and "hotkey" in data else None
 
     candidates = [
         CONFIG_FILE,
@@ -116,12 +157,17 @@ def load_config() -> dict:
         CONFIG_FILE + ".bak3",
         CONFIG_FILE + ".bak",   # legacy single-backup name
     ]
+    promote = True
     for path in candidates:
         if not os.path.exists(path):
             continue
         data = _try_read(path)
-        if data is not None:
-            if path != CONFIG_FILE:
+        if data is False and path == CONFIG_FILE:
+            # Locked, not broken: a backup helps for now, but must not
+            # overwrite the newer file (as in electron/lib/settings-file.js).
+            promote = False
+        if isinstance(data, dict):
+            if path != CONFIG_FILE and promote:
                 # main file was bad – promote the recovered backup
                 try:
                     shutil.copy(path, CONFIG_FILE)
@@ -172,7 +218,7 @@ def save_config(config: dict) -> None:
     except Exception:
         pass  # backup failure must not block the actual save
 
-    os.replace(tmp, CONFIG_FILE)
+    _replace(tmp, CONFIG_FILE)
 
 
 def _try_restore_from_backup():

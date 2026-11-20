@@ -47,7 +47,15 @@ test('main.js counts by uptime and shows a backend that gave up as failed', () =
   const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf-8');
   assert.match(main, /const breaker = afterExit\(consecutiveFastCrashes, Date\.now\(\) - startedAt\);/);
   assert.doesNotMatch(main, /lastBackendDeath/);
-  assert.match(main, /if \(breaker\.giveUp\) \{[\s\S]*?setModelFailed\(\{ code: 'backend'/);
+  assert.match(main, /if \(breaker\.giveUp\) \{[\s\S]*?const failure = backendFailure\(code, spawnError\);/);
+  // Giving up is always told: a toast of its own, or the failure's toast.
+  // Before, the first crash's toast ("restarting …") blocked it.
+  const giveUp = /if \(breaker\.giveUp\) \{([\s\S]*?)return;/.exec(main)[1];
+  assert.doesNotMatch(giveUp, /if \(!crashToastShown\)/);
+  assert.match(giveUp, /if \(failure\.code === 'backend'\) showToast\(trayT\(\)\.backendDead/);
+  assert.match(giveUp, /setModelFailed\(failure, \{ toast: failure\.code !== 'backend' \}\);/);
+  // A failed start is told apart from a crash (the 'error' event of spawn).
+  assert.match(main, /if \(String\(err\.syscall \|\| ''\)\.startsWith\('spawn'\)\) spawnError = err\.code/);
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
   assert.match(pkg.scripts.check, /node --check lib\/backend-breaker\.js/);
 });

@@ -21,6 +21,10 @@ This file was written after the fact from the commit history. Dates are those of
 - A processor without AVX and a missing or blocked part of the install (DLL, module) get their own message instead of "pick a smaller model".
 - The first download of a model shows how far it got in the setup guide, and a download that still makes progress is no longer cut off after an hour.
 - When the model doesn't fit into the graphics memory, the fallback toast says so instead of "graphics card is not responding".
+- A `settings.json` edited by hand on Windows is read in the encoding it was saved in: with a BOM (Notepad), as UTF-16 (PowerShell's `>`) or in the ANSI code page (`Set-Content`). Before, the backend crashed at every start on the last two, and on a BOM it fell back to an older backup and wrote it over the edit. Saving waits briefly for a `settings.json` that a virus scanner or a sync client holds open, and a file that stays locked is no longer replaced by a backup.
+- A dictation is no longer lost when saving the compute type fallback fails (locked `settings.json`).
+- A model download that fails because a virus scanner still holds a just-downloaded file is tried again (twice) instead of ending as "download failed".
+- A backend that can't start says why: missing or blocked `backend.exe` or DLL ("reinstall"), a processor without AVX, or the generic message. Giving up always shows a toast now; before, the toast of the first crash ("restarting …") was the last one. Import errors at the start are written to `notype.log` (home folder as `~`).
 - `notype.log` gets a short description of the machine at every start of the speech engine: OS, processor features (AVX/AVX2/AVX-512), memory, CTranslate2 and faster-whisper versions, CUDA devices and compute types, and why CUDA wasn't used. No host or user name, no paths; the home folder in error messages is written as `~`.
 
 ### Changed

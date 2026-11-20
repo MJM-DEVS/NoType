@@ -2,12 +2,12 @@ const { app, BrowserWindow, Tray, Menu, globalShortcut, ipcMain, nativeImage, sc
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
-const { loadSettingsFile, stripBom } = require('./lib/settings-file');
+const { loadSettingsFile, readSettingsText } = require('./lib/settings-file');
 const { parseBackendLine } = require('./lib/backend-line');
 const { isSameDocument, isAppFile, allowPermission } = require('./lib/guards');
 const { phraseKey } = require('./lib/phrase-key');
 const { modelLabel } = require('./lib/model-labels');
-const { normalizeFailure, failureText, failureAction } = require('./lib/model-status');
+const { normalizeFailure, failureText, failureAction, backendFailure } = require('./lib/model-status');
 const { afterExit } = require('./lib/backend-breaker');
 const { loadHistoryFile, saveHistoryFile, debouncedSave } = require('./lib/history-file');
 const { firstUpdateCheck } = require('./lib/first-update-check');
@@ -30,7 +30,7 @@ if (!gotLock) {
 // resolvable at module load (only the cached USER_DATA_DIR is deferred).
 try {
   const _cfgPath = path.join(app.getPath('userData'), 'settings.json');
-  const _cfg = fs.existsSync(_cfgPath) ? JSON.parse(stripBom(fs.readFileSync(_cfgPath, 'utf-8'))) : {};
+  const _cfg = fs.existsSync(_cfgPath) ? JSON.parse(readSettingsText(_cfgPath)) : {};
   if (_cfg.gpu_safe_mode) {
     app.disableHardwareAcceleration();
     console.log('GPU safe mode ON – hardware acceleration disabled');
@@ -328,6 +328,7 @@ function startPython() {
   console.log(`Starting backend: ${cmd} ${args.join(' ')}`);
 
   const startedAt = Date.now();   // its uptime decides what an exit counts as
+  let spawnError = null;          // 'ENOENT' …: it never ran ('error' comes before 'close')
   pythonProcess = spawn(cmd, args, {
     cwd: ROOT_DIR,
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -389,13 +390,16 @@ function startPython() {
     if (breaker.giveUp) {
       backendGaveUp = true;
       console.error('Backend crash-looping – giving up auto-restart');
-      if (!crashToastShown) {
-        showToast(trayT().backendDead, 'error', null, 'restart');
-        crashToastShown = true;
-      }
       // Not "loading" for good: tray, settings and hotkey say it, and "Try
-      // again" starts the backend once more (retryModelLoad).
-      setModelFailed({ code: 'backend', message: `Backend exited (code ${code})` }, { toast: false });
+      // again" starts the backend once more (retryModelLoad). A missing or
+      // blocked backend.exe or DLL, or a processor without AVX, is worded
+      // as such instead of the generic code: 'backend'.
+      const failure = backendFailure(code, spawnError);
+      // Always a toast here: the crash toast of the first crash (which
+      // blocked this one before) promised a restart that is not coming.
+      if (failure.code === 'backend') showToast(trayT().backendDead, 'error', null, 'restart');
+      crashToastShown = true;
+      setModelFailed(failure, { toast: failure.code !== 'backend' });
       return;  // require manual restart – stop hammering the GPU
     }
 
@@ -411,6 +415,8 @@ function startPython() {
 
   pythonProcess.on('error', (err) => {
     console.error('Backend spawn error:', err);
+    // Only a start that failed (not e.g. a kill that failed later on).
+    if (String(err.syscall || '').startsWith('spawn')) spawnError = err.code || 'unknown';
   });
 
   // Reset the breaker once the backend has run cleanly for 30s – a transient

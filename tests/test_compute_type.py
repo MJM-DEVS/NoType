@@ -199,6 +199,59 @@ def test_download_happens_once_and_failure_is_named(monkeypatch, whisper):
     assert whisper.calls == []   # no load attempt without the files
 
 
+def scanner_lock():
+    """What huggingface_hub raises when it renames a finished file that a
+    virus scanner still has open, wrapped the way a caller might wrap it."""
+    try:
+        raise PermissionError(13, "The process cannot access the file because it is being "
+                                  "used by another process", "blobs\\abc.incomplete")
+    except PermissionError as e:
+        try:
+            raise OSError("snapshot_download failed") from e
+        except OSError as wrapped:
+            return wrapped
+
+
+def test_download_tries_again_while_a_file_is_locked(monkeypatch, whisper):
+    monkeypatch.setattr(Transcriber, "_local_model_path", lambda self: None)
+    monkeypatch.setattr(transcriber, "DOWNLOAD_LOCK_RETRIES", (0.0, 0.0))
+    downloads = []
+
+    def locked_twice(repo):
+        downloads.append(repo)
+        if len(downloads) <= 2:
+            raise scanner_lock()
+        return f"/cache/{repo}"
+
+    monkeypatch.setattr(faster_whisper.utils, "download_model", locked_twice)
+    Transcriber("small", device="cpu").load_model()
+    assert downloads == ["small"] * 3
+    assert whisper.calls == [("cpu", "int8")]
+
+
+def test_download_gives_up_on_a_lock_that_stays(monkeypatch, whisper):
+    monkeypatch.setattr(Transcriber, "_local_model_path", lambda self: None)
+    monkeypatch.setattr(transcriber, "DOWNLOAD_LOCK_RETRIES", (0.0, 0.0))
+    downloads = []
+
+    def locked(repo):
+        downloads.append(repo)
+        raise scanner_lock()
+
+    monkeypatch.setattr(faster_whisper.utils, "download_model", locked)
+    with pytest.raises(RuntimeError) as info:
+        Transcriber("small", device="cpu").load_model()
+    assert str(info.value).startswith(DOWNLOAD_FAILED)
+    assert len(downloads) == 3
+
+
+def test_a_network_error_is_not_retried_as_a_lock(monkeypatch):
+    # requests' ConnectionError is an OSError, too, but not a PermissionError.
+    assert transcriber._locked_file(scanner_lock())
+    assert not transcriber._locked_file(OSError("Name or service not known"))
+    assert not transcriber._locked_file(ConnectionError("reset"))
+
+
 def test_downloaded_once_then_loaded_from_the_folder(monkeypatch, whisper):
     monkeypatch.setattr(Transcriber, "_local_model_path", lambda self: None)
     monkeypatch.setattr(faster_whisper.utils, "download_model", lambda repo: f"/cache/{repo}")

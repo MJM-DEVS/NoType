@@ -62,6 +62,21 @@
     return 'other';
   }
 
+  // The backend process kept ending right after its start (main.js gave
+  // up): what the last end says. `exitCode` as Node reports it (on Windows
+  // the unsigned NTSTATUS), `spawnError` the code of a start that failed:
+  // backend.exe gone (ENOENT) or blocked (EACCES, EPERM), typically by a
+  // virus scanner. Both mean a part of NoType is missing, like a missing DLL.
+  const SPAWN_BLOCKED = ['ENOENT', 'EACCES', 'EPERM'];
+  function backendFailure(exitCode, spawnError) {
+    let code = 'backend';
+    if (SPAWN_BLOCKED.includes(spawnError) || RUNTIME_EXITS.includes(exitCode)) code = 'runtime';
+    else if (CPU_UNSUPPORTED_EXITS.includes(exitCode)) code = 'cpu_unsupported';
+    const message = spawnError ? `Backend could not be started (${spawnError})`
+      : `Backend exited (exit code ${exitCode})`;
+    return { code, message };
+  }
+
   // model_failed data, or what is left of an `error` message → the failure
   // the windows keep until a model loads. `noGpu`: the backend looked for
   // an NVIDIA GPU and found none (unknown for a bare `error`).
@@ -94,7 +109,9 @@
     return RETRY_FIRST.includes(normalizeFailure(failure).code) ? 'model:retry' : 'settings:speech';
   }
 
-  const api = { TEXT, CODES, RETRY_FIRST, failureCode, normalizeFailure, failureText, failureAction };
+  const api = {
+    TEXT, CODES, RETRY_FIRST, failureCode, backendFailure, normalizeFailure, failureText, failureAction,
+  };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.NoTypeModelStatus = api;
 })(this);

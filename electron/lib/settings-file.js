@@ -21,10 +21,37 @@ function stripBom(text) {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
+// The text of settings.json as config.py's decode_settings() reads it: this
+// app writes UTF-8, but a file edited by hand can come back as UTF-16
+// (PowerShell's `>` and Out-File) or in the ANSI code page (Set-Content in
+// Windows PowerShell). Read as UTF-8, the first is no JSON at all and the
+// second turns every umlaut into U+FFFD, which the next save makes permanent.
+function decodeSettings(buf) {
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return buf.subarray(2).toString('utf16le');
+  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
+    return Buffer.from(buf.subarray(2)).swap16().toString('utf16le');
+  }
+  if (isUtf8(buf)) return stripBom(buf.toString('utf-8'));
+  return new TextDecoder('windows-1252').decode(buf);
+}
+
+function isUtf8(buf) {
+  try {
+    new TextDecoder('utf-8', { fatal: true }).decode(buf);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function readSettingsText(file) {
+  return decodeSettings(fs.readFileSync(file));
+}
+
 function readUsable(file) {
   let text;
   try {
-    text = stripBom(fs.readFileSync(file, 'utf-8'));
+    text = readSettingsText(file);
   } catch (e) {
     return { error: (e && e.code) || 'unreadable', broken: false };
   }
@@ -74,4 +101,4 @@ function loadSettingsFile(file) {
   return result;
 }
 
-module.exports = { loadSettingsFile, stripBom, BACKUP_SUFFIXES };
+module.exports = { loadSettingsFile, readSettingsText, decodeSettings, stripBom, BACKUP_SUFFIXES };

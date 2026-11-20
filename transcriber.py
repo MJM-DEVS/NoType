@@ -10,6 +10,7 @@ can read the catalog and the language rules without loading the inference stack.
 import logging
 import os
 import threading
+import time
 import numpy as np
 
 import hallucinations
@@ -164,6 +165,23 @@ def compute_type_attempts(device: str, compute_type: str) -> list:
 
 # ── Download progress ──
 DOWNLOAD_BEAT = 5.0   # seconds between two looks at the download folders
+# A finished file is renamed from blobs/….incomplete in the cache. On Windows
+# that fails while a virus scanner still reads the new file (PermissionError,
+# WinError 5 or 32). The download picks up where it stopped, so it is simply
+# tried again after these pauses (seconds).
+DOWNLOAD_LOCK_RETRIES = (2.0, 5.0)
+
+
+def _locked_file(error) -> bool:
+    """Did `error`, or what it came from, fail on a file another program
+    holds open?"""
+    seen = set()
+    while error is not None and id(error) not in seen:
+        if isinstance(error, PermissionError):
+            return True
+        seen.add(id(error))
+        error = error.__cause__ or error.__context__
+    return False
 
 
 def _download_folders(repo: str) -> list:
@@ -266,7 +284,15 @@ class Transcriber:
 
         threading.Thread(target=beat, daemon=True).start()
         try:
-            return download_model(self._repo)
+            for pause in (*DOWNLOAD_LOCK_RETRIES, None):
+                try:
+                    return download_model(self._repo)
+                except Exception as e:
+                    if pause is None or not _locked_file(e):
+                        raise
+                    logger.warning(f"Download of {self._repo}: a file is in use "
+                                   f"(virus scanner?), trying again in {pause:.0f} s: {e}")
+                    time.sleep(pause)
         finally:
             done.set()
 

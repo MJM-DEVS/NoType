@@ -50,6 +50,28 @@ test('a UTF-8 BOM is skipped, like config.py does', () => {
   assert.ok(!fs.existsSync(file + '.corrupt'));
 });
 
+test('hand-edited encodings are read like config.py reads them', () => {
+  // Same cases as tests/test_config.py::test_hand_edited_encodings_are_read.
+  const json = JSON.stringify({ hotkey: 'alt+m', initial_prompt: 'Jürgen Müller, Straße „Zitat“' });
+  const utf16be = Buffer.from(json, 'utf16le').swap16();
+  const cases = {
+    utf8: Buffer.from(json, 'utf-8'),
+    'utf8-bom': Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(json, 'utf-8')]),
+    'utf16-le': Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(json, 'utf16le')]),
+    'utf16-be': Buffer.concat([Buffer.from([0xfe, 0xff]), utf16be]),
+    // Set-Content in Windows PowerShell: the ANSI code page (cp1252 here).
+    cp1252: Buffer.from(json.replace('„', '\x84').replace('“', '\x93'), 'latin1'),
+  };
+  for (const [name, bytes] of Object.entries(cases)) {
+    const file = tmpSettings({ '.bak1': good('alt+x') });
+    fs.writeFileSync(file, bytes);
+    const r = loadSettingsFile(file);
+    assert.strictEqual(r.source, file, name);
+    assert.strictEqual(r.config.initial_prompt, 'Jürgen Müller, Straße „Zitat“', name);
+    assert.ok(!fs.existsSync(file + '.corrupt'), name);
+  }
+});
+
 test('a settings.json that cannot be read is left alone, the backup used from memory', () => {
   const file = tmpSettings({ '.bak1': good('alt+r') });
   // A directory stands in for a locked file: it exists, reading it fails.
