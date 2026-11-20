@@ -111,7 +111,7 @@ Every key in `settings.json` is listed in [configuration.md](configuration.md). 
 NoType/
 ├── backend.py             # IPC loop, recording, transcription orchestration
 ├── speech_engine.py       # starts, watches and replaces the Whisper process, retries a failed dictation
-├── transcribe_worker.py   # the Whisper process itself (backend.exe --transcribe-worker)
+├── transcribe_worker.py   # the Whisper process itself (backend.exe --transcribe-worker), its log diagnostics
 ├── audio_spool.py         # writes each recording to disk while it is spoken, saved recordings
 ├── audio_recorder.py      # sounddevice capture, spectrum bands, rolling preview window
 ├── transcriber.py         # faster-whisper wrapper, language mix, batched long dictations, cuBLAS fallback
@@ -169,7 +169,9 @@ NoType/
 
 - Serialized inference (the CUDA model is not thread-safe); live preview and final pass share one lock.
 - Startup inference self-test; a cuBLAS compute-type rejection triggers an automatic, persisted float16 fallback.
-- Compute types per device: GPU types become int8 on the processor, and a load the device rejects walks the other types (CUDA: float16, int8; CPU: int8, float32) before it counts as failed. Loading is only cut off after a stretch without any status line (120 s on CUDA, 600 s on the processor, 1 h while downloading); a model that could not be loaded is a lasting state in the UI (`model_failed`), not a spinner.
+- Compute types per device: GPU types become int8 on the processor, and a load the device rejects walks the other types (CUDA: float16, int8; CPU: int8, float32) before it counts as failed. Loading is only cut off after a stretch without any status line (120 s on CUDA, 600 s on the processor, 1 h while downloading; a download sends one every 5 s while its files grow); a model that could not be loaded is a lasting state in the UI (`model_failed`), not a spinner.
+- Every load the engine starts sends `model_loading` (under its lock) and ends in `model_ready` or `model_failed`, also on unexpected errors. `model_failed` carries a `code` (`speech_engine.load_failure_code`, mirrored in `electron/lib/model-status.js`) that picks the next step; "Try again" is the `retry_model` command (`SpeechEngine.retry()`, ignored while a model runs or loads).
+- The speech engine process logs its machine at start (`transcribe_worker.system_info` / `engine_info`): OS, AVX flags, RAM, CTranslate2/faster-whisper versions, CUDA devices and compute types. No host or user name, no paths (`scrub_home`).
 - Backend circuit breaker with exponential backoff and a give-up threshold; IPC ping/pong watchdog.
 - Ollama is bound to the backend via a kill-on-close Job Object, so force-killing the app cannot orphan it.
 - Atomic settings writes with three rolling backups; overlay rendering avoids compositor constructs that provoke GPU driver timeouts.
