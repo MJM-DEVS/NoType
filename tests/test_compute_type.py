@@ -3,13 +3,17 @@
 WhisperModel is replaced by a fake that rejects what CTranslate2 rejects on
 that device, so nothing is downloaded and no GPU library is needed."""
 
+import logging
+import os
 import sys
+import time
 import types
 
 import pytest
 
 import faster_whisper
 import faster_whisper.utils
+import transcriber
 from transcriber import DOWNLOAD_FAILED, Transcriber, compute_type_attempts, resolve_compute_type
 
 CPU_REJECTS = ("float16", "int8_float16", "bfloat16", "int8_bfloat16")
@@ -89,6 +93,28 @@ def test_no_ctranslate2_counts_as_no_cuda(monkeypatch):
     monkeypatch.setitem(sys.modules, "ctranslate2", None)  # import fails
     t = Transcriber("small", device="auto", compute_type="int8_float16")
     assert (t.device, t.compute_type) == ("cpu", "int8")
+
+
+def test_a_failed_cuda_check_says_why_in_the_log(monkeypatch, caplog):
+    def broken():
+        raise OSError("DLL load failed while importing _ext")
+
+    monkeypatch.setitem(sys.modules, "ctranslate2", types.SimpleNamespace(get_cuda_device_count=broken))
+    with caplog.at_level(logging.INFO, logger="NoType.Transcriber"):
+        t = Transcriber("small", device="auto", compute_type="auto")
+    assert t.device == "cpu"
+    assert "CUDA check failed, using the processor: OSError: DLL load failed" in caplog.text
+
+
+def test_only_the_processor_converts_the_compute_type(monkeypatch, caplog):
+    no_cuda(monkeypatch, count=1)
+    with caplog.at_level(logging.INFO, logger="NoType.Transcriber"):
+        assert Transcriber("small", "auto", "Float16").compute_type == "float16"
+    assert "does not run on the processor" not in caplog.text
+    no_cuda(monkeypatch)
+    with caplog.at_level(logging.INFO, logger="NoType.Transcriber"):
+        assert Transcriber("small", "auto", "float16").compute_type == "int8"
+    assert "compute_type=float16 does not run on the processor, using int8" in caplog.text
 
 
 def test_cuda_keeps_the_configured_type(monkeypatch):
@@ -187,3 +213,55 @@ def test_downloaded_once_then_loaded_from_the_folder(monkeypatch, whisper):
     whisper.fails.add(("cpu", "int8"))
     Transcriber("small", device="cpu").load_model()
     assert seen == ["/cache/small", "/cache/small"]
+
+
+# ── Download: a sign of life while the files grow ──
+
+@pytest.fixture
+def cache_blob(monkeypatch, tmp_path, whisper):
+    """A Hugging Face cache in tmp_path, looked at every 50 ms; returns the
+    blob that grows while the fake download runs."""
+    monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "hub"))
+    monkeypatch.setenv("HF_XET_CACHE", str(tmp_path / "xet"))
+    monkeypatch.setattr(transcriber, "DOWNLOAD_BEAT", 0.05)
+    monkeypatch.setattr(Transcriber, "_local_model_path", lambda self: None)
+    return tmp_path / "hub" / "models--Systran--faster-whisper-small" / "blobs" / "abc.incomplete"
+
+
+def test_a_growing_download_reports_progress(monkeypatch, cache_blob):
+    def download(repo):
+        cache_blob.parent.mkdir(parents=True)
+        for _ in range(4):
+            with open(cache_blob, "ab") as f:
+                f.write(b"\0" * 2 ** 20)
+            time.sleep(0.2)
+        return "/cache/small"
+
+    monkeypatch.setattr(faster_whisper.utils, "download_model", download)
+    status = []
+    Transcriber("small", device="cpu").load_model(on_progress=status.append)
+    beats = [s for s in status if s.startswith("Lade Modell herunter")]
+    assert len(beats) >= 2
+    assert beats[-1] in ("Lade Modell herunter … 3 MB", "Lade Modell herunter … 4 MB")
+    assert status[-1] == "Modell geladen ✓"
+
+
+def test_a_stalled_download_stays_quiet(monkeypatch, cache_blob):
+    def download(repo):
+        time.sleep(0.4)   # nothing arrives
+        return "/cache/small"
+
+    monkeypatch.setattr(faster_whisper.utils, "download_model", download)
+    status = []
+    Transcriber("small", device="cpu").load_model(on_progress=status.append)
+    assert not [s for s in status if s.startswith("Lade Modell herunter")]
+
+
+def test_download_folders_follow_the_built_in_names(monkeypatch):
+    monkeypatch.setenv("HF_HOME", "/hf")
+    monkeypatch.delenv("HF_HUB_CACHE", raising=False)
+    monkeypatch.delenv("HF_XET_CACHE", raising=False)
+    assert transcriber._download_folders("small") == [
+        os.path.join("/hf", "hub", "models--Systran--faster-whisper-small"), os.path.join("/hf", "xet")]
+    assert transcriber._download_folders("distil-whisper/distil-large-v3.5-ct2")[0].endswith(
+        "models--distil-whisper--distil-large-v3.5-ct2")

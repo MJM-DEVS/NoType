@@ -10,6 +10,7 @@ const CHANNEL_PAGES = {
   'clear-history': ['settings.html'],
   'list-devices': ['settings.html', 'onboarding.html'],
   'list-models': ['settings.html', 'onboarding.html'],
+  'retry-model': ['settings.html', 'onboarding.html'],
   'hotkey-capture': ['settings.html', 'onboarding.html'],
   'open-onboarding': ['settings.html'],
   'close-onboarding': ['onboarding.html'],

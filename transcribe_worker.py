@@ -16,7 +16,9 @@ import io
 import logging
 import os
 import pickle
+import platform
 import queue
+import re
 import sys
 import threading
 import time
@@ -40,6 +42,108 @@ def read_frame(stream):
     if len(data) < size:
         return None
     return pickle.loads(data)
+
+
+# ── Diagnostics ──────────────────────────────────────────────────────
+# Two log lines per process start, so notype.log tells why a model doesn't
+# load on a machine nobody here can look at. Nothing personal goes in: no
+# host or user name, no paths.
+
+def scrub_home(text: str) -> str:
+    """`text` with the user's home folder written as ~ (error messages carry
+    paths, and with them the user name)."""
+    home = os.path.expanduser("~")
+    text = str(text)
+    if not home or home == "~" or len(home) < 4:
+        return text
+    for variant in sorted({home, home.replace("\\", "/"), home.replace("/", "\\")}, key=len, reverse=True):
+        text = re.sub(re.escape(variant), "~", text, flags=re.IGNORECASE)
+    return text
+
+
+def _cpu_features() -> dict:
+    """AVX, AVX2, AVX-512 present? Empty where the OS doesn't say."""
+    try:
+        if sys.platform.startswith("win"):
+            import ctypes
+            present = ctypes.windll.kernel32.IsProcessorFeaturePresent
+            # PF_AVX_INSTRUCTIONS_AVAILABLE, PF_AVX2_…, PF_AVX512F_…
+            return {"avx": bool(present(39)), "avx2": bool(present(40)), "avx512": bool(present(41))}
+        with open("/proc/cpuinfo", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if line.startswith("flags"):
+                    flags = set(line.split(":", 1)[1].split())
+                    return {"avx": "avx" in flags, "avx2": "avx2" in flags, "avx512": "avx512f" in flags}
+    except Exception:
+        pass
+    return {}
+
+
+def _ram_gb():
+    """Physical memory in GB, None when unknown."""
+    try:
+        if sys.platform.startswith("win"):
+            import ctypes
+
+            class MemoryStatus(ctypes.Structure):
+                _fields_ = [("length", ctypes.c_ulong), ("load", ctypes.c_ulong),
+                            ("total", ctypes.c_ulonglong), ("avail", ctypes.c_ulonglong),
+                            ("total_page", ctypes.c_ulonglong), ("avail_page", ctypes.c_ulonglong),
+                            ("total_virtual", ctypes.c_ulonglong), ("avail_virtual", ctypes.c_ulonglong),
+                            ("avail_extended", ctypes.c_ulonglong)]
+
+            status = MemoryStatus()
+            status.length = ctypes.sizeof(MemoryStatus)
+            if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                return None
+            total = status.total
+        else:
+            total = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES")
+        return round(total / 2 ** 30, 1)
+    except Exception:
+        return None
+
+
+def system_info() -> dict:
+    """OS, processor and memory. Needs nothing beyond the standard library,
+    so it is in the log even when the inference stack crashes on import."""
+    info = {"os": f"{platform.system()} {platform.release()} ({platform.version()})",
+            "arch": platform.machine(), "python": platform.python_version(),
+            "cpu_threads": os.cpu_count()}
+    info.update(_cpu_features())
+    ram = _ram_gb()
+    if ram:
+        info["ram_gb"] = ram
+    return info
+
+
+def engine_info(device: str = "auto") -> dict:
+    """Versions of the inference stack and the devices and compute types
+    CTranslate2 sees. A process meant for the processor leaves CUDA alone:
+    it is often the fallback for a CUDA start that hung."""
+    info = {}
+    try:
+        import ctranslate2
+        info["ctranslate2"] = getattr(ctranslate2, "__version__", "?")
+        cuda = 0 if device == "cpu" else ctranslate2.get_cuda_device_count()
+        info["cuda_devices"] = "not checked" if device == "cpu" else cuda
+        for kind in ("cpu", "cuda") if cuda else ("cpu",):
+            info[f"{kind}_types"] = "/".join(sorted(ctranslate2.get_supported_compute_types(kind)))
+    except Exception as e:
+        info["ctranslate2"] = f"unavailable ({e.__class__.__name__}: {scrub_home(e)})"
+    try:
+        import faster_whisper
+        info["faster_whisper"] = getattr(faster_whisper, "__version__", "?")
+    except Exception as e:
+        info["faster_whisper"] = f"unavailable ({e.__class__.__name__})"
+    return info
+
+
+def format_info(info: dict) -> str:
+    def text(value):
+        return "yes" if value is True else "no" if value is False else str(value)
+
+    return ", ".join(f"{key}={text(value)}" for key, value in info.items())
 
 
 class _LogToParent(logging.Handler):
@@ -124,8 +228,11 @@ def main():
     if init is None:
         return
     threading.Thread(target=read_commands, daemon=True).start()
+    logger.info(f"System: {format_info(system_info())}")
 
+    engine = None
     try:
+        logger.info(f"Speech engine: {format_info(engine_info(init['device']))}")
         from transcriber import JobCancelled, Transcriber
 
         engine = Transcriber(model_size=init["model_size"], device=init["device"],
@@ -138,8 +245,12 @@ def main():
             fallback = bool(_selftest(engine).get("compute_fallback"))
             logger.info("Inference selftest OK")
     except Exception as e:
-        logger.error(f"Model load failed: {e}", exc_info=True)
-        send({"t": "load_failed", "error": str(e)})
+        logger.error(f"Model load failed: {scrub_home(e)}", exc_info=True)
+        # The device, even when this failed before "loading" said it: the
+        # processor isn't tried a second time with what just failed there.
+        send({"t": "load_failed", "error": scrub_home(e),
+              "device": getattr(engine, "device", None),
+              "compute_type": getattr(engine, "compute_type", None)})
         return
 
     send({"t": "ready", "device": engine.device, "compute_type": engine.compute_type,

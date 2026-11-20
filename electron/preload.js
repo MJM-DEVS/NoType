@@ -57,6 +57,8 @@ contextBridge.exposeInMainWorld('notype', {
   clearHistory: () => ipcRenderer.send('clear-history'),
   listDevices: () => ipcRenderer.send('list-devices'),
   listModels: () => ipcRenderer.send('list-models'),
+  // No model could be loaded: load it once more ("Try again").
+  retryModel: () => ipcRenderer.send('retry-model'),
   // While a page captures a new hotkey, the global shortcut must not fire.
   setHotkeyCapture: (active) => ipcRenderer.send('hotkey-capture', !!active),
   openOnboarding: () => ipcRenderer.send('open-onboarding'),

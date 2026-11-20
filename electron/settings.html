@@ -1018,6 +1018,7 @@
             <!-- Why the model could not be loaded and what to do (renderModelStatus) -->
             <div class="field-desc warn" id="modelStatusHint" hidden></div>
           </div>
+          <button class="btn-sm" id="modelRetryBtn" type="button" hidden>Erneut versuchen</button>
           <span class="status-badge loading" id="modelStatus">Lädt …</span>
         </div>
       </div>
@@ -1853,10 +1854,11 @@
   // instead of resetting it to "Loading …".
   let modelState = { state: 'loading', data: null };
   function renderModelStatus() {
-    const badge = $('modelStatus'), hint = $('modelStatusHint');
+    const badge = $('modelStatus'), hint = $('modelStatusHint'), retry = $('modelRetryBtn');
     const { state, data } = modelState;
     const nameOf = (id) => (window.NoTypeModels ? window.NoTypeModels.nameOf(id) : id);
     hint.hidden = state !== 'failed';
+    retry.hidden = state !== 'failed';
     if (state === 'ready') {
       badge.className = 'status-badge ok';
       badge.textContent = `${nameOf(data.model)} · ${data.device}`;
@@ -1865,11 +1867,22 @@
       badge.className = 'status-badge error';
       badge.textContent = data.model ? `${nameOf(data.model)} · ${text.badge}` : text.badge;
       hint.textContent = text.hint;
+      retry.textContent = text.retry;
+      retry.disabled = false;
     } else {
       badge.className = 'status-badge loading';
       badge.textContent = t('speech.status.loading');
     }
   }
+
+  // "Try again": the badge goes to loading once the backend starts it
+  // (model-loading); until then the button just can't be pressed twice.
+  $('modelRetryBtn').onclick = () => {
+    if (!window.notype.retryModel) return;
+    $('modelRetryBtn').disabled = true;
+    setTimeout(() => { $('modelRetryBtn').disabled = false; }, 10000);   // no answer came
+    window.notype.retryModel();
+  };
 
   $('setupBtn').onclick = () => window.notype.openOnboarding();
 

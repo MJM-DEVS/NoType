@@ -39,9 +39,12 @@ test('senders: each channel only from its pages', () => {
   assert.ok(allowSender('update-action', 'update.html'));
   assert.ok(allowSender('update-action', 'settings.html'));
   assert.ok(allowSender('toast-action', 'toast.html'));
+  assert.ok(allowSender('retry-model', 'settings.html'));
+  assert.ok(allowSender('retry-model', 'onboarding.html'));
   for (const p of ['toast.html', 'overlay.html', 'update.html', 'suggest.html']) {
     assert.ok(!allowSender('save-config', p), p);
     assert.ok(!allowSender('agent-test', p), p);
+    assert.ok(!allowSender('retry-model', p), p);
   }
   assert.ok(!allowSender('save-config', null));
   assert.ok(!allowSender('unknown-channel', 'settings.html'));

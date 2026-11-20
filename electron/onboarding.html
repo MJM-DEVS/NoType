@@ -486,6 +486,7 @@
       <div class="status-row">
         <span class="status-pill loading" id="statusPill"><i></i><span id="statusText">…</span></span>
         <span class="field-desc" id="statusDetail"></span>
+        <button class="btn-sm" id="retryBtn" type="button" hidden>Erneut versuchen</button>
       </div>
       <textarea id="testArea" data-i18n-placeholder="t.placeholder" placeholder="Klick hier rein und sprich …"></textarea>
       <div class="success-box" id="successBox">
@@ -1108,13 +1109,23 @@
     let detail = testDetail;
     if (testState === 'loading') detail = lastStatusMsg || t('s.loading.detail');
     else if (testState === 'failed' && window.NoTypeModelStatus) {
-      detail = window.NoTypeModelStatus.failureText(modelFailure, uiLang).hint;
+      const text = window.NoTypeModelStatus.failureText(modelFailure, uiLang);
+      detail = text.hint;
+      $('retryBtn').textContent = text.retry;
     } else if (testState === 'ready' && !detail) {
       detail = t(state.mode === 'press_to_speak' ? 's.ready.detail.press' : 's.ready.detail')
         .replace('{hotkey}', prettyHotkey(state.hotkey));
     }
     $('statusDetail').textContent = detail || '';
+    $('retryBtn').hidden = testState !== 'failed' || !window.notype || !window.notype.retryModel;
+    $('retryBtn').disabled = false;
   }
+  // "Try again" after a failed load: model-loading puts the step back to loading.
+  $('retryBtn').onclick = () => {
+    $('retryBtn').disabled = true;
+    setTimeout(() => { $('retryBtn').disabled = false; }, 10000);   // no answer came
+    window.notype.retryModel();
+  };
   function setTest(s, detail) { testState = s; testDetail = detail || ''; refreshStatus(); updateReady(); }
 
   // ── 5 · Summary ──

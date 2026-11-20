@@ -9,6 +9,7 @@ can read the catalog and the language rules without loading the inference stack.
 
 import logging
 import os
+import threading
 import numpy as np
 
 import hallucinations
@@ -161,6 +162,33 @@ def compute_type_attempts(device: str, compute_type: str) -> list:
     return [first] + [c for c in fallbacks if c != first]
 
 
+# ── Download progress ──
+DOWNLOAD_BEAT = 5.0   # seconds between two looks at the download folders
+
+
+def _download_folders(repo: str) -> list:
+    """Where a download of `repo` grows: its folder in the Hugging Face cache,
+    and the Xet chunk cache newer huggingface_hub versions fill first."""
+    repo = repo if "/" in repo else BUILTIN_REPOS.get(repo, repo)
+    hf_home = os.environ.get("HF_HOME") or os.path.join(os.path.expanduser("~"), ".cache", "huggingface")
+    hub = os.environ.get("HF_HUB_CACHE") or os.path.join(hf_home, "hub")
+    xet = os.environ.get("HF_XET_CACHE") or os.path.join(hf_home, "xet")
+    return [os.path.join(hub, "models--" + repo.replace("/", "--")), xet]
+
+
+def _folder_bytes(folders: list) -> int:
+    """Bytes in all files below `folders` (0 for what doesn't exist yet)."""
+    total = 0
+    for folder in folders:
+        for root, _, files in os.walk(folder):
+            for name in files:
+                try:
+                    total += os.path.getsize(os.path.join(root, name))
+                except OSError:
+                    pass
+    return total
+
+
 class Transcriber:
     def __init__(self, model_size: str = "small", device: str = "auto",
                  compute_type: str = "auto"):
@@ -185,7 +213,10 @@ class Transcriber:
             try:
                 import ctranslate2
                 device = "cuda" if ctranslate2.get_cuda_device_count() > 0 else "cpu"
-            except Exception:
+            except Exception as e:
+                # The cause goes to the log: a missing DLL shows up here first.
+                logger.warning(f"CUDA check failed, using the processor: "
+                               f"{e.__class__.__name__}: {e}")
                 device = "cpu"
         self.device = device
         self.compute_type = resolve_compute_type(device, compute_type)
@@ -213,6 +244,32 @@ class Transcriber:
     def needs_download(self) -> bool:
         return self._local_model_path() is None
 
+    def _download(self, on_progress=None) -> str:
+        """download_model() with a sign of life: faster-whisper's download
+        says nothing for minutes. While the files on disk grow, a status line
+        every few seconds, which the speech engine counts as progress and the
+        setup guide shows. A download that stalls stays quiet."""
+        from faster_whisper.utils import download_model
+
+        folders = _download_folders(self._repo)
+        start = _folder_bytes(folders)
+        done = threading.Event()
+
+        def beat():
+            last = start
+            while not done.wait(DOWNLOAD_BEAT):
+                size = _folder_bytes(folders)
+                if size > last:
+                    last = size
+                    if on_progress:
+                        on_progress(f"Lade Modell herunter … {(size - start) // 2 ** 20} MB")
+
+        threading.Thread(target=beat, daemon=True).start()
+        try:
+            return download_model(self._repo)
+        finally:
+            done.set()
+
     def load_model(self, on_progress=None):
         """Load the Whisper model. Downloads on first use, afterwards it
         loads from the local files without contacting the Hub.
@@ -221,7 +278,6 @@ class Transcriber:
         type on the processor) is no reason to give up: the others for that
         device follow (compute_type_attempts). Raises once all of them failed."""
         from faster_whisper import WhisperModel
-        from faster_whisper.utils import download_model
 
         if on_progress:
             on_progress(f"Lade Modell '{self.model_size}' ({self.device})...")
@@ -233,7 +289,7 @@ class Transcriber:
             # Once, before the attempts below, so a compute type that has to
             # be retried doesn't go back to the internet.
             try:
-                source = download_model(self._repo)
+                source = self._download(on_progress)
             except Exception as e:
                 raise RuntimeError(f"{DOWNLOAD_FAILED} ({self._repo}): {e}") from e
 

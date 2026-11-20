@@ -7,7 +7,7 @@ const { parseBackendLine } = require('./lib/backend-line');
 const { isSameDocument, isAppFile, allowPermission } = require('./lib/guards');
 const { phraseKey } = require('./lib/phrase-key');
 const { modelLabel } = require('./lib/model-labels');
-const { normalizeFailure, failureText } = require('./lib/model-status');
+const { normalizeFailure, failureText, failureAction } = require('./lib/model-status');
 const { loadHistoryFile, saveHistoryFile, debouncedSave } = require('./lib/history-file');
 const { firstUpdateCheck } = require('./lib/first-update-check');
 const { senderPage, allowSender, filterConfig } = require('./lib/ipc-guard');
@@ -394,7 +394,9 @@ function startPython() {
         showToast(trayT().backendDead, 'error', null, 'restart');
         crashToastShown = true;
       }
-      updateTray('loading');
+      // Not "loading" for good: tray, settings and hotkey say it, and "Try
+      // again" starts the backend once more (retryModelLoad).
+      setModelFailed({ code: 'backend', message: `Backend exited (code ${code})` }, { toast: false });
       return;  // require manual restart – stop hammering the GPU
     }
 
@@ -557,7 +559,8 @@ function handlePythonMessage(line) {
         break;
 
       case 'engine_fallback':
-        showToast(trayT().gpuFallback, 'warning');
+        // Not enough graphics memory is no GPU that stopped answering.
+        showToast(data && data.code === 'memory' ? trayT().gpuFallbackMemory : trayT().gpuFallback, 'warning');
         break;
 
       case 'rescue_available':
@@ -1440,7 +1443,7 @@ function trayT() {
   const de = {
     ready: '✓ Bereit', recording: '● Aufnahme …', processing: '⟳ Transkribiere …',
     loading: '⏳ Modell lädt …', paused: '⏸ Pausiert',
-    failed: '⚠ Modell nicht geladen', failedOpen: 'Sprache & Modell öffnen …',
+    failed: '⚠ Modell nicht geladen', failedOpen: 'Sprache & Modell öffnen …', failedRetry: '↻  Erneut versuchen',
     today: 'Heute', words: 'Wörter', transcriptions: 'Transkriptionen',
     last7: 'Letzte 7 Tage', last30: 'Letzte 30 Tage',
     history: 'Letzte Transkriptionen', settings: '⚙  Einstellungen', setup: '✦  Einrichtung', autostart: 'Mit Windows starten', quit: '✕  Beenden',
@@ -1454,6 +1457,7 @@ function trayT() {
     transcribeFailedSaved: ['Diktat ließ sich gerade nicht umwandeln', 'Die Aufnahme ist gespeichert, nichts ist verloren.'],
     clipboardMoved: ['Fenster gewechselt, nichts eingefügt', 'Der Text liegt in der Zwischenablage. Mit Strg+V einfügen.'],
     gpuFallback: ['Grafikkarte antwortet nicht', 'NoType arbeitet auf dem Prozessor weiter und wechselt von selbst zurück.'],
+    gpuFallbackMemory: ['Zu wenig Grafikspeicher für das Modell', 'NoType arbeitet auf dem Prozessor weiter. Ein kleineres Modell passt auf die Grafikkarte.'],
     rescueFound: ['Aufnahme von {when} ist noch nicht umgewandelt', '{dur} gesprochen. Der Text kommt in die Zwischenablage.'],
     rescueStarted: 'Aufnahme wird umgewandelt …',
     rescueDone: ['Aufnahme umgewandelt', 'Der Text liegt in der Zwischenablage. Mit Strg+V einfügen.'],
@@ -1472,6 +1476,7 @@ function trayT() {
     hotkeyFailed: ['Hotkey {key} ist schon belegt', 'Diktieren per Hotkey geht gerade nicht. Unter „Allgemein“ einen anderen wählen.'],
     hotkeyInvalid: 'Hotkey {key} wird nicht erkannt',
     actRestart: 'Neu starten', actSetup: 'Einrichten', actOpen: 'Öffnen', actChange: 'Ändern',
+    actRetry: 'Erneut versuchen',
     updCheck: 'Nach Updates suchen', updChecking: 'Suche nach Updates …',
     updInstall: '↑  Auf {v} aktualisieren', updDownload: '↑  NoType {v} herunterladen',
     updLoading: 'Update wird geladen: {p} %', updInstalling: 'Update wird installiert …',
@@ -1481,7 +1486,7 @@ function trayT() {
   const en = {
     ready: '✓ Ready', recording: '● Recording …', processing: '⟳ Transcribing …',
     loading: '⏳ Loading model …', paused: '⏸ Paused',
-    failed: '⚠ Model not loaded', failedOpen: 'Open Language & Model …',
+    failed: '⚠ Model not loaded', failedOpen: 'Open Language & Model …', failedRetry: '↻  Try again',
     today: 'Today', words: 'words', transcriptions: 'transcriptions',
     last7: 'Last 7 days', last30: 'Last 30 days',
     history: 'Recent transcriptions', settings: '⚙  Settings', setup: '✦  Setup', autostart: 'Start with Windows', quit: '✕  Quit',
@@ -1494,6 +1499,7 @@ function trayT() {
     transcribeFailedSaved: ['Dictation could not be transcribed right now', 'The recording is saved, nothing is lost.'],
     clipboardMoved: ['Window changed, nothing inserted', 'The text is on the clipboard. Paste it with Ctrl+V.'],
     gpuFallback: ['Graphics card is not responding', 'NoType keeps working on the processor and switches back by itself.'],
+    gpuFallbackMemory: ['Not enough graphics memory for the model', 'NoType keeps working on the processor. A smaller model fits on the graphics card.'],
     rescueFound: ['Recording from {when} is not transcribed yet', '{dur} of speech. The text goes to the clipboard.'],
     rescueStarted: 'Transcribing the recording …',
     rescueDone: ['Recording transcribed', 'The text is on the clipboard. Paste it with Ctrl+V.'],
@@ -1512,6 +1518,7 @@ function trayT() {
     hotkeyFailed: ['Hotkey {key} is already taken', 'Dictating by hotkey does not work right now. Pick another one under “General”.'],
     hotkeyInvalid: 'Hotkey {key} is not recognized',
     actRestart: 'Restart', actSetup: 'Set up', actOpen: 'Open', actChange: 'Change',
+    actRetry: 'Try again',
     updCheck: 'Check for updates', updChecking: 'Checking for updates …',
     updInstall: '↑  Update to {v}', updDownload: '↑  Download NoType {v}',
     updLoading: 'Downloading update: {p} %', updInstalling: 'Installing update …',
@@ -1594,7 +1601,10 @@ function buildTrayMenu(status = 'ready') {
 
   const items = [
     { label: `NoType · ${labels[status] || T.ready}`, enabled: false },
-    ...(status === 'failed' ? [{ label: T.failedOpen, click: () => openSettings('speech') }] : []),
+    ...(status === 'failed' ? [
+      { label: T.failedRetry, click: () => retryModelLoad() },
+      { label: T.failedOpen, click: () => openSettings('speech') },
+    ] : []),
     { label: `Hotkey: ${hotkeyLabel}`, enabled: false },
     {
       label: `${T.today}: ${todayStats.count} · ~${todayStats.words} ${T.words}`,
@@ -1847,6 +1857,7 @@ onIpc('get-history', () => pushHistoryToSettings());
 onIpc('clear-history', () => clearHistory());
 onIpc('list-devices', () => sendToPython('list_devices'));
 onIpc('list-models', () => sendToPython('list_models'));
+onIpc('retry-model', () => retryModelLoad());
 onIpc('hotkey-capture', (_, active) => {
   // A page is recording a new key combo – the global shortcut must not fire
   // (and start a dictation) while the user presses keys to define it.
@@ -2033,19 +2044,40 @@ function showBackendError(message) {
 // No model could be loaded. Unlike a 9-second toast this stays: tray,
 // settings and setup guide show it, and the hotkey answers with it, until a
 // model loads (model_loading / model_ready clear it).
-function setModelFailed(data) {
+function setModelFailed(data, { toast = true } = {}) {
   modelLoaded = false;
   modelFailure = normalizeFailure(data);
   console.error(`Model failed (${modelFailure.code}): ${modelFailure.message}`);
   if (!isRecording && !isTranscribing) updateTray('ready');   // shown as 'failed'
   if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('model-failed', modelFailure);
   sendToOnboarding('model-failed', modelFailure);
-  showModelFailure();
+  if (toast) showModelFailure();
 }
 
 function showModelFailure() {
-  const { title, hint } = failureText(modelFailure, config.app_language === 'en' ? 'en' : 'de');
-  showToast([title, hint], 'error', null, 'settings:speech');
+  // The toast's second line holds two lines of text: the next step only.
+  // Settings and setup guide show the whole hint.
+  const { title, step } = failureText(modelFailure, config.app_language === 'en' ? 'en' : 'de');
+  showToast([title, step], 'error', null, failureAction(modelFailure));
+}
+
+// "Try again" (toast, tray, settings, setup guide): the backend loads the
+// model once more, or a backend that gave up after crashing starts again.
+// The answer is model_loading, then model_ready or model_failed.
+function retryModelLoad() {
+  if (modelLoaded || quitRequested) return;
+  if (pythonProcess && pythonProcess.stdin.writable) {
+    sendToPython('retry_model');
+  } else if (backendGaveUp) {   // during a restart back-off one is coming anyway
+    consecutiveFastCrashes = 0;
+    crashToastShown = false;
+    backendGaveUp = false;
+    modelFailure = null;
+    updateTray('loading');
+    if (settingsWin && !settingsWin.isDestroyed()) settingsWin.webContents.send('model-loading', {});
+    sendToOnboarding('model-loading', {});
+    startPython();
+  }
 }
 
 function showToast(msg, type = 'success', stats = null, action = null) {
@@ -2054,6 +2086,7 @@ function showToast(msg, type = 'success', stats = null, action = null) {
   const [title, sub] = Array.isArray(msg) ? msg : [String(msg || ''), ''];
   const T = trayT();
   const actionLabel = !action ? '' : action === 'restart' ? T.actRestart
+    : action === 'model:retry' ? T.actRetry
     : action === 'settings:cleanup' ? T.actSetup
     : action === 'settings:system' || action === 'settings:general' ? T.actChange
     : action.startsWith('rescue:') ? T.actRescue : T.actOpen;
@@ -2130,6 +2163,7 @@ onIpc('toast-hover', (_, hovering) => {
 onIpc('toast-action', (_, action) => {
   if (toastWin && !toastWin.isDestroyed()) toastWin.close();
   if (action === 'restart') { app.relaunch(); quitApp(); }
+  else if (action === 'model:retry') retryModelLoad();
   else if (typeof action === 'string' && action.startsWith('settings:')) openSettings(action.slice(9));
   else if (typeof action === 'string' && action.startsWith('rescue:')) runRescue(action.slice(7));
 });

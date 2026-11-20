@@ -5,7 +5,9 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { TEXT, CODES, failureCode, normalizeFailure, failureText } = require('../lib/model-status');
+const {
+  TEXT, CODES, RETRY_FIRST, failureCode, normalizeFailure, failureText, failureAction,
+} = require('../lib/model-status');
 
 const FLOAT16_ON_CPU = 'Requested float16 compute type, but the target device or backend do not '
   + 'support efficient float16 computation.';
@@ -16,14 +18,56 @@ test('error messages are classified like the backend does', () => {
     ['Model download failed (Systran/faster-whisper-small): Name or service not known', 'download'],
     ['Loading the model got stuck (no progress for 600 s)', 'stuck'],
     ['Speech engine ended while loading (exit code 3221225477)', 'crashed'],
-    ['Could not start the speech engine: [WinError 2]', 'crashed'],
+    ['Speech engine ended while loading (exit code 1)', 'crashed'],
+    ['Speech engine is gone: [Errno 32] Broken pipe', 'crashed'],
+    ['Speech engine ended while loading (exit code 3221225501)', 'cpu_unsupported'],
+    ['Speech engine ended while loading (exit code -4)', 'cpu_unsupported'],
+    ['Fatal Python error: Illegal instruction', 'cpu_unsupported'],
+    ['Speech engine ended while loading (exit code 3221225781)', 'runtime'],
+    ['DLL load failed while importing _ext: The specified module could not be found.', 'runtime'],
+    ["No module named 'ctranslate2'", 'runtime'],
+    ['Library cublas64_12.dll is not found or cannot be loaded', 'runtime'],
+    ['Could not start the speech engine: [WinError 2]', 'runtime'],
     [`${FLOAT16_ON_CPU} (model small on cpu, tried int8, float32)`, 'compute_type'],
     ['CUDA failed with error out of memory', 'memory'],
     ['std::bad_alloc', 'memory'],
-    ['Library cublas64_12.dll is not found or cannot be loaded', 'other'],
+    ["Speech engine failed while loading (KeyError: 'download')", 'other'],
     ['', 'other'],
+    [null, 'other'],
   ];
   for (const [message, code] of cases) assert.strictEqual(failureCode(message), code, message);
+  // Exit codes count whole, as on the Python side.
+  assert.strictEqual(failureCode('Speech engine ended while loading (exit code 32212255010)'), 'crashed');
+  assert.strictEqual(failureCode('Speech engine ended while loading (exit code -41)'), 'crashed');
+});
+
+test('the toast offers "Try again" where loading again helps, else the settings', () => {
+  for (const code of ['download', 'stuck', 'crashed', 'runtime', 'backend']) {
+    assert.strictEqual(failureAction({ code }), 'model:retry', code);
+  }
+  for (const code of ['compute_type', 'memory', 'cpu_unsupported', 'other']) {
+    assert.strictEqual(failureAction({ code }), 'settings:speech', code);
+  }
+  assert.strictEqual(failureAction({ message: 'Loading the model got stuck' }), 'model:retry');
+  assert.strictEqual(failureAction(null), 'settings:speech');
+  assert.ok(RETRY_FIRST.every((code) => CODES.includes(code)));
+});
+
+test('hints that come with "Try again" mention it', () => {
+  for (const code of ['download', 'stuck', 'crashed', 'backend']) {
+    assert.ok(TEXT.de[code].includes(TEXT.de.retry), `de.${code}`);
+    assert.ok(TEXT.en[code].includes(TEXT.en.retry), `en.${code}`);
+  }
+});
+
+test('the toast gets the next step without the CPU note', () => {
+  const text = failureText({ code: 'stuck', device: 'cpu', gpu: null }, 'de');
+  assert.strictEqual(text.step, TEXT.de.stuck);
+  assert.strictEqual(text.hint, `${TEXT.de.cpu} ${TEXT.de.stuck}`);
+  assert.strictEqual(text.retry, 'Erneut versuchen');
+  assert.strictEqual(failureText({ code: 'stuck' }, 'en').retry, 'Try again');
+  // A backend that keeps crashing is not about the GPU.
+  assert.strictEqual(failureText({ code: 'backend', gpu: null }, 'de').hint, TEXT.de.backend);
 });
 
 test('every code has copy in German and English', () => {
@@ -93,6 +137,34 @@ test('the new strings exist in both languages of each page', () => {
   const onboarding = fs.readFileSync(path.join(__dirname, '..', 'onboarding.html'), 'utf-8');
   assert.strictEqual(onboarding.split("'s.failed':").length - 1, 2);
   for (const page of [settings, onboarding]) assert.match(page, /<script src="lib\/model-status\.js"><\/script>/);
+});
+
+test('settings and setup guide offer "Try again" while the model failed', () => {
+  assert.match(settings, /<button class="btn-sm" id="modelRetryBtn" type="button" hidden>/);
+  assert.match(settings, /retry\.hidden = state !== 'failed';/);
+  assert.match(settings, /window\.notype\.retryModel\(\)/);
+  const onboarding = fs.readFileSync(path.join(__dirname, '..', 'onboarding.html'), 'utf-8');
+  assert.match(onboarding, /<button class="btn-sm" id="retryBtn" type="button" hidden>/);
+  assert.match(onboarding, /\$\('retryBtn'\)\.hidden = testState !== 'failed'/);
+  assert.match(onboarding, /window\.notype\.retryModel\(\)/);
+});
+
+test('main.js wires "Try again" to the backend, the toast and the tray', () => {
+  const main = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf-8');
+  assert.match(main, /onIpc\('retry-model', \(\) => retryModelLoad\(\)\);/);
+  assert.match(main, /else if \(action === 'model:retry'\) retryModelLoad\(\);/);
+  assert.match(main, /sendToPython\('retry_model'\)/);
+  assert.match(main, /\{ label: T\.failedRetry, click: \(\) => retryModelLoad\(\) \}/);
+  assert.strictEqual(main.split('actRetry:').length - 1, 2);
+  assert.strictEqual(main.split('failedRetry:').length - 1, 2);
+  // A backend that gave up after crashing is a failure, not "loading".
+  assert.match(main, /setModelFailed\(\{ code: 'backend'/);
+  // Too little graphics memory is worded as such, in both languages.
+  assert.match(main, /data\.code === 'memory' \? trayT\(\)\.gpuFallbackMemory : trayT\(\)\.gpuFallback/);
+  assert.strictEqual(main.split('gpuFallbackMemory:').length - 1, 2);
+  // The backend handles the command.
+  const backend = fs.readFileSync(path.join(__dirname, '..', '..', 'backend.py'), 'utf-8');
+  assert.match(backend, /elif cmd == "retry_model":\n\s+self\.handle_retry_model\(\)/);
 });
 
 test('the model status badge is not reset by the i18n pass', () => {

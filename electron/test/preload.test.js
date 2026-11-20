@@ -68,6 +68,12 @@ test('model-failed and model-loading reach their callbacks', () => {
   assert.deepStrictEqual(got, [['failed', { code: 'stuck' }], ['failed', {}], ['loading', {}]]);
 });
 
+test('retryModel sends retry-model without arguments', () => {
+  const { api, ipcRenderer } = loadPreload();
+  api.retryModel('ignored');
+  assert.deepStrictEqual(ipcRenderer.sent, [['retry-model']]);
+});
+
 test('the unused registerHotkey is gone, senders still send', () => {
   const { api, ipcRenderer } = loadPreload();
   assert.strictEqual(api.registerHotkey, undefined);

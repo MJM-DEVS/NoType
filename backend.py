@@ -126,9 +126,10 @@ class Backend:
         self.config = load_config()
         self.recorder = None
         self.engine = SpeechEngine(
+            on_loading=self._on_engine_loading,
             on_ready=self._on_engine_ready,
             on_status=lambda text: self.send("status", {"message": text}),
-            on_fallback=lambda: self.send("engine_fallback"),
+            on_fallback=lambda info: self.send("engine_fallback", info),
             on_failed=self._on_engine_failed,
             is_recording=lambda: bool(self.recorder and self.recorder.is_recording),
         )
@@ -200,11 +201,24 @@ class Backend:
         """Load the configured Whisper model (blocks until that is settled)."""
         model_size = self.config.get("model_size", "small")
         compute_type = self.config.get("compute_type") or "auto"
-        self._model_failed = False
-        self.send("model_loading", {"model": model_size})
-        self.send("status", {"message": f"Loading model '{model_size}'..."})
         logger.info(f"Loading model: {model_size} (compute_type {compute_type})")
         self.engine.load(model_size, compute_type)
+
+    def _on_engine_loading(self, info: dict):
+        """A load starts. The engine says so under its lock, so model_loading
+        never overtakes the end of a load that was still running."""
+        self._model_failed = False
+        self.send("model_loading", {"model": info["model"]})
+        self.send("status", {"message": f"Loading model '{info['model']}'..."})
+
+    def handle_retry_model(self):
+        """"Try again" after no model could be loaded. While one runs or
+        loads, nothing happens: that ends in model_ready / model_failed."""
+        def retry():
+            if not self.engine.retry():
+                logger.info("Retry ignored: a model is loaded or loading")
+
+        threading.Thread(target=retry, daemon=True).start()
 
     def _on_engine_ready(self, info: dict):
         """A model is loaded and passed its selftest (at the start, after a
@@ -214,9 +228,17 @@ class Backend:
         # inference time: keep the one that works for the next app start.
         if info["compute_fallback"]:
             self.config["compute_type"] = info["compute_type"]
-            save_config(self.config)
-            logger.info(f"Persisted compute_type fallback: {info['compute_type']}")
+            try:
+                save_config(self.config)
+                logger.info(f"Persisted compute_type fallback: {info['compute_type']}")
+            except Exception as e:  # the model is loaded all the same
+                logger.warning(f"Saving the compute_type fallback failed: {e}")
         self.send("model_ready", {"device": info["device"], "model": info["model"]})
+        gpu = self._gpu_info()
+        if gpu and str(info["device"]).upper().startswith("CPU"):
+            # Driver too old, CUDA libraries missing …: the lines above say why.
+            logger.warning(f"An NVIDIA GPU is present ({gpu['name']}, {gpu['vram_mb']} MB), "
+                           f"but the model runs on the processor")
 
     def _on_engine_failed(self, info: dict):
         """No model could be loaded. model_failed says why and what to do
@@ -225,7 +247,10 @@ class Backend:
         self._model_failed = True
         gpu = self._gpu_info()
         failure = describe_load_failure(info["message"], info.get("device"), bool(gpu))
-        logger.error(f"No model loaded ({failure['code']}): {info['message']}")
+        logger.error(f"No model loaded ({failure['code']}; model {info.get('model')}, "
+                     f"device {info.get('device') or 'unknown'}, "
+                     f"compute_type {info.get('compute_type') or 'unknown'}, "
+                     f"NVIDIA GPU {gpu['name'] if gpu else 'none found'}): {info['message']}")
         self.send("model_failed", {
             "message": info["message"], "model": info.get("model"),
             "device": info.get("device"), "compute_type": info.get("compute_type"),
@@ -1050,6 +1075,8 @@ class Backend:
                     self.handle_ollama_update()
                 elif cmd == "list_models":
                     self.handle_list_models()
+                elif cmd == "retry_model":
+                    self.handle_retry_model()
                 elif cmd == "watch_hotkey_release":
                     self.handle_watch_hotkey_release((msg.get("data") or {}).get("hotkey", ""))
                 elif cmd == "ping":
