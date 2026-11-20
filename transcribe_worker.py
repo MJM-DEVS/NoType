@@ -136,7 +136,24 @@ def engine_info(device: str = "auto") -> dict:
         info["faster_whisper"] = getattr(faster_whisper, "__version__", "?")
     except Exception as e:
         info["faster_whisper"] = f"unavailable ({e.__class__.__name__})"
+    try:  # runs the VAD in front of every dictation
+        import onnxruntime
+        info["onnxruntime"] = getattr(onnxruntime, "__version__", "?")
+    except Exception as e:
+        info["onnxruntime"] = f"unavailable ({e.__class__.__name__}: {scrub_home(e)})"
     return info
+
+
+def warm_vad():
+    """Load the Silero VAD (onnxruntime) now instead of at the first
+    dictation. Every dictation runs it, so an onnxruntime that can't load on
+    this machine (a DLL a virus scanner took, an older VC++ runtime loaded
+    first) would otherwise fail each one after the model said "ready", with
+    nothing to tell why. faster-whisper keeps the model it loads here."""
+    from faster_whisper import vad
+    get_vad_model = getattr(vad, "get_vad_model", None)
+    if get_vad_model:
+        get_vad_model()
 
 
 def format_info(info: dict) -> str:
@@ -240,6 +257,7 @@ def main():
         send({"t": "loading", "device": engine.device, "compute_type": engine.compute_type,
               "download": engine.needs_download()})
         engine.load_model(on_progress=lambda m: send({"t": "status", "msg": m}))
+        warm_vad()
         fallback = False
         if engine.device == "cuda":
             fallback = bool(_selftest(engine).get("compute_fallback"))

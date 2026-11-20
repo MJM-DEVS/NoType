@@ -28,6 +28,10 @@ test('error messages are classified like the backend does', () => {
     ["No module named 'ctranslate2'", 'runtime'],
     ['Library cublas64_12.dll is not found or cannot be loaded', 'runtime'],
     ['Could not start the speech engine: [WinError 2]', 'runtime'],
+    ['Applying the VAD filter requires the onnxruntime package', 'runtime'],
+    ['[ONNXRuntimeError] : 3 : NO_SUCHFILE : Load model from ~/AppData/Local/Programs/NoType/'
+      + "resources/backend/_internal/faster_whisper/assets/silero_vad_v6.onnx failed:File doesn't exist",
+    'runtime'],
     [`${FLOAT16_ON_CPU} (model small on cpu, tried int8, float32)`, 'compute_type'],
     ['CUDA failed with error out of memory', 'memory'],
     ['std::bad_alloc', 'memory'],

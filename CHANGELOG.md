@@ -25,6 +25,7 @@ This file was written after the fact from the commit history. Dates are those of
 - A dictation is no longer lost when saving the compute type fallback fails (locked `settings.json`).
 - A model download that fails because a virus scanner still holds a just-downloaded file is tried again (twice) instead of ending as "download failed".
 - A backend that can't start says why: missing or blocked `backend.exe` or DLL ("reinstall"), a processor without AVX, or the generic message. Giving up always shows a toast now; before, the toast of the first crash ("restarting …") was the last one. Import errors at the start are written to `notype.log` (home folder as `~`).
+- The voice activity detection (Silero VAD, onnxruntime) loads together with the model. Before, an onnxruntime that could not load (a DLL removed by a virus scanner, an older VC++ runtime) let the model show "ready" and then failed every dictation without a reason; now the load fails with "a part of the speech engine is missing" and the log names the onnxruntime version or why it did not load.
 - `notype.log` gets a short description of the machine at every start of the speech engine: OS, processor features (AVX/AVX2/AVX-512), memory, CTranslate2 and faster-whisper versions, CUDA devices and compute types, and why CUDA wasn't used. No host or user name, no paths; the home folder in error messages is written as `~`.
 
 ### Changed

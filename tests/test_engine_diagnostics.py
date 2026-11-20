@@ -9,7 +9,7 @@ import re
 import sys
 import types
 
-from transcribe_worker import engine_info, format_info, scrub_home, system_info
+from transcribe_worker import engine_info, format_info, scrub_home, system_info, warm_vad
 
 SYSTEM_KEYS = {"os", "arch", "python", "cpu_threads", "avx", "avx2", "avx512", "ram_gb"}
 
@@ -117,3 +117,89 @@ def test_scrub_home_without_a_usable_home(monkeypatch):
 def test_format_info_reads_as_one_line():
     assert format_info({"os": "Windows 10", "avx": True, "avx2": False, "cuda_devices": 0}) == \
         "os=Windows 10, avx=yes, avx2=no, cuda_devices=0"
+
+
+# ── The VAD (onnxruntime): loaded with the model, not at the first dictation ──
+
+def test_engine_info_names_the_onnxruntime(monkeypatch):
+    monkeypatch.setitem(sys.modules, "ctranslate2", fake_ctranslate2())
+    monkeypatch.setitem(sys.modules, "onnxruntime", types.SimpleNamespace(__version__="1.20.1"))
+    assert engine_info()["onnxruntime"] == "1.20.1"
+    monkeypatch.setitem(sys.modules, "onnxruntime", None)   # its DLL does not load
+    assert re.match(r"unavailable \((ModuleNotFound|Import)Error: ", engine_info()["onnxruntime"])
+
+
+def test_warm_vad_loads_the_vad_model(monkeypatch):
+    import faster_whisper.vad
+    calls = []
+    monkeypatch.setattr(faster_whisper.vad, "get_vad_model", lambda: calls.append(1), raising=False)
+    warm_vad()
+    assert calls == [1]
+    monkeypatch.delattr(faster_whisper.vad, "get_vad_model")
+    warm_vad()   # a faster-whisper without it: nothing to warm
+
+
+WORKER_DRIVER = r"""
+import os, sys, types
+sys.path.insert(0, sys.argv[1])
+model_dir = sys.argv[2]
+open(os.path.join(model_dir, "model.bin"), "wb").close()
+ct2 = types.ModuleType("ctranslate2")
+ct2.__version__ = "4.5.0"
+ct2.get_cuda_device_count = lambda: 0
+ct2.get_supported_compute_types = lambda device: {"int8", "float32"}
+sys.modules["ctranslate2"] = ct2
+
+class WhisperModel:
+    def __init__(self, source, device, compute_type):
+        pass
+
+def get_vad_model():
+    # What faster-whisper raises when onnxruntime does not import.
+    raise RuntimeError("Applying the VAD filter requires the onnxruntime package")
+
+fw = types.ModuleType("faster_whisper")
+fw.WhisperModel = WhisperModel
+fw.utils = types.ModuleType("faster_whisper.utils")
+fw.utils.download_model = lambda repo, local_files_only=False: model_dir
+fw.vad = types.ModuleType("faster_whisper.vad")
+fw.vad.get_vad_model = get_vad_model
+sys.modules.update({"faster_whisper": fw, "faster_whisper.utils": fw.utils,
+                    "faster_whisper.vad": fw.vad, "onnxruntime": None})
+import transcribe_worker
+transcribe_worker.main()
+"""
+
+
+def test_a_vad_that_does_not_load_fails_the_load(tmp_path):
+    """A real worker process: the model loads, the VAD does not. Before, it
+    said "ready" and then failed every dictation; now the load fails with a
+    reason that reads as a broken install (runtime)."""
+    import subprocess
+    from speech_engine import load_failure_code
+    from transcribe_worker import read_frame, write_frame
+
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    proc = subprocess.Popen([sys.executable, "-c", WORKER_DRIVER, repo, str(tmp_path)],
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL)
+    try:
+        write_frame(proc.stdin, {"t": "init", "model_size": "small", "device": "auto",
+                                 "compute_type": "auto"})
+        messages = []
+        while True:
+            msg = read_frame(proc.stdout)
+            if msg is None:
+                break
+            messages.append(msg)
+            if msg["t"] in ("ready", "load_failed"):
+                break
+    finally:
+        proc.kill()
+        proc.wait(timeout=10)
+    logs = [m["msg"] for m in messages if m["t"] == "log"]
+    assert any("onnxruntime=unavailable" in line for line in logs)
+    end = messages[-1]
+    assert end["t"] == "load_failed"
+    assert end["device"] == "cpu" and end["compute_type"] == "int8"
+    assert load_failure_code(end["error"]) == "runtime"

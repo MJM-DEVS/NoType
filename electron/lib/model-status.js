@@ -47,7 +47,7 @@
   const CPU_UNSUPPORTED_EXITS = [0xC000001D, -4];
   const RUNTIME_EXITS = [0xC0000135, 0xC0000139, 0xC0000142];
   const RUNTIME_MARKERS = ['dll load failed', 'cannot load library', 'could not load library',
-    'cannot be loaded', 'no module named', 'could not start the speech engine'];
+    'cannot be loaded', 'no module named', 'could not start the speech engine', 'onnxruntime'];
   function failureCode(message) {
     const text = String(message || '').toLowerCase();
     const exit = /exit code (-?\d+)/.exec(text);

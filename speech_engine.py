@@ -76,7 +76,8 @@ LOAD_HINTS = {
 CPU_UNSUPPORTED_EXITS = {0xC000001D, -4}                  # illegal instruction
 RUNTIME_EXITS = {0xC0000135, 0xC0000139, 0xC0000142}      # DLL missing / entry point / init
 RUNTIME_MARKERS = ("dll load failed", "cannot load library", "could not load library",
-                   "cannot be loaded", "no module named", "could not start the speech engine")
+                   "cannot be loaded", "no module named", "could not start the speech engine",
+                   "onnxruntime")  # the VAD's runtime, or its model file, did not load
 
 
 def load_failure_code(message: str) -> str:
