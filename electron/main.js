@@ -329,12 +329,24 @@ function startPython() {
 
   const startedAt = Date.now();   // its uptime decides what an exit counts as
   let spawnError = null;          // 'ENOENT' …: it never ran ('error' comes before 'close')
-  pythonProcess = spawn(cmd, args, {
-    cwd: ROOT_DIR,
-    stdio: ['pipe', 'pipe', 'pipe'],
-    windowsHide: true,
-    env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
-  });
+  try {
+    pythonProcess = spawn(cmd, args, {
+      cwd: ROOT_DIR,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true,
+      env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+    });
+  } catch (err) {
+    // Node only reports ENOENT, EACCES and a few more as 'error' below;
+    // the rest it throws, among them EPERM and UNKNOWN, which is what a
+    // backend.exe blocked by a virus scanner or an app control policy gives.
+    // Uncaught, that ended the startup (no hotkeys, tray on "loading") or,
+    // from a restart, the main process. Now it is a failed start like ENOENT.
+    console.error('Backend spawn error:', err);
+    pythonProcess = null;
+    setImmediate(() => backendEnded(null, startedAt, err.code || 'UNKNOWN'));
+    return;
+  }
   // A fresh backend gets the full watchdog grace, not the dead one's clock.
   lastPongTs = Date.now();
   missedPings = 0;
@@ -361,62 +373,12 @@ function startPython() {
     console.error('Python:', data.toString().trim());
   });
 
-  pythonProcess.on('close', (code) => {
-    console.log(`Python exited (code ${code})`);
-    pythonProcess = null;
-    modelLoaded = false;
-    modelFailure = null;   // a new backend loads again
-    rescueRunning = null;
-    if (backendUptimeTimer) { clearTimeout(backendUptimeTimer); backendUptimeTimer = null; }
-
-    // If we asked it to quit, don't relaunch.
-    if (quitRequested) return;
-
-    // If any recording was in flight, reset the state machine so the hotkey
-    // doesn't end up locked.
-    if (isRecording || isTranscribing) finishTranscription();
-
-    // ── Circuit breaker ──
-    // A deterministic native crash (e.g. a CUDA/ctranslate2 segfault from a
-    // GPU driver reset) would otherwise respawn forever, and EACH respawn
-    // re-initialises a fresh CUDA context that prevents a wedged driver from
-    // settling. Count backends that die within 10 s of their start; after 5
-    // in a row, STOP and require a manual restart. A single watchdog-kill
-    // (uptime >65s) resets the counter, so it's never mistaken for a crash
-    // loop (lib/backend-breaker.js).
-    const breaker = afterExit(consecutiveFastCrashes, Date.now() - startedAt);
-    consecutiveFastCrashes = breaker.fastCrashes;
-
-    if (breaker.giveUp) {
-      backendGaveUp = true;
-      console.error('Backend crash-looping – giving up auto-restart');
-      // Not "loading" for good: tray, settings and hotkey say it, and "Try
-      // again" starts the backend once more (retryModelLoad). A missing or
-      // blocked backend.exe or DLL, or a processor without AVX, is worded
-      // as such instead of the generic code: 'backend'.
-      const failure = backendFailure(code, spawnError);
-      // Always a toast here: the crash toast of the first crash (which
-      // blocked this one before) promised a restart that is not coming.
-      if (failure.code === 'backend') showToast(trayT().backendDead, 'error', null, 'restart');
-      crashToastShown = true;
-      setModelFailed(failure, { toast: failure.code !== 'backend' });
-      return;  // require manual restart – stop hammering the GPU
-    }
-
-    // Exponential backoff for fast crashes: 2s, 4s, 8s, 16s; else 2s.
-    const delay = breaker.delay;
-    if (!crashToastShown) {
-      showToast(trayT().backendCrashed, 'error');
-      crashToastShown = true;
-    }
-    console.log(`Restarting backend in ${delay} ms (fast-crash streak ${consecutiveFastCrashes})`);
-    setTimeout(() => { if (!quitRequested && !backendGaveUp) startPython(); }, delay);
-  });
+  pythonProcess.on('close', (code) => backendEnded(code, startedAt, spawnError));
 
   pythonProcess.on('error', (err) => {
     console.error('Backend spawn error:', err);
     // Only a start that failed (not e.g. a kill that failed later on).
-    if (String(err.syscall || '').startsWith('spawn')) spawnError = err.code || 'unknown';
+    if (String(err.syscall || '').startsWith('spawn')) spawnError = err.code || 'UNKNOWN';
   });
 
   // Reset the breaker once the backend has run cleanly for 30s – a transient
@@ -426,6 +388,60 @@ function startPython() {
   }, 30_000);
 
   pythonStartCount++;
+}
+
+// The backend ended, or never started (`spawnError`, then `code` is the
+// negative errno or null): restart it, or give up after a crash loop.
+function backendEnded(code, startedAt, spawnError) {
+  console.log(`Python exited (code ${code})`);
+  pythonProcess = null;
+  modelLoaded = false;
+  modelFailure = null;   // a new backend loads again
+  rescueRunning = null;
+  if (backendUptimeTimer) { clearTimeout(backendUptimeTimer); backendUptimeTimer = null; }
+
+  // If we asked it to quit, don't relaunch.
+  if (quitRequested) return;
+
+  // If any recording was in flight, reset the state machine so the hotkey
+  // doesn't end up locked.
+  if (isRecording || isTranscribing) finishTranscription();
+
+  // ── Circuit breaker ──
+  // A deterministic native crash (e.g. a CUDA/ctranslate2 segfault from a
+  // GPU driver reset) would otherwise respawn forever, and EACH respawn
+  // re-initialises a fresh CUDA context that prevents a wedged driver from
+  // settling. Count backends that die within 10 s of their start; after 5
+  // in a row, STOP and require a manual restart. A single watchdog-kill
+  // (uptime >65s) resets the counter, so it's never mistaken for a crash
+  // loop (lib/backend-breaker.js).
+  const breaker = afterExit(consecutiveFastCrashes, Date.now() - startedAt);
+  consecutiveFastCrashes = breaker.fastCrashes;
+
+  if (breaker.giveUp) {
+    backendGaveUp = true;
+    console.error('Backend crash-looping – giving up auto-restart');
+    // Not "loading" for good: tray, settings and hotkey say it, and "Try
+    // again" starts the backend once more (retryModelLoad). A missing or
+    // blocked backend.exe or DLL, or a processor without AVX, is worded
+    // as such instead of the generic code: 'backend'.
+    const failure = backendFailure(code, spawnError);
+    // Always a toast here: the crash toast of the first crash (which
+    // blocked this one before) promised a restart that is not coming.
+    if (failure.code === 'backend') showToast(trayT().backendDead, 'error', null, 'restart');
+    crashToastShown = true;
+    setModelFailed(failure, { toast: failure.code !== 'backend' });
+    return;  // require manual restart – stop hammering the GPU
+  }
+
+  // Exponential backoff for fast crashes: 2s, 4s, 8s, 16s; else 2s.
+  const delay = breaker.delay;
+  if (!crashToastShown) {
+    showToast(trayT().backendCrashed, 'error');
+    crashToastShown = true;
+  }
+  console.log(`Restarting backend in ${delay} ms (fast-crash streak ${consecutiveFastCrashes})`);
+  setTimeout(() => { if (!quitRequested && !backendGaveUp) startPython(); }, delay);
 }
 
 // ── IPC Watchdog ────────────────────────────────────────────────────

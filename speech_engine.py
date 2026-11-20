@@ -192,9 +192,10 @@ class _Worker:
                 self._inbox.put(msg)
 
     def _read_stderr(self):
-        # Native crash reports. Only ever engine internals, never text.
+        # Native crash reports and tracebacks. Only ever engine internals,
+        # never text; their paths carry the user name (home folder as ~).
         for raw in self.proc.stderr:
-            line = raw.decode("utf-8", "replace").rstrip()
+            line = scrub_home(raw.decode("utf-8", "replace").rstrip())
             if line:
                 logger.warning(f"Speech engine: {line[:500]}")
 

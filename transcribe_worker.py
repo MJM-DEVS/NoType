@@ -56,7 +56,10 @@ def scrub_home(text: str) -> str:
     text = str(text)
     if not home or home == "~" or len(home) < 4:
         return text
-    for variant in sorted({home, home.replace("\\", "/"), home.replace("/", "\\")}, key=len, reverse=True):
+    backslashed = home.replace("/", "\\")
+    # The last one as an OSError prints its file name: repr, \ doubled.
+    variants = {home, home.replace("\\", "/"), backslashed, backslashed.replace("\\", "\\\\")}
+    for variant in sorted(variants, key=len, reverse=True):
         text = re.sub(re.escape(variant), "~", text, flags=re.IGNORECASE)
     return text
 
@@ -169,9 +172,11 @@ class _LogToParent(logging.Handler):
         self._send = send
 
     def emit(self, record):
+        # Every line, tracebacks included, with the home folder as ~:
+        # messages and paths of the inference stack carry the user name.
         try:
             self._send({"t": "log", "name": record.name, "level": record.levelno,
-                        "msg": self.format(record)})
+                        "msg": scrub_home(self.format(record))})
         except Exception:
             pass
 

@@ -80,7 +80,8 @@ test('a backend that gave up is worded by how it ended', () => {
   assert.deepStrictEqual(backendFailure(-4058, 'ENOENT'),
     { code: 'runtime', message: 'Backend could not be started (ENOENT)' });
   assert.strictEqual(backendFailure(-4092, 'EACCES').code, 'runtime');   // blocked from running
-  assert.strictEqual(backendFailure(-4048, 'EPERM').code, 'runtime');
+  assert.strictEqual(backendFailure(null, 'EPERM').code, 'runtime');     // thrown by spawn()
+  assert.strictEqual(backendFailure(null, 'UNKNOWN').code, 'runtime');   // e.g. ERROR_VIRUS_INFECTED
   // Exit codes as Node reports them on Windows (unsigned NTSTATUS).
   assert.deepStrictEqual(backendFailure(3221225781, null),                // 0xC0000135, DLL not found
     { code: 'runtime', message: 'Backend exited (exit code 3221225781)' });

@@ -106,6 +106,10 @@ def test_scrub_home_in_both_spellings(monkeypatch):
     assert scrub_home("c:/users/mijo/.cache/model.bin") == "~/.cache/model.bin"
     assert scrub_home(r"D:\Models\small") == r"D:\Models\small"
     assert scrub_home(OSError("no file")) == "no file"
+    # How Windows OSErrors print their file name: repr, backslashes doubled.
+    error = PermissionError(13, "in use", r"C:\Users\Mijo\.cache\x.incomplete")
+    assert "Mijo" in str(error)
+    assert scrub_home(error) == r"[Errno 13] in use: '~\\.cache\\x.incomplete'"
 
 
 def test_scrub_home_without_a_usable_home(monkeypatch):
@@ -117,6 +121,39 @@ def test_scrub_home_without_a_usable_home(monkeypatch):
 def test_format_info_reads_as_one_line():
     assert format_info({"os": "Windows 10", "avx": True, "avx2": False, "cuda_devices": 0}) == \
         "os=Windows 10, avx=yes, avx2=no, cuda_devices=0"
+
+
+def test_every_worker_log_line_leaves_the_home_folder_out(monkeypatch):
+    """Not only the diagnostics: warnings with an exception in them and
+    tracebacks (exc_info) carry paths below the home folder, too."""
+    import logging
+    from transcribe_worker import _LogToParent
+    monkeypatch.setattr(os.path, "expanduser", lambda path: r"C:\Users\Mijo")
+    sent = []
+    handler = _LogToParent(sent.append)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    try:
+        raise PermissionError(13, "in use", r"C:\Users\Mijo\.cache\huggingface\hub\blobs\x.incomplete")
+    except PermissionError as e:
+        record = logging.LogRecord("NoType.Transcriber", logging.WARNING, __file__, 1,
+                                   f"Download: a file is in use: {e}", None, sys.exc_info())
+    handler.emit(record)
+    assert "Mijo" not in sent[0]["msg"]
+    assert r"in use: '~\\.cache\\huggingface" in sent[0]["msg"]
+    assert "Traceback" in sent[0]["msg"]
+
+
+def test_native_crash_reports_leave_the_home_folder_out(monkeypatch, caplog):
+    import logging
+    import speech_engine
+    monkeypatch.setattr(os.path, "expanduser", lambda path: r"C:\Users\Mijo")
+    worker = speech_engine._Worker.__new__(speech_engine._Worker)
+    worker.proc = types.SimpleNamespace(stderr=[
+        b'  File "C:\\Users\\Mijo\\AppData\\Local\\Programs\\NoType\\x.py", line 1\n', b"\n"])
+    with caplog.at_level(logging.WARNING, logger="NoType.Engine"):
+        worker._read_stderr()
+    lines = [r.getMessage() for r in caplog.records]
+    assert lines == [r'Speech engine:   File "~\AppData\Local\Programs\NoType\x.py", line 1']
 
 
 # ── The VAD (onnxruntime): loaded with the model, not at the first dictation ──

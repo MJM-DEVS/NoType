@@ -54,8 +54,11 @@ test('main.js counts by uptime and shows a backend that gave up as failed', () =
   assert.doesNotMatch(giveUp, /if \(!crashToastShown\)/);
   assert.match(giveUp, /if \(failure\.code === 'backend'\) showToast\(trayT\(\)\.backendDead/);
   assert.match(giveUp, /setModelFailed\(failure, \{ toast: failure\.code !== 'backend' \}\);/);
-  // A failed start is told apart from a crash (the 'error' event of spawn).
+  // A failed start is told apart from a crash (the 'error' event of spawn),
+  // also one that spawn() throws (EPERM, UNKNOWN) instead of reporting it.
   assert.match(main, /if \(String\(err\.syscall \|\| ''\)\.startsWith\('spawn'\)\) spawnError = err\.code/);
+  assert.match(main, /try \{\n\s+pythonProcess = spawn\(cmd, args, \{[\s\S]*?\} catch \(err\) \{[\s\S]*?setImmediate\(\(\) => backendEnded\(null, startedAt, err\.code \|\| 'UNKNOWN'\)\);\n\s+return;/);
+  assert.match(main, /pythonProcess\.on\('close', \(code\) => backendEnded\(code, startedAt, spawnError\)\);/);
   const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
   assert.match(pkg.scripts.check, /node --check lib\/backend-breaker\.js/);
 });

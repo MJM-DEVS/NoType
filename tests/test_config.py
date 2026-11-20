@@ -125,6 +125,27 @@ def test_save_gives_up_on_a_target_that_stays_locked(monkeypatch, settings):
     with pytest.raises(PermissionError):
         config.save_config(dict(SETTINGS))
     assert len(tries) == len(config.REPLACE_RETRY_DELAYS) + 1
+    assert not list(settings.parent.glob("*.tmp"))   # nothing left behind
+
+
+def test_save_leaves_electrons_temp_file_alone(settings):
+    """Electron writes settings.json.tmp; a save waiting for a locked target
+    must not take that file for its own (or the other way round)."""
+    electron_tmp = settings.parent / "settings.json.tmp"
+    electron_tmp.write_text("from Electron", encoding="utf-8")
+    config.save_config(dict(SETTINGS))
+    assert electron_tmp.read_text(encoding="utf-8") == "from Electron"
+    assert json.loads(settings.read_text(encoding="utf-8"))["model_size"] == "medium"
+
+
+@pytest.mark.parametrize("bom", [b"\xff\xfe", b"\xfe\xff"])
+def test_odd_length_utf16_counts_as_broken(settings, bom):
+    """Like electron/lib/settings-file.js: broken, so the backup is promoted."""
+    settings.write_bytes(bom + text().encode("utf-16-le" if bom == b"\xff\xfe" else "utf-16-be") + b"\x00")
+    (settings.parent / "settings.json.bak1").write_text(
+        text({**SETTINGS, "model_size": "small"}), encoding="utf-8")
+    assert config.load_config()["model_size"] == "small"
+    assert json.loads(settings.read_text(encoding="utf-8"))["model_size"] == "small"
 
 
 def test_saved_as_utf8(settings):

@@ -24,13 +24,15 @@ function stripBom(text) {
 // The text of settings.json as config.py's decode_settings() reads it: this
 // app writes UTF-8, but a file edited by hand can come back as UTF-16
 // (PowerShell's `>` and Out-File) or in the ANSI code page (Set-Content in
-// Windows PowerShell). Read as UTF-8, the first is no JSON at all and the
-// second turns every umlaut into U+FFFD, which the next save makes permanent.
+// Windows PowerShell), read as windows-1252, the Western European one. Read
+// as UTF-8, the first is no JSON at all and the second turns every umlaut
+// into U+FFFD, which the next save makes permanent. Throws for UTF-16 of odd
+// length, which config.py can't decode either: broken.
 function decodeSettings(buf) {
-  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return buf.subarray(2).toString('utf16le');
-  if (buf.length >= 2 && buf[0] === 0xfe && buf[1] === 0xff) {
-    return Buffer.from(buf.subarray(2)).swap16().toString('utf16le');
-  }
+  const utf16 = buf.length >= 2 && ((buf[0] === 0xff && buf[1] === 0xfe) || (buf[0] === 0xfe && buf[1] === 0xff));
+  if (utf16 && buf.length % 2) throw new TypeError('UTF-16 of odd length');
+  if (utf16 && buf[0] === 0xff) return buf.subarray(2).toString('utf16le');
+  if (utf16) return Buffer.from(buf.subarray(2)).swap16().toString('utf16le');
   if (isUtf8(buf)) return stripBom(buf.toString('utf-8'));
   return new TextDecoder('windows-1252').decode(buf);
 }
@@ -49,14 +51,14 @@ function readSettingsText(file) {
 }
 
 function readUsable(file) {
-  let text;
+  let raw;
   try {
-    text = readSettingsText(file);
+    raw = fs.readFileSync(file);
   } catch (e) {
     return { error: (e && e.code) || 'unreadable', broken: false };
   }
   try {
-    const data = JSON.parse(text);
+    const data = JSON.parse(decodeSettings(raw));
     if (data && typeof data === 'object' && !Array.isArray(data) && 'hotkey' in data) {
       return { data };
     }

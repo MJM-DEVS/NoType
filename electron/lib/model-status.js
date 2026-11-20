@@ -65,9 +65,10 @@
   // The backend process kept ending right after its start (main.js gave
   // up): what the last end says. `exitCode` as Node reports it (on Windows
   // the unsigned NTSTATUS), `spawnError` the code of a start that failed:
-  // backend.exe gone (ENOENT) or blocked (EACCES, EPERM), typically by a
-  // virus scanner. Both mean a part of NoType is missing, like a missing DLL.
-  const SPAWN_BLOCKED = ['ENOENT', 'EACCES', 'EPERM'];
+  // backend.exe gone (ENOENT) or blocked (EACCES, EPERM, or UNKNOWN for what
+  // libuv has no name for, such as a virus scanner's or an app control
+  // policy's refusal). All mean a part of NoType is missing, like a DLL.
+  const SPAWN_BLOCKED = ['ENOENT', 'EACCES', 'EPERM', 'UNKNOWN'];
   function backendFailure(exitCode, spawnError) {
     let code = 'backend';
     if (SPAWN_BLOCKED.includes(spawnError) || RUNTIME_EXITS.includes(exitCode)) code = 'runtime';

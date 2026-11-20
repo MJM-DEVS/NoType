@@ -72,6 +72,21 @@ test('hand-edited encodings are read like config.py reads them', () => {
   }
 });
 
+test('UTF-16 of odd length is broken, as config.py sees it', () => {
+  const json = JSON.stringify({ hotkey: 'alt+m' });
+  const le = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(json, 'utf16le'), Buffer.from([0])]);
+  const be = Buffer.concat([Buffer.from([0xfe, 0xff]), Buffer.from(json, 'utf16le').swap16(), Buffer.from([0])]);
+  for (const [name, bytes] of [['le', le], ['be', be]]) {
+    const file = tmpSettings({ '.bak1': good('alt+x') });
+    fs.writeFileSync(file, bytes);
+    const r = loadSettingsFile(file);
+    assert.strictEqual(r.config.hotkey, 'alt+x', name);
+    assert.strictEqual(r.source, file + '.bak1', name);
+    assert.ok(fs.existsSync(file + '.corrupt'), name);      // broken, not just locked
+    assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf-8')).hotkey, 'alt+x', name);
+  }
+});
+
 test('a settings.json that cannot be read is left alone, the backup used from memory', () => {
   const file = tmpSettings({ '.bak1': good('alt+r') });
   // A directory stands in for a locked file: it exists, reading it fails.

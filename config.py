@@ -104,8 +104,9 @@ _config = None
 def decode_settings(raw: bytes) -> str:
     """The text of settings.json. NoType writes UTF-8, but a file edited by
     hand can come back with a BOM (Notepad), as UTF-16 (PowerShell's `>` and
-    Out-File) or in the ANSI code page (Set-Content in Windows PowerShell).
-    electron/lib/settings-file.js decodes it the same way."""
+    Out-File) or in the ANSI code page (Set-Content in Windows PowerShell),
+    read as cp1252, the Western European one. Raises ValueError for UTF-16
+    of odd length (broken). electron/lib/settings-file.js decodes the same."""
     if raw.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
         return raw.decode("utf-16")
     try:
@@ -195,7 +196,9 @@ def save_config(config: dict) -> None:
     global _config
     _config = config
 
-    tmp = CONFIG_FILE + ".tmp"
+    # Not settings.json.tmp: Electron writes that one, and while _replace()
+    # waits for a locked target the two could take each other's file.
+    tmp = f"{CONFIG_FILE}.{os.getpid()}.tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
         f.flush()
@@ -218,7 +221,14 @@ def save_config(config: dict) -> None:
     except Exception:
         pass  # backup failure must not block the actual save
 
-    _replace(tmp, CONFIG_FILE)
+    try:
+        _replace(tmp, CONFIG_FILE)
+    except OSError:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def _try_restore_from_backup():
